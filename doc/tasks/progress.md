@@ -8,10 +8,10 @@
 - [ ] [00 项目脚手架](./00-scaffold.md) — 目录结构、domain 模型、ports 接口、uv/mise/Brewfile、测试框架
 
 ## 阶段 1 · 适配器（外部依赖，互相独立）
-- [ ] [01 Config 配置](./01-config.md)
-- [ ] [02 MetadataProbe 元数据](./02-metadata-probe.md)
-- [ ] [03 Media 缩略图/抽帧](./03-media.md)
-- [ ] [04 SpeechDetector 人声检测](./04-speech-detector.md)
+- [x] [01 Config 配置](./01-config.md)
+- [x] [02 MetadataProbe 元数据](./02-metadata-probe.md)
+- [x] [03 Media 缩略图/抽帧](./03-media.md)
+- [x] [04 SpeechDetector 人声检测](./04-speech-detector.md)
 - [ ] [05 Transcriber 语音转写](./05-transcriber.md)
 - [ ] [06 Summarizer 文本总结(OMLX)](./06-summarizer.md)
 - [ ] [07 VisionTagger 画面识别(OMLX)](./07-vision-tagger.md)
