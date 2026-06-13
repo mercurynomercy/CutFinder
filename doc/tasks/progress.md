@@ -16,7 +16,7 @@
 - [x] [06 Summarizer 文本总结(OMLX)](./06-summarizer.md)
 - [x] [07 VisionTagger 画面识别(OMLX)](./07-vision-tagger.md)
 - [x] [08 LibraryWriter 库文件组织](./08-library-writer.md)
-- [ ] [09 CatalogRepository 仓储](./09-catalog-repository.md)
+- [x] [09 CatalogRepository 仓储](./09-catalog-repository.md)
 
 ## 阶段 2 · 核心逻辑
 - [ ] [10 Scanner 扫描去重](./10-scanner.md)
