@@ -105,7 +105,7 @@ class FfmpegProbe:
         # Fallback: no embedded creation_time → file birth time
         if capture_time is None:
             try:
-                bt = path.stat().st_birthtime  # type: ignore[attr-defined]
+                bt = path.stat().st_birthtime  # macOS / BSD only
                 capture_time = datetime.datetime.fromtimestamp(
                     bt, tz=datetime.timezone.utc
                 )
