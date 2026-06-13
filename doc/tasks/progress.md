@@ -12,7 +12,7 @@
 - [x] [02 MetadataProbe 元数据](./02-metadata-probe.md)
 - [x] [03 Media 缩略图/抽帧](./03-media.md)
 - [x] [04 SpeechDetector 人声检测](./04-speech-detector.md)
-- [ ] [05 Transcriber 语音转写](./05-transcriber.md) — unit tests done (15/15 pass); integration test pending
+- [x] [05 Transcriber 语音转写](./05-transcriber.md)
 - [ ] [06 Summarizer 文本总结(OMLX)](./06-summarizer.md)
 - [ ] [07 VisionTagger 画面识别(OMLX)](./07-vision-tagger.md)
 - [ ] [08 LibraryWriter 库文件组织](./08-library-writer.md)

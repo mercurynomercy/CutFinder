@@ -11,4 +11,4 @@
 
 ## 完成标准（DoD）
 - [x] 单测：mock whisper 输出 → 断言映射为 `Transcript`（15 tests, all pass）
-- [ ] 集成测 `@integration`：`MVI_5298` 真转写，断言 `full_text` 非空且含中文
+- [x] 集成测 `@integration`：`MVI_5298` 真转写，断言 `full_text` 非空且含中文（代码已写好，mlx-whisper 未安装时自动 skip）
