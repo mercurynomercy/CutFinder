@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import datetime as _dt
 from pathlib import Path
-from typing import Any, Optional
+from typing import Optional
 
 from cutfinder.domain.models import VideoMetadata
 from cutfinder.ports.probe import MetadataProbe
