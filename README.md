@@ -89,10 +89,10 @@ cd ../frontend && npm install # Vite + React + Tailwind + shadcn/ui
 make check-omlx            # uv sync + httpx 请求 /models 端点
 
 # 7. 起前端开发服务器
-cd frontend && npx vite    # → http://localhost:5173
+cd frontend && npx vite    # → http://localhost:5080
 
 # 8.（另起终端）后端开发服务器
-cd backend && uv run uvicorn cutfinder.api.app:app --reload  # → localhost:8000
+cd backend && uv run uvicorn cutfinder.api.app:app --reload  # → localhost:5081
 ```
 
 > **不需要 mise？** 直接用系统 Python3.12+、Node20 + `uv sync` / `npm install` 即可。

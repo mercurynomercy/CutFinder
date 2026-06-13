@@ -10,7 +10,7 @@ export default defineConfig({
   reporter: 'html',
 
   use: {
-    baseURL: 'http://localhost:5173',
+    baseURL: 'http://localhost:5080',
     trace: 'on-first-retry',
   },
 
@@ -23,8 +23,8 @@ export default defineConfig({
 
   // Start the Vite dev server before running e2e tests.
   webServer: {
-    command: 'npm run dev -- --port 5173',
-    url: 'http://localhost:5173',
+    command: 'npm run dev -- --port 5080',
+    url: 'http://localhost:5080',
     reuseExisting: false,
   },
 })

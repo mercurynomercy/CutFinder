@@ -16,21 +16,21 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 # ── Backend (FastAPI / uvicorn)
-echo "Starting backend on http://localhost:8000 ..."
+echo "Starting backend on http://localhost:5081 ..."
 cd "$ROOT/backend"
 uv run uvicorn cutfinder.api.app:app --reload &
 BACKEND_PID=$!
 echo "$BACKEND_PID" > "$PIDFILE"
 
 # ── Frontend (Vite dev server)
-echo "Starting frontend on http://localhost:5173 ..."
+echo "Starting frontend on http://localhost:5080 ..."
 cd "$ROOT/frontend"
 npx vite &
 FRONTEND_PID=$!
 echo "$FRONTEND_PID" >> "$PIDFILE"
 
 echo ""
-echo "Ready — open http://localhost:5173"
+echo "Ready — open http://localhost:5080"
 echo "Press Ctrl+C to stop both servers."
 
 # Wait for any background process (keeps script alive)
