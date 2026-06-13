@@ -28,10 +28,12 @@ from .fake_transcriber import (
     FakeTranscriber,
     make_sample_transcript,
 )
+from .fake_library import FakeLibraryWriter
 from .omlx_vision import FakeVisionTagger, make_sample_result
 
 __all__ = [
     "FakeFrameExtractor",
+    "FakeLibraryWriter",
     "FakeProbe",
     "FakeSpeechDetector",
     "FakeSummarizer",

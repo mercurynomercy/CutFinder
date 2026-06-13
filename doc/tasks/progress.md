@@ -15,7 +15,7 @@
 - [x] [05 Transcriber 语音转写](./05-transcriber.md)
 - [x] [06 Summarizer 文本总结(OMLX)](./06-summarizer.md)
 - [x] [07 VisionTagger 画面识别(OMLX)](./07-vision-tagger.md)
-- [ ] [08 LibraryWriter 库文件组织](./08-library-writer.md)
+- [x] [08 LibraryWriter 库文件组织](./08-library-writer.md)
 - [ ] [09 CatalogRepository 仓储](./09-catalog-repository.md)
 
 ## 阶段 2 · 核心逻辑

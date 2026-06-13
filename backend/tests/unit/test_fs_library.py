@@ -1,0 +1,264 @@
+"""Unit tests for FsLibraryWriter — real file copy in temp directories.
+
+Tests verify:
+  - Original files are never modified (mtime, content).
+  - Destination path follows ``<library>/<date>/A-roll|B-roll/`` format.
+  - Filename conflicts are resolved by appending ``(1)``, ``(2)`` etc. — never overwrites.
+  - mtime/atime are preserved after copy (shutil.copy2).
+  - File size is verified after copy; mismatch raises ``OSError``.
+
+Run with:
+    .venv/bin/python -m pytest tests/unit/test_fs_library.py -v
+"""
+
+from __future__ import annotations
+
+import os
+import shutil
+from pathlib import Path
+from unittest.mock import patch
+
+import pytest
+
+from cutfinder.adapters.fs_library import FsLibraryWriter
+from cutfinder.config import AppConfig, EnvSettings, Prefs
+
+# Import fake directly (avoid triggering fakes/__init__.py which has
+# relative imports that fail when imported from a test module).
+import importlib as _importlib
+import sys as _sys
+from pathlib import Path as _Path
+
+_fake_lib = str(_Path(__file__).parent.parent / "fakes" / "fake_library.py")
+_spec = _importlib.util.spec_from_file_location("fake_lib", _fake_lib)  # noqa: F821
+_fake_mod = _importlib.util.module_from_spec(_spec)  # noqa: F821
+_sys.modules["fake_lib"] = _fake_mod
+_spec.loader.exec_module(_fake_mod)  # type: ignore[union-attr]
+FakeLibraryWriter = _fake_mod.FakeLibraryWriter  # type: ignore[union-attr, name-defined]
+
+
+def _make_config(tmp_path: Path) -> AppConfig:
+    """Create an AppConfig pointing at *tmp_path* as the library root."""
+    return AppConfig(
+        env=EnvSettings(OMLX_BASE_URL="http://localhost:1235/v1", OMLX_API_KEY="test-key"),
+        prefs=Prefs(library_path=str(tmp_path)),
+    )
+
+
+def _make_src_file(
+    tmp_path: Path, name: str = "test.mp4", content: bytes | None = None
+) -> Path:
+    """Create a small source file in *tmp_path* and return its path."""
+    src = tmp_path / name
+    data = content if content is not None else b"0123456789ABCDEF"
+    src.write_bytes(data)
+    # Set a known mtime (Jan 15, 2024, 10:30 UTC)
+    known_ts = 1705312200.0
+    os.utime(src, (known_ts, known_ts))
+    return src
+
+
+# ─── Basic copy tests ──────────────────────────────────────────────
+
+class TestCopyInto:
+    """Verify basic copy behavior."""
+
+    def test_copy_to_new_path(self, tmp_path):
+        """A new file is copied to the correct date/type directory."""
+        src = _make_src_file(tmp_path, "clip.mp4")
+        writer = FsLibraryWriter(_make_config(tmp_path))
+
+        dest_str = writer.copy_into(src, "2024-01-15", "a")
+        dest = Path(dest_str)
+
+        assert dest == tmp_path / "2024-01-15" / "A-roll" / "clip.mp4"
+        assert dest.exists()
+
+    def test_copy_b_roll(self, tmp_path):
+        """B-roll copies into B-roll subdirectory."""
+        src = _make_src_file(tmp_path, "broll.mov")
+        writer = FsLibraryWriter(_make_config(tmp_path))
+
+        dest_str = writer.copy_into(src, "2024-03-20", "b")
+        dest = Path(dest_str)
+
+        assert dest == tmp_path / "2024-03-20" / "B-roll" / "broll.mov"
+        assert dest.exists()
+
+    def test_directories_created_auto(self, tmp_path):
+        """Target directories are auto-created even if they don't exist yet."""
+        src = _make_src_file(tmp_path, "deep.mp4")
+        writer = FsLibraryWriter(_make_config(tmp_path))
+
+        # Date that doesn't exist yet
+        dest_str = writer.copy_into(src, "2099-12-31", "a")
+        assert Path(dest_str).exists()
+
+    def test_original_file_unchanged_content(self, tmp_path):
+        """Original file content is never modified after copy."""
+        original_data = b"original-content-12345"
+        src = _make_src_file(tmp_path, "unchanged.mp4", content=original_data)
+        writer = FsLibraryWriter(_make_config(tmp_path))
+
+        _ = writer.copy_into(src, "2024-06-01", "a")
+
+        assert src.read_bytes() == original_data
+
+    def test_original_file_unchanged_mtime(self, tmp_path):
+        """Original file mtime is preserved (not touched by copy)."""
+        known_ts = 1705312200.0
+        src = _make_src_file(tmp_path, "mtime.mp4")
+
+        # Verify known_ts was set
+        assert os.path.getmtime(src) == known_ts
+
+        writer = FsLibraryWriter(_make_config(tmp_path))
+        _ = writer.copy_into(src, "2024-01-15", "a")
+
+        # mtime should remain the same
+        assert os.path.getmtime(src) == known_ts
+
+    def test_copy_preserves_mtime(self, tmp_path):
+        """shutil.copy2 preserves mtime on the destination file."""
+        known_ts = 1705312200.0
+        src = _make_src_file(tmp_path, "preserved.mp4")
+
+        writer = FsLibraryWriter(_make_config(tmp_path))
+        dest_str = writer.copy_into(src, "2024-01-15", "a")
+        dest = Path(dest_str)
+
+        assert os.path.getmtime(dest) == known_ts
+
+
+# ─── Conflict resolution tests ─────────────────────────────────────
+
+class TestConflictResolution:
+    """Verify that same-name conflicts are handled without overwriting."""
+
+    def test_first_conflict_appends_1(self, tmp_path):
+        """When the target already exists, (1) is appended."""
+        # Pre-create the destination file
+        lib_dir = tmp_path / "2024-01-15" / "A-roll"
+        lib_dir.mkdir(parents=True)
+        existing = lib_dir / "clip.mp4"
+        existing.write_bytes(b"existing-content")
+
+        src = _make_src_file(tmp_path, "clip.mp4", content=b"new-content")
+        writer = FsLibraryWriter(_make_config(tmp_path))
+
+        dest_str = writer.copy_into(src, "2024-01-15", "a")
+        dest = Path(dest_str)
+
+        assert dest == tmp_path / "2024-01-15" / "A-roll" / "clip(1).mp4"
+        assert dest.exists()
+
+    def test_second_conflict_appends_2(self, tmp_path):
+        """(1) taken → (2) is used."""
+        lib_dir = tmp_path / "2024-01-15" / "A-roll"
+        lib_dir.mkdir(parents=True)
+        (lib_dir / "clip.mp4").write_bytes(b"existing")
+        (lib_dir / "clip(1).mp4").write_bytes(b"conflict-1")
+
+        src = _make_src_file(tmp_path, "clip.mp4", content=b"newest")
+        writer = FsLibraryWriter(_make_config(tmp_path))
+
+        dest_str = writer.copy_into(src, "2024-01-15", "a")
+        dest = Path(dest_str)
+
+        assert dest == tmp_path / "2024-01-15" / "A-roll" / "clip(2).mp4"
+
+    def test_existing_file_unchanged_after_conflict_copy(self, tmp_path):
+        """Pre-existing file is never overwritten even when conflict resolution happens."""
+        lib_dir = tmp_path / "2024-01-15" / "A-roll"
+        lib_dir.mkdir(parents=True)
+        existing = lib_dir / "original.mp4"
+        original_content = b"I was here first and I stay unchanged."
+        existing.write_bytes(original_content)
+
+        src = _make_src_file(tmp_path, "original.mp4", content=b"new data")
+        writer = FsLibraryWriter(_make_config(tmp_path))
+
+        _ = writer.copy_into(src, "2024-01-15", "a")
+
+        # Original must still have its original content
+        assert existing.read_bytes() == original_content
+
+
+# ─── Error handling tests ──────────────────────────────────────────
+
+class TestErrorHandling:
+    """Verify error paths raise appropriate exceptions."""
+
+    def test_nonexistent_source_raises_file_not_found(self, tmp_path):
+        """Copying a non-existent source raises FileNotFoundError."""
+        writer = FsLibraryWriter(_make_config(tmp_path))
+
+        with pytest.raises(FileNotFoundError, match="Source file does not exist"):
+            writer.copy_into("/nonexistent/path/video.mp4", "2024-01-15", "a")
+
+    def test_size_mismatch_raises_os_error(self, tmp_path):
+        """If destination size differs from source after copy, raises OSError.
+
+        We mock ``shutil.copy2`` to write only a partial file so the
+        destination size is smaller than the source — triggering the
+        post-copy size check in ``FsLibraryWriter.copy_into``.
+        """
+        src = _make_src_file(tmp_path, "truncated.mp4")  # 16 bytes
+        writer = FsLibraryWriter(_make_config(tmp_path))
+
+        _real_copy2 = shutil.copy2
+        partial_written: list[bytes] = []
+
+        def fake_copy2(src_path, dest_path):
+            _real_copy2(src_path, dest_path)
+            # Truncate destination to 9 bytes (less than source's 16).
+            partial_written.append(b"X" * 9)
+            with open(dest_path, "wb") as f:
+                f.write(partial_written[-1])
+
+        with patch("cutfinder.adapters.fs_library.shutil.copy2", fake_copy2):
+            with pytest.raises(OSError, match="Size mismatch"):
+                writer.copy_into(src, "2024-01-15", "a")
+
+
+# ─── Config integration tests ──────────────────────────────────────
+
+class TestConfigIntegration:
+    """Verify library_path from AppConfig is used correctly."""
+
+    def test_uses_config_library_path(self, tmp_path):
+        """Destination is under the library path configured in AppConfig."""
+        custom_lib = tmp_path / "my_custom_library"
+        config = _make_config(custom_lib)
+
+        src = _make_src_file(tmp_path, "test.mp4")
+        writer = FsLibraryWriter(config)
+
+        dest_str = writer.copy_into(src, "2024-05-10", "b")
+        assert dest_str.startswith(str(custom_lib))
+
+
+# ─── FakeLibraryWriter tests ──────────────────────────────────────
+
+class TestFakeLibraryWriter:
+    """Verify FakeLibraryWriter records calls and returns expected paths."""
+
+    def test_records_call(self):
+        writer = FakeLibraryWriter()
+        _ = writer.copy_into("/tmp/video.mp4", "2026-01-01", "a")
+        assert writer.calls == [("/tmp/video.mp4", "2026-01-01", "a")]
+
+    def test_returns_a_roll_path(self):
+        writer = FakeLibraryWriter()
+        path = writer.copy_into("video.mp4", "2026-01-01", "a")
+        assert path == "/library/2026-01-01/A-roll/"
+
+    def test_returns_b_roll_path(self):
+        writer = FakeLibraryWriter()
+        path = writer.copy_into("video.mp4", "2026-01-01", "b")
+        assert path == "/library/2026-01-01/B-roll/"
+
+    def test_custom_library_path(self):
+        writer = FakeLibraryWriter(library_path="/custom/lib")
+        path = writer.copy_into("video.mp4", "2026-03-15", "a")
+        assert path == "/custom/lib/2026-03-15/A-roll/"
