@@ -5,14 +5,14 @@
 > 建议按阶段顺序推进：基础 → 适配器 → 核心 → 接口 → 前端 → 集成。
 
 ## 阶段 0 · 基础
-- [ ] [00 项目脚手架](./00-scaffold.md) — 目录结构、domain 模型、ports 接口、uv/mise/Brewfile、测试框架
+- [x] [00 项目脚手架](./00-scaffold.md) — 目录结构、domain 模型、ports 接口、uv/mise/Brewfile、测试框架
 
 ## 阶段 1 · 适配器（外部依赖，互相独立）
 - [x] [01 Config 配置](./01-config.md)
 - [x] [02 MetadataProbe 元数据](./02-metadata-probe.md)
 - [x] [03 Media 缩略图/抽帧](./03-media.md)
 - [x] [04 SpeechDetector 人声检测](./04-speech-detector.md)
-- [ ] [05 Transcriber 语音转写](./05-transcriber.md)
+- [ ] [05 Transcriber 语音转写](./05-transcriber.md) — unit tests done (15/15 pass); integration test pending
 - [ ] [06 Summarizer 文本总结(OMLX)](./06-summarizer.md)
 - [ ] [07 VisionTagger 画面识别(OMLX)](./07-vision-tagger.md)
 - [ ] [08 LibraryWriter 库文件组织](./08-library-writer.md)

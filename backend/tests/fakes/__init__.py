@@ -4,6 +4,7 @@ Exports:
     - FakeProbe (metadata probe)
     - FakeThumbnailMaker, FakeFrameExtractor (media adapters)
     - FakeSpeechDetector (speech detection adapter)
+    - FakeTranscriber (transcription adapter)
 """
 
 from .fake_media import (
@@ -17,14 +18,19 @@ from .fake_speech import (
     FakeSpeechDetector,
     make_sample_ratio,
 )
+from .fake_transcriber import (
+    FakeTranscriber,
+    make_sample_transcript,
+)
 
 __all__ = [
     "FakeFrameExtractor",
     "FakeProbe",
     "FakeSpeechDetector",
-    "FakeThumbnailMaker",
+    "FakeTranscriber",
     "make_sample",
     "make_sample_frame_paths",
     "make_sample_ratio",
     "make_sample_thumbnail_path",
+    "make_sample_transcript",
 ]
