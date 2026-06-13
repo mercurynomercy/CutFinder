@@ -16,6 +16,7 @@
 - **按拍摄日期 + 类型自动归档**：复制到 `库/YYYY-MM-DD/A-roll(或 B-roll)/`。
 - **缩略图墙 + 多维检索**：按日期 / 类型 / 标签筛选，按台词全文搜索。
 - **重新分析单个片段**：换模型或结果不佳时一键重跑 AI，保留你的手动纠正与标签。
+- **深色专业界面**：近黑面板让缩略图突出，A-roll/B-roll 以颜色+图标区分，贴近 FCP 调性（见 [`doc/ui-design.md`](./doc/ui-design.md)）。
 
 ### 不破坏原素材（核心约束）
 
@@ -29,7 +30,7 @@
 ## 架构概览
 
 ```
-前端 (Vite + React)
+前端 (Vite + React + Tailwind + shadcn/ui，深色优先)
    │ HTTP (REST + SSE)
 API 层 (FastAPI，薄)
    │
@@ -107,6 +108,8 @@ make e2e               # Playwright 关键流程(后端用假适配器+预置 DB
 
 - [需求文档 `doc/proposal.md`](./doc/proposal.md) —— 目标、需求、范围、技术选型
 - [详细设计 `doc/detailed-design.md`](./doc/detailed-design.md) —— 模块、接口、数据模型、API、测试与部署
+- [UI 设计系统 `doc/ui-design.md`](./doc/ui-design.md) —— 配色/字体/间距 token、组件规范、页面布局（深色优先）
+- [任务清单 `doc/tasks/`](./doc/tasks/progress.md) —— 各模块最小任务与总体进度
 - [`CLAUDE.md`](./CLAUDE.md) —— 给 AI 协作者的项目约束与架构速览
 
 ---

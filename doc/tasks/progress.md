@@ -1,7 +1,7 @@
 # CutFinder 总体进度
 
 > 每个模块一个任务文件，勾选表示**整模块完成**（子任务全过 + 完成标准达成）。
-> 依据：[`proposal.md`](../proposal.md)、[`detailed-design.md`](../detailed-design.md)。
+> 依据：[`proposal.md`](../proposal.md)、[`detailed-design.md`](../detailed-design.md)、[`ui-design.md`](../ui-design.md)。
 > 建议按阶段顺序推进：基础 → 适配器 → 核心 → 接口 → 前端 → 集成。
 
 ## 阶段 0 · 基础

@@ -8,7 +8,8 @@
 - [ ] `backend/pyproject.toml` + `uv.lock`（依赖：fastapi、uvicorn、pydantic、pydantic-settings、openai、mlx-whisper、silero-vad(或 torch)、httpx、pytest、pytest-asyncio）
 - [ ] `mise.toml` 钉死 Python / Node 版本
 - [ ] `Brewfile`（`ffmpeg`）
-- [ ] 前端脚手架 `frontend/`：Vite + React + TS、Vitest、@testing-library/react、MSW、Playwright
+- [ ] 前端脚手架 `frontend/`：Vite + React + TS、**Tailwind + shadcn/ui**、Vitest、@testing-library/react、MSW、Playwright
+- [ ] 落地设计系统骨架：`frontend/src/styles/tokens.css`（颜色/字体/间距 token，见 [`ui-design.md`](../ui-design.md) §8）+ 引入 Inter / JetBrains Mono
 - [ ] `Makefile` 先实现 `setup` 与 `test` 两个目标
 - [ ] `.env.example`（`OMLX_BASE_URL`、`OMLX_API_KEY`）
 - [ ] `domain/enums.py`：`RollType(A/B)`、`Source(auto/manual)`、`JobStatus`、`DateSource(embedded/file)`、`ClipStatus(pending/processing/done/error)`

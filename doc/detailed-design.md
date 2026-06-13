@@ -22,7 +22,7 @@
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│  前端 (Vite + React)                                      │
+│  前端 (Vite + React + Tailwind + shadcn/ui)               │
 │  缩略图墙 / 筛选 / 搜索 / 详情编辑 / 设置 / 进度条(SSE)    │
 └───────────────────────────┬─────────────────────────────┘
                             │ HTTP (REST + SSE)
@@ -336,7 +336,7 @@ CREATE VIRTUAL TABLE clips_fts USING fts5(
 
 ## 7. 前端模块设计（React）
 
-每个 feature 自洽，只通过 `api/` 客户端与后端通信：
+视觉与组件规范见 [`ui-design.md`](./ui-design.md)（深色 token、A/B 类型色、布局）。每个 feature 自洽，只通过 `api/` 客户端与后端通信：
 
 | 模块 | 职责 | 独立测(Vitest + RTL) |
 |---|---|---|

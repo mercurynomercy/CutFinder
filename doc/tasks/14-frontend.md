@@ -1,9 +1,11 @@
 # 14 · Frontend 前端（React）
 
 > 缩略图墙 + 筛选/搜索 + 详情编辑 + 设置 + SSE 进度。只通过 `api/` 与后端通信。
-> **依赖**：13。 **位置**：`frontend/src/`。 **详见** detailed-design §7。
+> **依赖**：13。 **位置**：`frontend/src/`。 **详见** detailed-design §7、[`ui-design.md`](../ui-design.md)。
 
 ## 子任务
+- [ ] `styles/tokens.css`：落地设计系统颜色/字体/间距 token（见 ui-design.md §8），映射到 Tailwind + shadcn/ui 主题
+- [ ] 固化基础三件套：Button / Chip(含 A-B 类型徽标) / 缩略图卡片
 - [ ] `api/`：唯一 HTTP 封装（REST + SSE 订阅）
 - [ ] `features/gallery`：缩略图墙（分页/虚拟滚动、空态）
 - [ ] `features/filters`：日期 / 类型 / 标签筛选

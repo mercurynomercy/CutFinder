@@ -54,7 +54,7 @@
 | 后端 | Python + FastAPI | 视频与 AI 生态最全 |
 | 数据库 | SQLite（单文件，存于素材库旁） | 零配置、易备份、便于迁移 |
 | 视频处理 | ffmpeg / ffprobe | 抽帧、缩略图、读取元数据（拍摄时间、时长、分辨率、编码） |
-| 前端 | Vite + React | 缩略图墙 + 多维筛选/搜索 |
+| 前端 | Vite + React + Tailwind + shadcn/ui | 缩略图墙 + 多维筛选/搜索；深色 UI 见 [`ui-design.md`](./ui-design.md) |
 | 进度反馈 | 后台任务队列 + SSE | 批量处理时实时推送逐个进度 |
 | 测试 | pytest + Vitest/RTL + 少量 Playwright | 外部依赖接口抽象、可独立测试 |
 | 环境/部署 | mise + uv + Brewfile + Makefile + `.env` | 一键安装，换机免折腾（Docker 不适用：MLX 需 Metal） |
