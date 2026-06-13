@@ -1,0 +1,29 @@
+# 本地测试素材（大文件，不入库）
+testVideo/
+
+# 密钥/端点（只提交 .env.example）
+.env
+.env.local
+
+# Python (uv / venv)
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Node / 前端
+node_modules/
+frontend/dist/
+*.local
+
+# 运行时数据（素材库内的数据库与缩略图）
+.cutfinder/
+
+# macOS
+.DS_Store
+
+# 编辑器
+.idea/
+.vscode/
