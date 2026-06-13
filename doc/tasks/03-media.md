@@ -4,10 +4,10 @@
 > **依赖**：00。 **接口**：`ports/media.py:ThumbnailMaker, FrameExtractor`。 **详见** detailed-design §3.3。
 
 ## 子任务
-- [ ] `adapters/ffmpeg_media.py:FfmpegThumbnailMaker.make(path, out_path)`：取偏中部一帧 → 写图片
-- [ ] `FfmpegFrameExtractor.extract(path, count)`：按时长均匀取 `count` 帧（默认 3）→ 图片路径列表
-- [ ] `tests/fakes/`：返回预置图片路径的假实现
+- [x] `adapters/ffmpeg_media.py:FfmpegThumbnailMaker.make(path, out_path)`：取偏中部一帧 → 写图片
+- [x] `FfmpegFrameExtractor.extract(path, count)`：按时长均匀取 `count` 帧（默认 3）→ 图片路径列表
+- [x] `tests/fakes/`：返回预置图片路径的假实现
 
 ## 完成标准（DoD）
-- [ ] 单测：mock subprocess，断言 ffmpeg 命令/时间点构造正确
-- [ ] 集成测 `@integration`：对 `testVideo` 真抽帧，断言产出文件存在、数量=count、尺寸合理
+- [x] 单测：mock subprocess，断言 ffmpeg 命令/时间点构造正确（19 tests, `test_ffmpeg_media.py`）
+- [x] 集成测 `@integration`：对真实视频真抽帧，断言产出文件存在、数量=count、尺寸合理（7 tests, `test_integration_ffmpeg_media.py`）
