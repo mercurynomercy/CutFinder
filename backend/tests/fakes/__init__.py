@@ -5,6 +5,8 @@ Exports:
     - FakeThumbnailMaker, FakeFrameExtractor (media adapters)
     - FakeSpeechDetector (speech detection adapter)
     - FakeTranscriber (transcription adapter)
+    - FakeSummarizer (text summarization adapter)
+    - FakeVisionTagger, make_sample_result (vision tagger for B-roll testing)
 """
 
 from .fake_media import (
@@ -18,19 +20,28 @@ from .fake_speech import (
     FakeSpeechDetector,
     make_sample_ratio,
 )
+from .fake_summarizer import (
+    FakeSummarizer,
+    make_sample_summary,
+)
 from .fake_transcriber import (
     FakeTranscriber,
     make_sample_transcript,
 )
+from .omlx_vision import FakeVisionTagger, make_sample_result
 
 __all__ = [
     "FakeFrameExtractor",
     "FakeProbe",
     "FakeSpeechDetector",
+    "FakeSummarizer",
     "FakeTranscriber",
+    "FakeVisionTagger",
     "make_sample",
     "make_sample_frame_paths",
     "make_sample_ratio",
+    "make_sample_result",
+    "make_sample_summary",
     "make_sample_thumbnail_path",
     "make_sample_transcript",
 ]
