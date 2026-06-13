@@ -35,12 +35,9 @@ frontend-deps:
 env-boilerplate:
 	@test -f .env || (cp .env.example .env && echo "Created .env from .env.example — edit it with your OMLX key.")
 
-# ── 2. dev — start both backend and frontend servers ─────────────
-dev:
-	@echo "Starting backend (FastAPI/uvicorn) and frontend (Vite dev server)..."
-	@echo "In separate terminals run:"
-	@echo "  cd backend && uv run uvicorn cutfinder.api.app:app --reload"
-	@echo "  cd frontend && $(VITE)"
+# ── 2. dev — start both backend and frontend servers in one command ─
+dev: uv-sync frontend-deps env-boilerplate
+	@bash scripts/dev.sh
 
 # ── 3. models — download MLX Whisper model cache ───────────────
 models: uv-sync
