@@ -1,0 +1,47 @@
+{
+  "name": "cutfinder-frontend",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "e2e": "playwright test"
+  },
+  "dependencies": {
+    "@radix-ui/react-dialog": "^1.0",
+    "@radix-ui/react-dropdown-menu": "^2.0",
+    "@radix-ui/react-progress": "^1.0",
+    "@radix-ui/react-select": "^2.0",
+    "@radix-ui/react-separator": "^1.0",
+    "@radix-ui/react-slot": "^1.0",
+    "@radix-ui/react-tabs": "^1.0",
+    "@radix-ui/react-toast": "^1.1",
+    "class-variance-authority": "^0.7",
+    "clsx": "^2.1",
+    "lucide-react": "^0.468",
+    "react": "^19.0",
+    "react-dom": "^19.0",
+    "tailwind-merge": "^2.5",
+    "tailwindcss-animate": "^1.0"
+  },
+  "devDependencies": {
+    "@testing-library/jest-dom": "^6.6",
+    "jsdom": "^26.0",
+    "@testing-library/react": "^16.1",
+    "@types/node": "^22.10",
+    "@types/react": "^19.0",
+    "@types/react-dom": "^19.0",
+    "@vitejs/plugin-react": "^4.3",
+    "autoprefixer": "^10.4",
+    "msw": "^2.7",
+    "playwright": "^1.49",
+    "tailwindcss": "^3.4",
+    "typescript": "~5.7",
+    "vite": "^6.1",
+    "vitest": "^3.0"
+  }
+}
