@@ -4,7 +4,7 @@
 
 把一堆 A-roll（有中文解说）和 B-roll（纯空镜）自动**分类、打标签、生成简介与缩略图**，让你之后能按日期 / 类型 / 标签 / 台词快速找回任意一段素材。面向 macOS（Apple Silicon）+ Final Cut Pro 工作流，**全程离线、AI 全本地**。
 
-> **状态：脚手架完成。** 项目骨架已搭建完毕，`make test` / `uv run mypy` / Vite build 均可跑通。后端适配器层与前端页面正在逐步实现中。
+> **状态：核心功能已完成。** 阶段 0–14（后端适配器、编排层、API 层、前端）均已实现，`make test` / `uv run mypy` / Vite build 均可跑通。当前处于阶段 15 — 集成测试与部署完善中。
 
 ---
 
@@ -54,55 +54,68 @@ API 层 (FastAPI，薄)
 
 ---
 
-## 前置条件
+## 要求 (Requirements)
 
-- macOS，Apple Silicon（AI 推理需要 Metal GPU）
-- [OMLX](https://github.com/jundot/omlx) 已安装，并加载好文本与视觉模型
-- [uv](https://docs.astral.sh/uv/)（Python 依赖管理）+ `python3`
-- [Node.js 20](https://nodejs.org/) + `npm`（前端开发服务器）
-- [Homebrew](https://brew.sh/) 可选，用于安装 `ffmpeg`（也可用其他途径）
-- [mise](https://mise.jdx.dev/) 可选，用于自动管理 Python/Node 版本
+### 必需
 
-> ⚠️ AI 推理需要 Apple Metal GPU，**不能跑在 Docker 容器里**，只能原生运行。
+| 依赖 | 说明 |
+|------|------|
+| **macOS + Apple Silicon** | AI 推理依赖 Metal GPU，无法在 Docker / x86_macOS 上运行 |
+| [OMLX](https://github.com/jundot/omlx) ≥ 0.1 | Apple Silicon 本地模型服务器（菜单栏 App），需预加载 `Qwen3.6-35B-A3B`（文本）和 `Qwen3-VL-8B-Instruct`（视觉）两个模型 |
+| [uv](https://docs.astral.sh/uv/) | Python 依赖管理（`pip install uv`） |
+| **Python ≥ 3.12** | 系统自带或经 mise/Homebrew 安装 |
+| **Node.js ≥ 20** + `npm` | 前端开发服务器与构建工具 |
+| [ffmpeg](https://ffmpeg.org/) (`ffprobe` + `ffmpeg`) | 视频元数据提取与缩略图生成（Homebrew: `brew install ffmpeg`） |
+
+### 可选
+
+- [mise](https://mise.jdx.dev/) — 自动管理 Python / Node 版本（`.mise.toml`）
+- [Homebrew](https://brew.sh/) — 用于安装 ffmpeg / OMLX
+
+> ⚠️ **AI 推理必须原生运行**，不能跑在 Docker 容器里。
 
 ---
 
-## 安装与运行（脚手架已完成）
+## 安装与启动 (Setup & Run)
+
+### 一键安装（推荐）
 
 ```bash
-# 1. OMLX — 确保已安装并加载了 Qwen3.6-35B-A3B（文本）和 Qwen3-VL-8B-Instruct（视觉）
-
-# 2. 克隆项目
 git clone <repo> && cd CutFinder
-
-# 3. 配置密钥/端点
-cp .env.example .env       # 填入 OMLX_BASE_URL 与 OMLX_API_KEY
-
-# 4.（可选）一键装环境：mise 管版本 + brew 装 ffmpeg
-# mise install && brew bundle --file Brewfile
-
-# 5. 安装依赖：后端 uv sync，前端 npm install
-cd backend && uv sync        # Python venv + 依赖（含 pytest/mypy/ruff）
-cd ../frontend && npm install # Vite + React + Tailwind + shadcn/ui
-
-# 6.（可选）验证 OMLX
-make check-omlx            # uv sync + httpx 请求 /models 端点
-
-# 7. 起前端开发服务器
-cd frontend && npx vite    # → http://localhost:5080
-
-# 8.（另起终端）后端开发服务器
-cd backend && uv run uvicorn cutfinder.api.app:app --reload  # → localhost:5081
+cp .env.example .env            # 填入 OMLX_BASE_URL 与 OMLX_API_KEY
+make setup                      # mise install + brew bundle + uv sync + npm install
 ```
 
-> **不需要 mise？** 直接用系统 Python3.12+、Node20 + `uv sync` / `npm install` 即可。
-> mise.toml 只是建议版本，不强制使用。
+> 没有 mise？先 `brew install mise`，或手动执行：
+> ```bash
+> cd backend && uv sync          # Python 依赖（pytest / mypy / ruff）
+> cd ../frontend && npm install   # Vite + React + Tailwind + shadcn/ui
+> ```
 
-`.env` 示例：
+### 验证 OMLX 就绪
 
-```dotenv
-OMLX_BASE_URL=http://localhost:8000/v1
-OMLX_API_KEY=your-omlx-key
+```bash
+make check-omlx                 # 校验文本/视觉模型是否已加载
+```
+
+### 启动开发服务器（最简单）
+
+**一条命令同时起前后端：**
+
+```bash
+make dev                        # → 后端 localhost:5081 + 前端 http://localhost:5080
+```
+
+按 `Ctrl+C` 同时停止两个服务。
+
+### 手动分起（调试用）
+
+```bash
+# 终端 1 — 后端
+cd backend && uv run uvicorn cutfinder.api.app:app --reload   # localhost:5081
+
+# 终端 2 — 前端
+cd frontend && npx vite                                       # http://localhost:5080
 ```
 
 ---
@@ -134,12 +147,12 @@ npx playwright test            # e2e 测试（自动起 Vite dev server）
 ### Makefile 快捷命令
 
 ```bash
-make test              # 后端 pytest（仅单元）
-make test-integration  # 集成测试（需 ffmpeg/OMLX）
-make e2e               # Playwright e2e
+make test              # 后端 pytest（全部单元 + 集成标记测试）
+make test-integration  # 仅跑 -m integration（需 ffmpeg/OMLX）
+make e2e               # Playwright e2e（前后端均自动启动/连接）
 ```
 
-> 注意：`make test` 目前只跑后端 pytest。前端 Vitest 有独立的 `vitest.config.ts`，需手动在 frontend/ 目录下运行。
+> Vitest 前端测试仍需手动进入 frontend/: `cd frontend && npx vitest run`
 
 ---
 
