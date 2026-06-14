@@ -7,12 +7,12 @@
 - [ ] `api/app.py`：FastAPI 应用 + 依赖注入装配真实适配器
 - [ ] pydantic 请求/响应 schema
 - [ ] 路由：
-  - [ ] `POST /api/scan` → 入队、返回 `job_id`
-  - [ ] `GET /api/jobs/{id}`、`GET /api/jobs/{id}/events`（SSE）
-  - [ ] `GET /api/clips`（query：date/type/tag/q）、`GET /api/clips/{id}`
-  - [ ] `PATCH /api/clips/{id}`（纠正 roll/改 summary）
-  - [ ] `PUT /api/clips/{id}/tags`
-  - [ ] `POST /api/clips/{id}/reanalyze`
+  - [x] `POST /api/scan` → 入队、返回 `job_id`
+  - [x] `GET /api/jobs/{id}`、`GET /api/jobs/{id}/events`（SSE）
+  - [x] `GET /api/clips`（query：date/type/tag/q）、`GET /api/clips/{id}`
+  - [x] `PATCH /api/clips/{id}`（纠正 roll/改 summary）
+  - [x] `PUT /api/clips/{id}/tags`
+  - [x] `POST /api/clips/{id}/reanalyze`
   - [ ] `GET /api/search?q=`、`GET /api/clips/{id}/thumbnail`
   - [ ] `GET /api/settings`、`PUT /api/settings`
 

@@ -43,7 +43,7 @@ def _now() -> str:
 def _make_clip(**overrides: Any) -> Clip:
     """Return a :class:`Clip` with sensible defaults, overridable via *overrides*."""
     defaults = dict(
-        id=None, fingerprint="test_fp", source_path="/tmp/test.mp4",
+        id=None, fingerprint="aabbccdd00112233", source_path="/tmp/test.mp4",
         roll_type="a", status="pending", summary=None, description=None,
         created_at=_now(),
     )
@@ -391,8 +391,8 @@ class TestErrorInjectionContinuation:
         bad_probe.probe = failing_probe  # type: ignore[assignment]
         orch.probe = bad_probe
 
-        candidate1 = _make_candidate(path="/tmp/clip1.mp4", fingerprint="fp1")
-        candidate2 = _make_candidate(path="/tmp/clip2.mp4", fingerprint="fp2")
+        candidate1 = _make_candidate(path="/tmp/clip1.mp4", fingerprint="aaaaaaaaaaaaaaa1")
+        candidate2 = _make_candidate(path="/tmp/clip2.mp4", fingerprint="bbbbbbbbbbbbbbb2")
 
         result1 = orch.process_clip(candidate1)
         assert result1 is None  # first clip failed
@@ -453,11 +453,11 @@ class TestIdempotentSkip:
 
         # Pre-populate the repository with a done clip (simulating prior scan)
         existing_clip = _make_clip(
-            id=42, fingerprint="existing_fp", source_path="/tmp/old.mp4",
+            id=42, fingerprint="ccccccccccccccc3", source_path="/tmp/old.mp4",
             roll_type="a", status="done", summary=None, description=None,
         )
         repo._clips[42] = existing_clip
-        repo._clip_by_fp["existing_fp"] = 42
+        repo._clip_by_fp["ccccccccccccccc3"] = 42
 
         orch = Orchestrator(
             probe=fake_probe, thumbnail_maker=fake_thumbnail, speech_detector=fake_speech_a,
@@ -465,7 +465,7 @@ class TestIdempotentSkip:
         )
 
         # Candidate with the same fingerprint as existing clip → should be skipped
-        candidate = _make_candidate(path="/tmp/another.mp4", fingerprint="existing_fp")
+        candidate = _make_candidate(path="/tmp/another.mp4", fingerprint="ccccccccccccccc3")
 
         result_id = orch.process_clip(candidate)
         assert result_id == 42  # returns existing clip ID
@@ -495,11 +495,11 @@ class TestIdempotentSkip:
 
         # Pre-populate with a done clip
         existing_clip = _make_clip(
-            id=99, fingerprint="skip_me", source_path="/tmp/skip.mp4",
+            id=99, fingerprint="ddddddddddddddd4", source_path="/tmp/skip.mp4",
             roll_type="b", status="done", summary=None, description=None,
         )
         repo._clips[99] = existing_clip
-        repo._clip_by_fp["skip_me"] = 99
+        repo._clip_by_fp["ddddddddddddddd4"] = 99
 
         library = FakeLibraryWriter(library_path="/library")
         orch = Orchestrator(
@@ -508,7 +508,7 @@ class TestIdempotentSkip:
             library_writer=library,
         )
 
-        candidate = _make_candidate(path="/tmp/other.mp4", fingerprint="skip_me")
+        candidate = _make_candidate(path="/tmp/other.mp4", fingerprint="ddddddddddddddd4")
         orch.process_clip(candidate)  # should skip
 
         assert repo.upsert_calls == []   # no upsert on skipped clip
@@ -626,7 +626,7 @@ class TestReanalyze:
 
         # Create a clip that was manually corrected to B-roll
         manual_clip = _make_clip(
-            id=10, fingerprint="manual_fp", source_path="/tmp/manual.mp4",
+            id=10, fingerprint="eeeeeeeeeeeeeee5", source_path="/tmp/manual.mp4",
             roll_type="b", roll_source="manual",  # user corrected from A to B
             status="done", summary=None, description=None,
         )
@@ -666,7 +666,7 @@ class TestReanalyze:
         repo = FakeCatalogRepository()
 
         existing_clip = _make_clip(
-            id=20, fingerprint="tag_fp", source_path="/tmp/tagged.mp4",
+            id=20, fingerprint="fffffffffffffff6", source_path="/tmp/tagged.mp4",
             roll_type="a", status="done", summary=None, description=None,
         )
         repo._clips[20] = existing_clip
@@ -714,7 +714,7 @@ class TestReanalyze:
         repo = FakeCatalogRepository()
 
         existing_clip = _make_clip(
-            id=30, fingerprint="refresh_fp", source_path="/tmp/refresh.mp4",
+            id=30, fingerprint="1111111111111117", source_path="/tmp/refresh.mp4",
             roll_type="a", status="done", summary="旧摘要", description=None,
         )
         repo._clips[30] = existing_clip
@@ -757,7 +757,7 @@ class TestReanalyze:
         repo = FakeCatalogRepository()
 
         clip = _make_clip(
-            id=40, fingerprint="no_copy_fp", source_path="/tmp/no_copy.mp4",
+            id=40, fingerprint="2222222222222218", source_path="/tmp/no_copy.mp4",
             roll_type="a", status="done", summary=None, description=None,
         )
         repo._clips[40] = clip
