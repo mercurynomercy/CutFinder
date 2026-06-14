@@ -1,4 +1,4 @@
-import { defineConfig, devices } from '@playwright/test'
+import { defineConfig, devices } from 'playwright/test'
 
 /** See https://playwright.dev/docs/configuration */
 export default defineConfig({
@@ -25,6 +25,6 @@ export default defineConfig({
   webServer: {
     command: 'npm run dev -- --port 5080',
     url: 'http://localhost:5080',
-    reuseExisting: false,
+    reuseExistingServer: true,
   },
 })

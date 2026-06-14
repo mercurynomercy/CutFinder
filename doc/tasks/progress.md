@@ -19,15 +19,15 @@
 - [x] [09 CatalogRepository 仓储](./09-catalog-repository.md)
 
 ## 阶段 2 · 核心逻辑
-- [ ] [10 Scanner 扫描去重](./10-scanner.md)
-- [ ] [11 Orchestrator 流水线编排](./11-orchestrator.md)
-- [ ] [12 Worker 队列+SSE](./12-worker-queue.md)
+- [x] [10 Scanner 扫描去重](./10-scanner.md)
+- [x] [11 Orchestrator 流水线编排](./11-orchestrator.md)
+- [x] [12 Worker 队列+SSE](./12-worker-queue.md)
 
 ## 阶段 3 · 接口
-- [ ] [13 API 层(FastAPI)](./13-api.md)
+- [x] [13 API 层(FastAPI)](./13-api.md)
 
 ## 阶段 4 · 前端
-- [ ] [14 Frontend 前端](./14-frontend.md)
+- [x] [14 Frontend 前端](./14-frontend.md)
 
 ## 阶段 5 · 集成与部署
 - [ ] [15 环境/部署/集成测试](./15-env-deploy.md)
@@ -35,6 +35,6 @@
 ---
 
 ### 里程碑
-- [ ] **可跑通单元测试**（阶段 0–2 完成，`make test` 全绿）
-- [ ] **后端 API 可用**（阶段 3 完成，假数据可访问）
+- [x] **可跑通单元测试**（阶段 0–2 完成，`make test` 全绿）
+- [x] **后端 API 可用**（阶段 3 完成，假数据可访问）
 - [ ] **端到端可用**（阶段 4–5 完成，真素材跑通扫描→检索）
