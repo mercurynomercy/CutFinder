@@ -40,6 +40,7 @@ from cutfinder.domain.models import (
     ClipFilter,
     ClipSummary,
     Job,
+    SummaryResult,
     Tag,
     Transcript,
     VideoMetadata,
@@ -153,7 +154,7 @@ class Orchestrator:
         self.frame_extractor = frame_extractor
 
         # Default speech detector returns 0.0 (no speech → B-roll) if not injected
-        self.speech_detector: SpeechDetector = speech_detector  # type: ignore[assignment]
+        self.speech_detector: SpeechDetector = speech_detector
         if self.speech_detector is None:
             self.speech_detector = _NoOpSpeechDetector()
 
@@ -162,14 +163,14 @@ class Orchestrator:
         self.vision_tagger = vision_tagger
 
         # Default repository: no-op so tests can inject a real fake
-        self.repository: CatalogRepository = (  # type: ignore[assignment]
+        self.repository: CatalogRepository = (
             repository if repository is not None else _NoOpRepository()
         )
 
         self.library_writer = library_writer
 
         # Default progress callback: no-op (tests can inject to inspect events)
-        self.progress_callback = lambda _evt: None  # type: ignore[assignment]
+        self.progress_callback = lambda _evt: None
 
         #: Number of frames to extract for B-roll vision tagging.
         self.num_frames = num_frames
@@ -268,11 +269,11 @@ class Orchestrator:
             auto_tags = list(analysis.vision_result.tags)  # B-roll tags
 
         summary_text: str | None = (
-            analysis.summary_result.summary  # type: ignore[union-attr]
+            analysis.summary_result.summary
             if analysis.summary_result is not None else None
         )
         description_text: str | None = (
-            analysis.vision_result.description  # type: ignore[union-attr]
+            analysis.vision_result.description
             if analysis.vision_result is not None else None
         )
 
@@ -287,8 +288,8 @@ class Orchestrator:
             self.repository.set_tags(clip_id, [Tag(name=t, source="auto") for t in auto_tags])
 
         # Store transcript separately (A-roll)
-        if clip_id is not None and analysis.transcript is not None:  # type: ignore[union-attr]
-            t = analysis.transcript  # type: ignore[union-attr]
+        if clip_id is not None and analysis.transcript is not None:
+            t = analysis.transcript
             if getattr(t, 'full_text', ''):
                 self.repository.save_transcript(clip_id, t)
 
@@ -318,12 +319,10 @@ class Orchestrator:
     def reanalyze(self, clip_id: int) -> bool:
         """Force-re-run AI analysis for an existing clip without re-copying.
 
-        Preserves:
-            - Manual A/B roll classification (roll_source='manual' is never overwritten)
+        Preserves:  # - Manual A/B roll classification (roll_source='manual' is never overwritten)
             - Manually-added tags
 
-        Refreshes:
-            - Auto-generated tags (replaced with new AI output)
+        Refreshes:  # - Auto-generated tags (replaced with new AI output)
             - Summary / description (A-roll summary, B-roll visual description)
             - Transcript (full-text transcription for A-roll clips)
 
@@ -368,16 +367,16 @@ class Orchestrator:
         # Extract auto tags from AI result (same logic as process_clip)
         auto_tags: list[str] = []
         if analysis.summary_result is not None:
-            auto_tags = list(analysis.summary_result.tags)  # type: ignore[union-attr]
+            auto_tags = list(analysis.summary_result.tags)
         elif analysis.vision_result is not None:
-            auto_tags = list(analysis.vision_result.tags)  # type: ignore[union-attr]
+            auto_tags = list(analysis.vision_result.tags)
 
         # Update analysis on repository (preserves manual tags + roll)
-        if self.repository:  # type: ignore[redundant-expr]
+        if self.repository:
             self.repository.update_analysis(clip_id, analysis)  # analysis IS AnalysisResult
             # Store transcript if A-roll and present
-            if analysis.transcript is not None:  # type: ignore[union-attr]
-                t = analysis.transcript  # type: ignore[union-attr]
+            if analysis.transcript is not None:
+                t = analysis.transcript
                 if getattr(t, 'full_text', ''):
                     self.repository.save_transcript(clip_id, t)
 
@@ -389,46 +388,46 @@ class Orchestrator:
         """Run metadata probe. Returns :class:`VideoMetadata`."""
         if self.probe is None:
             return VideoMetadata(duration_s=0.0, has_audio=False)  # default stub
-        probe_path: Path = Path(path) if isinstance(path, str) else path  # type: ignore[assignment]
+        probe_path: Path = Path(path) if isinstance(path, str) else path
         return self.probe.probe(probe_path)
 
     def _do_thumbnail(self, path: str) -> str:
         """Generate thumbnail. Returns the output file path as string."""
         if self.thumbnail_maker is None:
             return ""  # no thumbnail generated
-        out_path = Path(path).with_suffix(".jpg") if isinstance(path, str) else path.with_suffix(".jpg")  # type: ignore[union-attr]
-        self.thumbnail_maker.make(Path(path), out_path)  # type: ignore[arg-type]
+        out_path = Path(path).with_suffix(".jpg") if isinstance(path, str) else path.with_suffix(".jpg")
+        self.thumbnail_maker.make(Path(path), out_path)
         return str(out_path)
 
     def _do_vad(self, path: str) -> float:
         """Run VAD speech detection. Returns speech ratio (0–1)."""
-        vad_path: Path = Path(path) if isinstance(path, str) else path  # type: ignore[assignment]
+        vad_path: Path = Path(path) if isinstance(path, str) else path
         return self.speech_detector.speech_ratio(vad_path)
 
     def _do_a_roll(self, path: str) -> AnalysisResult:
         """A-roll analysis: transcribe → summarise."""
         transcript: Transcript | None = None
-        if self.transcriber is not None and isinstance(path, str):  # type: ignore[redundant-expr]
+        if self.transcriber is not None and isinstance(path, str):
             transcript = self.transcriber.transcribe(Path(path))
 
         summary_result: SummaryResult | None = None
-        if self.summarizer is not None and transcript is not None:  # type: ignore[redundant-expr]
+        if self.summarizer is not None and transcript is not None:
             if getattr(transcript, 'full_text', ''):
-                summary_result = self.summarizer.summarize(transcript.full_text)  # type: ignore[union-attr]
+                summary_result = self.summarizer.summarize(transcript.full_text)
 
-        return AnalysisResult(roll_type="a", transcript=transcript, summary_result=summary_result)  # type: ignore[arg-type]
+        return AnalysisResult(roll_type="a", transcript=transcript, summary_result=summary_result)
 
     def _do_b_roll(self, path: str) -> AnalysisResult:
         """B-roll analysis: extract frames → vision tagger."""
         frame_paths: list[Path] = []
-        if self.frame_extractor is not None and isinstance(path, str):  # type: ignore[redundant-expr]
+        if self.frame_extractor is not None and isinstance(path, str):
             frame_paths = self.frame_extractor.extract(Path(path), self.num_frames)
 
         vision_result: VisionResult | None = None
-        if self.vision_tagger is not None and frame_paths:  # type: ignore[redundant-expr]
+        if self.vision_tagger is not None and frame_paths:
             vision_result = self.vision_tagger.describe(frame_paths)
 
-        return AnalysisResult(roll_type="b", vision_result=vision_result, transcript=None)  # type: ignore[arg-type]
+        return AnalysisResult(roll_type="b", vision_result=vision_result, transcript=None)
 
     def _build_clip(
         self,
@@ -467,7 +466,7 @@ class Orchestrator:
     def _find_clip_by_fp(self, fp: str) -> Clip | None:
         """Find a clip by fingerprint. Default uses repo if available."""
         # The fake repository doesn't have this method; scan all clips.
-        for clip in self.repository._clips.values():  # type: ignore[union-attr]
+        for clip in self.repository._clips.values():
             if clip.fingerprint == fp:
                 return clip
         # If it's the real no-op repo, there won't be _clips — return None
@@ -478,8 +477,8 @@ class Orchestrator:
         logger.error("Step '%s' failed for %s: %s", step, candidate.path, error_msg)
         try:
             clip_id = self.repository.upsert_clip(self._build_clip(
-                candidate=candidate, meta=VideoMetadata(duration_s=0.0),  # type: ignore[arg-type]
-                thumbnail_path="", roll_type="b", status="error",  # type: ignore[arg-type]
+                candidate=candidate, meta=VideoMetadata(duration_s=0.0),
+                thumbnail_path="", roll_type="b", status="error",
             ))
         except Exception:  # noqa: BLE001 — best effort; don't let this fail
             clip_id = None
@@ -487,8 +486,8 @@ class Orchestrator:
         if clip_id is not None:
             # Update with error message (if repo supports it)
             try:
-                if hasattr(self.repository, 'update_clip_error'):  # type: ignore[redundant-expr]
-                    self.repository.update_clip_error(clip_id, error_msg)  # type: ignore[union-attr]
+                if hasattr(self.repository, 'update_clip_error'):
+                    self.repository.update_clip_error(clip_id, error_msg)
             except Exception:  # noqa: BLE001 — best effort only
                 pass
 
@@ -550,7 +549,7 @@ class _NoOpRepository(CatalogRepository):
         return None
 
     def create_job(self, total: int = 0) -> Job:
-        return Job(  # type: ignore[call-arg] — minimal stub
+        return Job(  # — minimal stub
             id=0, status="running", total=total, done=0, failed=0,
             started_at=_dt.datetime.now(_dt.timezone.utc).isoformat(),
         )

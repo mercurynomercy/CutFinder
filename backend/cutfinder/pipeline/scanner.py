@@ -130,14 +130,14 @@ class Scanner:
     >>> scanner = Scanner(FakeCatalogRepository())        # doctest: +SKIP
     """
 
-    def __init__(self, repository: CatalogRepository) -> None:  # type: ignore[misc]
+    def __init__(self, repository: CatalogRepository) -> None:
         self._repository = repository
 
     def scan(
         self,
         source_folders: list[Path],
         extensions: set[str] | None = None,
-    ) -> list["ClipCandidate"]:  # type: ignore[name-defined] — forward ref resolved below
+    ) -> list["ClipCandidate"]:  # — forward ref resolved below
         """Walk *source_folders*, filter by extension, fingerprint and deduplicate.
 
         Parameters

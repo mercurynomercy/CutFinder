@@ -13,14 +13,17 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Optional, Union
+from typing import TYPE_CHECKING, Optional, Union
+
+if TYPE_CHECKING:
+    from fastapi import FastAPI  # type: ignore[import-untyped]
 
 logger = logging.getLogger(__name__)
 
 
 def create_app(  # noqa: C901 — simple linear assembly, not complex
     library_path: Optional[Union[str, Path]] = None,
-) -> "FastAPI":  # type: ignore[name-defined]
+) -> "FastAPI":
     """Build and return the FastAPI application with all routers mounted.
 
     Parameters
@@ -45,20 +48,20 @@ def create_app(  # noqa: C901 — simple linear assembly, not complex
     app = FastAPI(title="CutFinder", version="0.1.0")
 
     # ── 1. Repository (SQLite-backed) ─────────────────────────────
-    repository = None  # type: ignore[assignment]
+    repository = None
 
     if library_path is not None and str(library_path).strip():
         try:
             from cutfinder.infrastructure.sqlite import SQLiteRepository  # noqa: E402
 
             db_path = Path(library_path) / ".cutfinder" / "catalog.sqlite"
-            repository = SQLiteRepository(db_path=str(db_path))  # type: ignore[assignment]
+            repository = SQLiteRepository(db_path=str(db_path))
 
         except Exception as exc:  # noqa: BLE001
             logger.warning("SQLite repository failed to initialise — catalog routes disabled: %s", exc)
 
     # ── 2. Orchestrator (adapters for summarizer, vision tagger, etc.) ──
-    orchestrator = None  # type: ignore[assignment]
+    orchestrator = None
 
     if library_path is not None and str(library_path).strip():
         try:
@@ -71,9 +74,9 @@ def create_app(  # noqa: C901 — simple linear assembly, not complex
                 OmlxSummarizer,
             )
 
-            summarizer = OmlxSummarizer(  # type: ignore[assignment]
-                api_key=prefs.env.OMLX_API_KEY,  # type: ignore[union-attr]
-                base_url=prefs.env.OMLX_BASE_URL,  # type: ignore[union-attr]
+            summarizer = OmlxSummarizer(
+                api_key=config.env.OMLX_API_KEY,
+                base_url=config.env.OMLX_BASE_URL,
                 model_name=prefs.text_model,
             )
 
@@ -81,9 +84,9 @@ def create_app(  # noqa: C901 — simple linear assembly, not complex
                 OmlxVisionTagger,
             )
 
-            vision_tagger = OmlxVisionTagger(  # type: ignore[assignment]
-                api_key=prefs.env.OMLX_API_KEY,  # type: ignore[union-attr]
-                base_url=prefs.env.OMLX_BASE_URL,  # type: ignore[union-attr]
+            vision_tagger = OmlxVisionTagger(
+                api_key=config.env.OMLX_API_KEY,
+                base_url=config.env.OMLX_BASE_URL,
                 model_name=prefs.vision_model,
             )
 
@@ -91,7 +94,7 @@ def create_app(  # noqa: C901 — simple linear assembly, not complex
                 Orchestrator,
             )
 
-            orchestrator = Orchestrator(  # type: ignore[assignment]
+            orchestrator = Orchestrator(
                 summarizer=summarizer,
                 vision_tagger=vision_tagger,
             )
@@ -100,26 +103,26 @@ def create_app(  # noqa: C901 — simple linear assembly, not complex
             logger.warning("Orchestrator failed to initialise — analysis routes disabled: %s", exc)
 
     # ── 3. Worker Queue (background processing + SSE broadcast) ──
-    worker_queue = None  # type: ignore[assignment]
+    worker_queue = None
 
     if orchestrator is not None or repository is not None:
         from cutfinder.pipeline.worker import WorkerQueue  # noqa: E402
 
-        worker_queue = WorkerQueue(  # type: ignore[assignment]
+        worker_queue = WorkerQueue(
             orchestrator=orchestrator,
             repository=repository,
         )
 
     # ── 4. Config helpers (for settings routes) ─────────────────
-    load_config_fn = None  # type: ignore[assignment]
-    save_prefs_fn = None  # type: ignore[assignment]
+    load_config_fn = None
+    save_prefs_fn = None
 
     if library_path is not None and str(library_path).strip():
         from cutfinder.config import load_config as _lc  # noqa: E402
         from cutfinder.config import save_prefs as _sp  # noqa: E402
 
         load_config_fn = _lc
-        save_prefs_fn = _sp  # type: ignore[assignment]
+        save_prefs_fn = _sp
 
     def get_library() -> Optional[str]:
         """Return the current library path (or None)."""
@@ -131,21 +134,25 @@ def create_app(  # noqa: C901 — simple linear assembly, not complex
         _build_router as settings_router,
     )
 
-    app.include_router(main_router(repository, orchestrator, worker_queue))  # type: ignore[arg-type]
+    thumbnail_root = str(library_path) if library_path else None
+
+    app.include_router(
+        main_router(repository, orchestrator, worker_queue, thumbnail_root),
+    )
 
     if load_config_fn is not None and save_prefs_fn is not None:
         app.include_router(settings_router(load_config_fn, save_prefs_fn, get_library))
 
     # ── 6. Startup / shutdown — start/stop the worker queue ─────
-    @app.on_event("startup")  # type: ignore[attr-defined]
+    @app.on_event("startup")
     async def _startup() -> None:  # noqa: E402
-        if worker_queue is not None:  # type: ignore[union-attr]
-            await worker_queue.start()  # type: ignore[union-attr]
+        if worker_queue is not None:
+            await worker_queue.start()
 
-    @app.on_event("shutdown")  # type: ignore[attr-defined]
+    @app.on_event("shutdown")
     async def _shutdown() -> None:  # noqa: E402
-        if worker_queue is not None:  # type: ignore[union-attr]
-            await worker_queue.stop()  # type: ignore[union-attr]
+        if worker_queue is not None:
+            await worker_queue.stop()
 
     return app
 

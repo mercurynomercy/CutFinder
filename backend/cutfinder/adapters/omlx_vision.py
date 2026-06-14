@@ -96,7 +96,7 @@ class OmlxVisionTagger(VisionTagger):
             return VisionResult(description="", tags=[])
 
         import json as _json  # lazy to avoid top-level cold start
-        from openai import OpenAI, APIConnectionError  # type: ignore[import]
+        from openai import OpenAI, APIConnectionError
 
         def _encode_frame(path: Path) -> dict[str, Any]:
             """Read image file and return base64 data URI dict."""
@@ -142,7 +142,7 @@ class OmlxVisionTagger(VisionTagger):
                     }},
                 )
 
-            except APIConnectionError as e:  # type: ignore[attr-defined]
+            except APIConnectionError as e:
                 if attempt == max_retries:
                     raise RuntimeError(
                         f"OMLX vision connection failed after {1 + max_retries} attempt(s): {e}"
@@ -158,7 +158,7 @@ class OmlxVisionTagger(VisionTagger):
 
             # Parse structured output
             choice = response.choices[0]
-            if choice.message.refusal:  # type: ignore[attr-defined]
+            if choice.message.refusal:
                 continue  # retry on refusal
 
             raw_content = choice.message.content
@@ -178,7 +178,7 @@ class OmlxVisionTagger(VisionTagger):
                 continue  # retry: nothing useful
 
             if not isinstance(tags_raw, list) or any(
-                not isinstance(t, str) for t in tags_raw  # type: ignore[arg-type]
+                not isinstance(t, str) for t in tags_raw
             ):
                 continue  # retry: malformed tags
 

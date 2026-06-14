@@ -22,7 +22,7 @@ def _build_router(
     orchestrator: Any,              # Orchestrator (may be None)
     worker_queue: Any,              # WorkerQueue (may be None)
     thumbnail_root: Optional[str] = None,  # Library path root for thumbnails (may be None)
-):
+) -> Any:
     """Construct and return the main application ``APIRouter``.
 
     Parameters are injected at startup time by :func:`api.app.create_app`.
@@ -36,11 +36,11 @@ def _build_router(
 
     # ── Scan (POST /scan) ───────────────────────────────────────
     @router.post("/scan")
-    async def post_scan(  # type: ignore[misc]
+    async def post_scan(
         candidates: list[dict[str, str]],
-    ) -> dict[str, int]:  # type: ignore[misc]
+    ) -> dict[str, int]:
         """Accept a list of clip candidates and enqueue them for processing."""
-        if worker_queue is None:  # type: ignore[union-attr]
+        if worker_queue is None:
             raise HTTPException(status_code=503, detail="Worker queue not available")
 
         from pydantic import ValidationError  # noqa: E402
@@ -51,17 +51,17 @@ def _build_router(
         except ValidationError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
-        job_id = await worker_queue.enqueue_scan(candidates_obj)  # type: ignore[union-attr]
+        job_id = await worker_queue.enqueue_scan(candidates_obj)
         return {"job_id": job_id}
 
     # ── Job status (GET /jobs/{id}) ─────────────────────────────
     @router.get("/jobs/{job_id}")
-    async def get_job_status(job_id: int) -> dict[str, Any]:  # type: ignore[misc]
+    async def get_job_status(job_id: int) -> dict[str, Any]:
         """Return the current status of a scan/reanalyze job."""
-        if repository is None:  # type: ignore[union-attr]
+        if repository is None:
             raise HTTPException(status_code=503, detail="Job tracking not available")
 
-        job = repository.get_job(job_id)  # type: ignore[union-attr]
+        job = repository.get_job(job_id)
         if job is None:
             raise HTTPException(status_code=404, detail="Job not found")
 
@@ -76,17 +76,17 @@ def _build_router(
 
     # ── SSE event stream (GET /jobs/{id}/events) ───────────────
     @router.get("/jobs/{job_id}/events")
-    async def get_job_events(  # type: ignore[misc]
+    async def get_job_events(
         job_id: int,
-    ):  # type: ignore[misc]
+    ) -> StreamingResponse:
         """Subscribe to progress events for a specific job via SSE."""
         import asyncio as _asyncio
 
-        async def event_generator() -> AsyncIterator[str]:  # type: ignore[misc]
-            sid, queue = worker_queue.subscribe()  # type: ignore[union-attr]
+        async def event_generator() -> AsyncIterator[str]:
+            sid, queue = worker_queue.subscribe()
             try:
                 while True:
-                    event = await queue.get()  # type: ignore[union-attr]
+                    event = await queue.get()
 
                     # Filter events that belong to this job
                     if "job_id" in event and (event.get("job_id") != job_id):
@@ -99,7 +99,7 @@ def _build_router(
                 pass  # client disconnected
 
             finally:
-                worker_queue.unsubscribe(sid)  # type: ignore[union-attr]
+                worker_queue.unsubscribe(sid)
 
         return StreamingResponse(
             event_generator(),
@@ -113,18 +113,18 @@ def _build_router(
 
     # ── Clip list (GET /clips) ─────────────────────────────────
     @router.get("/clips")
-    async def list_clips(  # type: ignore[misc]
+    async def list_clips(
         date: Optional[str] = Query(None),
         roll_type: Optional[str] = Query(None),
         tag: Optional[str] = Query(None),
-    ):  # type: ignore[misc]
+    ) -> list[dict[str, Any]]:
         """Return a list of clips, optionally filtered."""
-        if repository is None:  # type: ignore[union-attr]
+        if repository is None:
             raise HTTPException(status_code=503, detail="Catalog not available")
 
         from cutfinder.domain.models import ClipFilter  # noqa: E402
         filters = ClipFilter(date=date, roll_type=roll_type, tag=tag)
-        clips = repository.query_clips(filters)  # type: ignore[union-attr]
+        clips = repository.query_clips(filters)
 
         return [
             {
@@ -138,24 +138,24 @@ def _build_router(
                 "thumbnail_path": getattr(c, 'thumbnail_path', None),
                 "status": c.status,
             }
-            for c in clips  # type: ignore[attr-defined]
+            for c in clips
         ]
 
     # ── Clip detail (GET /clips/{id}) ─────────────────────────
     @router.get("/clips/{clip_id}")
-    async def get_clip_detail(  # type: ignore[misc]
+    async def get_clip_detail(
         clip_id: int,
-    ):  # type: ignore[misc]
+    ) -> dict[str, Any]:
         """Return detailed information for a single clip."""
-        if repository is None:  # type: ignore[union-attr]
+        if repository is None:
             raise HTTPException(status_code=503, detail="Catalog not available")
 
-        clip = repository.get_clip(clip_id)  # type: ignore[union-attr]
+        clip = repository.get_clip(clip_id)
         if clip is None:
             raise HTTPException(status_code=404, detail="Clip not found")
 
-        tags = repository.get_tags(clip_id)  # type: ignore[union-attr]
-        transcript = repository.get_transcript(clip_id)  # type: ignore[union-attr]
+        tags = repository.get_tags(clip_id)
+        transcript = repository.get_transcript(clip_id)
 
         result = {
             "id": clip.id,
@@ -177,7 +177,7 @@ def _build_router(
 
         # capture_time may be datetime; serialize to ISO string if so
         ct = getattr(clip, 'capture_time', None)
-        result["capture_time"] = ct.isoformat() if hasattr(ct, 'isoformat') else ct
+        result["capture_time"] = ct.isoformat() if ct is not None and hasattr(ct, 'isoformat') else ct
         result["date_source"] = getattr(clip, 'date_source', 'file')
 
         # Tags
@@ -195,7 +195,7 @@ def _build_router(
                         "end_s": getattr(s, 'end_s', 0),
                         "text": getattr(s, 'text', ''),
                     }
-                    for s in getattr(transcript, 'segments', [])  # type: ignore[attr-defined]
+                    for s in getattr(transcript, 'segments', [])
                 ],
             }
 
@@ -203,41 +203,41 @@ def _build_router(
 
     # ── Roll correction (PATCH /clips/{id}/roll) ─────────────
     @router.patch("/clips/{clip_id}/roll")
-    async def correct_roll(  # type: ignore[misc]
+    async def correct_roll(
         clip_id: int,
         roll: str = Query(..., pattern="^[ab]$"),  # injected by FastAPI
-    ):  # type: ignore[misc]
+    ) -> dict[str, Any]:
         """Override the AI-generated A/B classification for a clip."""
 
-        if repository is None:  # type: ignore[union-attr]
+        if repository is None:
             raise HTTPException(status_code=503, detail="Catalog not available")
 
-        clip = repository.get_clip(clip_id)  # type: ignore[union-attr]
+        clip = repository.get_clip(clip_id)
         if clip is None:
             raise HTTPException(status_code=404, detail="Clip not found")
 
-        repository.correct_roll(clip_id, roll)  # type: ignore[union-attr]
+        repository.correct_roll(clip_id, roll)
         return {"status": "ok", "clip_id": clip_id, "roll_type": roll}
 
     # ── Summary/Description edit (PATCH /clips/{id}) ─────────
     @router.patch("/clips/{clip_id}")
-    async def edit_clip(  # type: ignore[misc]
+    async def edit_clip(
         clip_id: int,
         request: Request,  # injected by FastAPI (module-level import)
-    ):  # type: ignore[misc]
+    ) -> dict[str, Any]:
         """Edit the summary (A-roll) or description (B-roll)."""
 
         try:
-            body = _json.loads((await request.body()).decode())  # type: ignore[union-attr]
+            body = _json.loads((await request.body()).decode())
         except _json.JSONDecodeError as exc:
             raise HTTPException(status_code=422, detail="Body must be valid JSON") from exc
         if not isinstance(body, dict):
             raise HTTPException(status_code=422, detail="Body must be a JSON object")
 
-        if repository is None:  # type: ignore[union-attr]
+        if repository is None:
             raise HTTPException(status_code=503, detail="Catalog not available")
 
-        clip = repository.get_clip(clip_id)  # type: ignore[union-attr]
+        clip = repository.get_clip(clip_id)
         if clip is None:
             raise HTTPException(status_code=404, detail="Clip not found")
 
@@ -248,32 +248,32 @@ def _build_router(
 
         # Build a minimal analysis result with only provided fields.
         # roll_type is required by AnalysisResult but never changes via edit — carry it forward.
-        fields: dict[str, Any] = {"roll_type": clip.roll_type}  # type: ignore[attr-defined]
+        fields: dict[str, Any] = {"roll_type": clip.roll_type}
         if "summary" in body and body["summary"] is not None:
-            fields["summary_result"] = SummaryResult(  # type: ignore[call-arg]
+            fields["summary_result"] = SummaryResult(
                 summary=body["summary"], tags=[],
             )
         if "description" in body and body["description"] is not None:
-            fields["vision_result"] = VisionResult(  # type: ignore[call-arg]
+            fields["vision_result"] = VisionResult(
                 description=body["description"], tags=[],
             )
 
-        if fields:  # type: ignore[truthy-bool] — always has roll_type
-            result_obj = AnalysisResult(**fields)  # type: ignore[arg-type]
-            repository.update_analysis(clip_id, result_obj)  # type: ignore[union-attr]
+        if fields:  # - always has roll_type
+            result_obj = AnalysisResult(**fields)
+            repository.update_analysis(clip_id, result_obj)
 
         return {"status": "ok", "clip_id": clip_id}
 
     # ── Tag management (PUT /clips/{id}/tags) ───────────────
     @router.put("/clips/{clip_id}/tags")
-    async def set_clip_tags(  # type: ignore[misc]
+    async def set_clip_tags(
         clip_id: int,
         request: Request,  # injected by FastAPI (module-level import)
-    ):  # type: ignore[misc]
+    ) -> dict[str, Any]:
         """Replace all tags on a clip with the provided list."""
 
         try:
-            body = _json.loads((await request.body()).decode())  # type: ignore[union-attr]
+            body = _json.loads((await request.body()).decode())
         except _json.JSONDecodeError as exc:
             raise HTTPException(status_code=422, detail="Body must be valid JSON") from exc
         if not isinstance(body, dict):
@@ -283,48 +283,90 @@ def _build_router(
         if not isinstance(raw_tags, list):
             raise HTTPException(status_code=422, detail="'tags' must be a list")
 
-        if repository is None:  # type: ignore[union-attr]
+        if repository is None:
             raise HTTPException(status_code=503, detail="Catalog not available")
 
-        clip = repository.get_clip(clip_id)  # type: ignore[union-attr]
+        clip = repository.get_clip(clip_id)
         if clip is None:
             raise HTTPException(status_code=404, detail="Clip not found")
 
         from cutfinder.domain.models import Tag  # noqa: E402
         tag_objects = [
-            Tag(name=t["name"], source=t.get("source", "manual"))  # type: ignore[call-arg]
+            Tag(name=t["name"], source=t.get("source", "manual"))
             for t in raw_tags if "name" in t
         ]
 
-        repository.set_tags(clip_id, tag_objects)  # type: ignore[union-attr]
+        repository.set_tags(clip_id, tag_objects)
         return {"status": "ok", "clip_id": clip_id, "tags_count": len(tag_objects)}
 
     # ── Re-analyze (POST /clips/{id}/reanalyze) ─────────────
     @router.post("/clips/{clip_id}/reanalyze")
-    async def reanalyze_clip(  # type: ignore[misc]
+    async def reanalyze_clip(
         clip_id: int,
-    ):  # type: ignore[misc]
+    ) -> dict[str, Any]:
         """Trigger re-analysis of an existing clip."""
-        if worker_queue is None:  # type: ignore[union-attr]
+        if worker_queue is None:
             raise HTTPException(status_code=503, detail="Worker queue not available")
 
-        clip = repository.get_clip(clip_id)  # type: ignore[union-attr]
+        clip = repository.get_clip(clip_id)
         if clip is None:
             raise HTTPException(status_code=404, detail="Clip not found")
 
-        job_id = await worker_queue.enqueue_reanalyze(clip_id)  # type: ignore[union-attr]
+        job_id = await worker_queue.enqueue_reanalyze(clip_id)
         return {"job_id": job_id}
+
+    # ── Thumbnail (GET /clips/{id}/thumbnail) ───────────────
+    @router.get("/clips/{clip_id}/thumbnail")
+    async def get_clip_thumbnail(
+        clip_id: int,
+    ) -> StreamingResponse:
+        """Serve the thumbnail image for a clip from the library directory."""
+
+        if repository is None:
+            raise HTTPException(status_code=503, detail="Catalog not available")
+
+        clip = repository.get_clip(clip_id)
+        if clip is None:
+            raise HTTPException(status_code=404, detail="Clip not found")
+
+        thumbnail_path = getattr(clip, "thumbnail_path", None)
+        if not thumbnail_path:
+            raise HTTPException(status_code=404, detail="No thumbnail available")
+
+        thumb_file = Path(thumbnail_path)
+        if not thumb_file.is_file():
+            raise HTTPException(status_code=404, detail="Thumbnail file not found")
+
+        # Detect content type from extension
+        import mimetypes  # noqa: E402
+
+        mime_type, _ = mimetypes.guess_type(str(thumb_file))
+        if mime_type is None:
+            mime_type = "application/octet-stream"
+
+        def iter_file() -> Any:  # noqa: E402
+            with open(thumb_file, "rb") as f:  # noqa: E402
+                while chunk := f.read(65_536):
+                    yield chunk
+
+        return StreamingResponse(
+            iter_file(),
+            media_type=mime_type,
+            headers={
+                "Cache-Control": "public, max-age=86400",
+            },
+        )
 
     # ── Search (GET /search) ───────────────────────────────
     @router.get("/search")
-    async def search_clips(  # type: ignore[misc]
-        q: str = Query(..., min_length=1),  # type: ignore[assignment]
-    ):  # type: ignore[misc]
+    async def search_clips(
+        q: str = Query(..., min_length=1),
+    ) -> list[dict[str, Any]]:
         """Search clips by full-text match on summary, description, transcript."""
-        if repository is None:  # type: ignore[union-attr]
+        if repository is None:
             raise HTTPException(status_code=503, detail="Catalog not available")
 
-        clips = repository.search(q)  # type: ignore[union-attr]
+        clips = repository.search(q)
         return [
             {
                 "id": c.id,
@@ -334,7 +376,7 @@ def _build_router(
                 "summary": getattr(c, 'summary', None),
                 "description": getattr(c, 'description', None),
             }
-            for c in clips  # type: ignore[attr-defined]
+            for c in clips
         ]
 
     return router

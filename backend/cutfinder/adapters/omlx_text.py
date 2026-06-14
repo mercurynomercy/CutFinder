@@ -96,7 +96,7 @@ class OmlxSummarizer(Summarizer):
 
         import json as _json  # lazy to avoid top-level cold start
 
-        from openai import OpenAI, APIConnectionError  # type: ignore[import]
+        from openai import OpenAI, APIConnectionError
 
         client = OpenAI(
             base_url=self._config.env.OMLX_BASE_URL,
@@ -129,7 +129,7 @@ class OmlxSummarizer(Summarizer):
                     messages=[{"role": "user", "content": prompt}],
                     response_format={"type": "json_schema", "json_schema": json_schema},
                 )
-            except APIConnectionError as e:  # type: ignore[attr-defined]
+            except APIConnectionError as e:
                 if attempt == max_retries:
                     raise RuntimeError(
                         f"OMLX connection failed after {1 + max_retries} attempt(s): {e}"
@@ -145,7 +145,7 @@ class OmlxSummarizer(Summarizer):
 
             # Parse structured output
             choice = response.choices[0]
-            if choice.message.refusal:  # type: ignore[attr-defined] — model refused the request
+            if choice.message.refusal:  # - model refusal -> retry
                 continue  # retry on refusal (model may succeed next attempt)
 
             raw_content = choice.message.content
@@ -165,7 +165,7 @@ class OmlxSummarizer(Summarizer):
                 continue  # retry: nothing useful returned
 
             if not isinstance(tags_raw, list) or any(
-                not isinstance(t, str) for t in tags_raw  # type: ignore[arg-type]
+                not isinstance(t, str) for t in tags_raw
             ):
                 continue  # retry: malformed tags
 

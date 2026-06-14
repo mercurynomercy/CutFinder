@@ -52,7 +52,12 @@ key  = os.environ.get('OMLX_API_KEY', ''); \
 if not key: raise SystemExit('OMLX_API_KEY is empty — set it in .env'); \
 resp = httpx.get(f'{base}/models', headers={'Authorization': f'Bearer {key}'}); \
 resp.raise_for_status(); \
-print('OMLX OK — models:', [m['id'] for m in resp.json().get('data', [])])"
+models = [m['id'] for m in resp.json().get('data', [])]; \
+print('OMLX OK — models:', models); \
+required = ['qwen3.6-35b-a3b', 'qwen3-vl-8b-instruct']; \
+missing = [m for m in required if not any(m.lower() in mid.lower() for mid in models)]; \
+if missing: raise SystemExit('Missing required OMLX models: ' + ', '.join(missing)); \
+print('All required text/vision models are present.')"
 
 # ── 5. test — unit tests only (no external deps) ───────────────
 test: uv-sync

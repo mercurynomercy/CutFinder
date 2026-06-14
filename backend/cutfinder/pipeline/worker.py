@@ -56,11 +56,11 @@ class _EventStream:
 
     """
 
-    subscribers: dict[str, asyncio.Queue] = field(default_factory=dict)
+    subscribers: dict[str, asyncio.Queue[Any]] = field(default_factory=dict)
     wait_event: asyncio.Event = field(default_factory=asyncio.Event)
     _next_id: int = 0
 
-    def add(self) -> tuple[str, asyncio.Queue]:
+    def add(self) -> tuple[str, asyncio.Queue[Any]]:
         """Register a new subscriber and return (id, queue)."""
         sid = f"sub_{self._next_id}"
         self._next_id += 1
@@ -140,6 +140,9 @@ class WorkerQueue:
         # Track the current job being processed (for counter updates)
         self._current_job_id: int | None = None
 
+        # Auto-increment counter for job IDs when no repository is available
+        self._next_job_counter: int = 0
+
     # ── Lifecycle ────────────────────────────────────────────────
 
     async def start(self) -> None:
@@ -198,8 +201,12 @@ class WorkerQueue:
             if job_id is not None and (existing := self._repository.get_job(job_id)):
                 pass  # reuse existing job record
             elif job_id is None:
-                job = self._repository.create_job(total=len(candidates))  # type: ignore[union-attr]
+                job = self._repository.create_job(total=len(candidates))
                 job_id = job.id
+
+        if job_id is None:
+            self._next_job_counter += 1
+            job_id = self._next_job_counter
 
         self._current_job_id = job_id  # track for counter updates in _process_clip
 
@@ -207,7 +214,7 @@ class WorkerQueue:
         self._emit({"type": "job_started", "job_id": job_id, "total": len(candidates)})
 
         for candidate in candidates:
-            await self._queue.put(("clip", candidate))  # type: ignore[arg-type]
+            await self._queue.put(("clip", candidate))
 
         return job_id
 
@@ -236,8 +243,12 @@ class WorkerQueue:
             if job_id is not None and (existing := self._repository.get_job(job_id)):
                 pass  # reuse existing job record
             elif job_id is None:
-                job = self._repository.create_job(total=1)  # type: ignore[union-attr]
+                job = self._repository.create_job(total=1)
                 job_id = job.id
+
+        if job_id is None:
+            self._next_job_counter += 1
+            job_id = self._next_job_counter
 
         self._current_job_id = job_id  # track for counter updates in _process_reanalyze
         self._emit({"type": "job_started", "job_id": job_id, "total": 1})
@@ -254,7 +265,7 @@ class WorkerQueue:
             A :class:`ClipCandidate` to process.
 
         """
-        await self._queue.put(("clip", candidate))  # type: ignore[arg-type]
+        await self._queue.put(("clip", candidate))
 
     async def enqueue_reanalyze_task(self, clip_id: int) -> None:
         """Enqueue a single re-analysis task (no job tracking).
@@ -265,11 +276,11 @@ class WorkerQueue:
             Database ID of the existing processed clip.
 
         """
-        await self._queue.put(("reanalyze", clip_id))  # type: ignore[arg-type]
+        await self._queue.put(("reanalyze", clip_id))
 
     # ── SSE subscriber management ────────────────────────────────
 
-    def subscribe(self) -> tuple[str, asyncio.Queue]:
+    def subscribe(self) -> tuple[str, asyncio.Queue[Any]]:
         """Register a new SSE subscriber.
 
         Returns ``(subscriber_id, event_queue)`` — the caller should
@@ -326,13 +337,13 @@ class WorkerQueue:
                     self._queue.task_done()
                     break
 
-                kind, payload = item  # type: ignore[misc]
+                kind, payload = item
 
                 try:
                     if kind == "clip":
-                        await self._process_clip(payload)  # type: ignore[arg-type]
+                        await self._process_clip(payload)
                     elif kind == "reanalyze":
-                        await self._process_reanalyze(payload)  # type: ignore[arg-type]
+                        await self._process_reanalyze(payload)
 
                 except Exception as exc:  # noqa: BLE001 — error isolation per clip
                     logger.error(
@@ -354,7 +365,7 @@ class WorkerQueue:
 
             # Update job counters (current job only)
             if self._repository and self._current_job_id is not None:
-                job = self._repository.get_job(self._current_job_id)  # type: ignore[union-attr]
+                job = self._repository.get_job(self._current_job_id)
                 if job is not None:
                     self._repository.update_job(self._current_job_id, done=job.done + 1)
 
@@ -374,7 +385,7 @@ class WorkerQueue:
 
             # Update job counters on failure (current job only)
             if self._repository and self._current_job_id is not None:
-                job = self._repository.get_job(self._current_job_id)  # type: ignore[union-attr]
+                job = self._repository.get_job(self._current_job_id)
                 if job is not None:
                     self._repository.update_job(
                         self._current_job_id, done=job.done + 1, failed=job.failed + 1,
@@ -391,7 +402,7 @@ class WorkerQueue:
 
             # Update job counters (current job only)
             if self._repository and self._current_job_id is not None:
-                job = self._repository.get_job(self._current_job_id)  # type: ignore[union-attr]
+                job = self._repository.get_job(self._current_job_id)
                 if job is not None:
                     self._repository.update_job(self._current_job_id, done=job.done + 1)
 
@@ -408,7 +419,7 @@ class WorkerQueue:
             })
 
             if self._repository and self._current_job_id is not None:
-                job = self._repository.get_job(self._current_job_id)  # type: ignore[union-attr]
+                job = self._repository.get_job(self._current_job_id)
                 if job is not None:
                     self._repository.update_job(
                         self._current_job_id, done=job.done + 1, failed=job.failed + 1,

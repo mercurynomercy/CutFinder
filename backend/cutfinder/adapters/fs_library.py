@@ -94,10 +94,10 @@ class FsLibraryWriter:
         shutil.copy2(src, dest)
 
         # Verify size integrity after copy
-        if src.stat().st_size != dest.stat().st_size:  # type: ignore[union-attr]
+        if src.stat().st_size != dest.stat().st_size:
             raise OSError(
                 f"Size mismatch after copy: source={src.stat().st_size}, "
-                f"dest={dest.stat().st_size}"  # type: ignore[union-attr]
+                f"dest={dest.stat().st_size}"
             )
 
         return str(dest)

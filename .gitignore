@@ -27,3 +27,12 @@ frontend/dist/
 # 编辑器
 .idea/
 .vscode/
+
+# Build / test artifacts (frontend)
+*.tsbuildinfo
+playwright-report/
+test-results/
+
+# Debug scripts (e2e development)
+*e2e/_debug*.mjs
+test_*.mjs

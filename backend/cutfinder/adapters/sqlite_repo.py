@@ -136,7 +136,7 @@ class SqliteRepository:
     >>> repo = SqliteRepository(conn)  # doctest: +SKIP
     """
 
-    def __init__(self, conn: _Conn) -> None:  # type: ignore[type-arg]
+    def __init__(self, conn: _Conn) -> None:
         self._conn = conn
         self.execute_schema()
 
@@ -268,17 +268,17 @@ class SqliteRepository:
         conditions: list[str] = []
         params: list[object] = []
 
-        if f.date is not None:  # type: ignore[attr-defined]
+        if f.date is not None:
             conditions.append("date(capture_time) = ? OR date(created_at) = ?")  # capture or creation
-            params.extend([f.date, f.date])  # type: ignore[attr-defined]
+            params.extend([f.date, f.date])
 
-        if hasattr(f, "roll_type") and f.roll_type is not None:  # type: ignore[attr-defined]
+        if hasattr(f, "roll_type") and f.roll_type is not None:
             conditions.append("roll_type = ?")
-            params.append(f.roll_type)  # type: ignore[attr-defined]
+            params.append(f.roll_type)
 
-        if hasattr(f, "tag") and f.tag is not None:  # type: ignore[attr-defined]
+        if hasattr(f, "tag") and f.tag is not None:
             conditions.append("id IN (SELECT clip_id FROM tags WHERE name = ?)")
-            params.append(f.tag)  # type: ignore[attr-defined]
+            params.append(f.tag)
 
         sql = f"SELECT {_clip_columns_sql()} FROM clips WHERE {' AND '.join(conditions)} ORDER BY id" if conditions else f"SELECT {_clip_columns_sql()} FROM clips ORDER BY id"
         c.execute(sql, params)
@@ -397,13 +397,13 @@ class SqliteRepository:
             return  # clip doesn't exist — silently skip.
 
         roll_source, current_roll = row
-        new_roll: str = r.roll_type  # type: ignore[attr-defined]
+        new_roll: str = r.roll_type
 
         if roll_source != "manual":
             c.execute("UPDATE clips SET roll_type = ? WHERE id = ?", (new_roll, clip_id))
 
         # Update transcript if present.
-        new_transcript = getattr(r, "transcript", None)  # type: ignore[attr-defined]
+        new_transcript = getattr(r, "transcript", None)
         if new_transcript is not None and isinstance(new_transcript, Transcript):
             c.execute("""
                 INSERT INTO transcripts (clip_id, full_text, segments_json)
@@ -416,20 +416,20 @@ class SqliteRepository:
             )))
 
         # Update summary (A-roll).
-        sr = getattr(r, "summary_result", None)  # type: ignore[attr-defined]
-        if sr is not None and hasattr(sr, "summary") and sr.summary:  # type: ignore[attr-defined]
-            c.execute("UPDATE clips SET summary = ? WHERE id = ?", (sr.summary, clip_id))  # type: ignore[attr-defined]
+        sr = getattr(r, "summary_result", None)
+        if sr is not None and hasattr(sr, "summary") and sr.summary:
+            c.execute("UPDATE clips SET summary = ? WHERE id = ?", (sr.summary, clip_id))
 
         # Update description (B-roll).
-        vr = getattr(r, "vision_result", None)  # type: ignore[attr-defined]
-        if vr is not None and hasattr(vr, "description") and vr.description:  # type: ignore[attr-defined]
-            c.execute("UPDATE clips SET description = ? WHERE id = ?", (vr.description, clip_id))  # type: ignore[attr-defined]
+        vr = getattr(r, "vision_result", None)
+        if vr is not None and hasattr(vr, "description") and vr.description:
+            c.execute("UPDATE clips SET description = ? WHERE id = ?", (vr.description, clip_id))
 
         # Update tags — preserve manual ones, replace auto.
-        if hasattr(r, "vision_result") and vr is not None:  # type: ignore[attr-defined]
-            auto_tags = [Tag(name=t, source="auto") for t in vr.tags]  # type: ignore[attr-defined]
-        elif hasattr(r, "summary_result") and sr is not None:  # type: ignore[attr-defined]
-            auto_tags = [Tag(name=t, source="auto") for t in sr.tags]  # type: ignore[attr-defined]
+        if hasattr(r, "vision_result") and vr is not None:
+            auto_tags = [Tag(name=t, source="auto") for t in vr.tags]
+        elif hasattr(r, "summary_result") and sr is not None:
+            auto_tags = [Tag(name=t, source="auto") for t in sr.tags]
         else:
             auto_tags = []
 
@@ -461,7 +461,7 @@ class SqliteRepository:
     def save_transcript(self, clip_id: int, t) -> None:  # noqa: ANN001 — type is Transcript
         c = self._conn.cursor()
         segments_json = json.dumps(
-            [dict(start_s=s.start_s, end_s=s.end_s, text=s.text) for s in t.segments]  # type: ignore[attr-defined]
+            [dict(start_s=s.start_s, end_s=s.end_s, text=s.text) for s in t.segments]
         ) if hasattr(t, "segments") else ""
 
         c.execute("""
@@ -470,7 +470,7 @@ class SqliteRepository:
             ON CONFLICT(clip_id) DO UPDATE SET
                 full_text = excluded.full_text,
                 segments_json = excluded.segments_json
-        """, (clip_id, t.full_text or "", segments_json))  # type: ignore[attr-defined]
+        """, (clip_id, t.full_text or "", segments_json))
 
         self._sync_fts_transcript(clip_id)
         self._conn.commit()
@@ -572,9 +572,9 @@ class SqliteRepository:
 
     def close(self) -> None:
         """Close the underlying connection.  Idempotent."""
-        if self._conn is not None:  # type: ignore[union-attr]
+        if self._conn is not None:
             self._conn.close()
-            self._conn = None  # type: ignore[assignment]
+            self._conn = None
 
 
 # ── In-memory convenience wrapper (tests) ─────────────────────

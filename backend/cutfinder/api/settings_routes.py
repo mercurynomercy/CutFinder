@@ -32,14 +32,14 @@ def _build_router(
     router = APIRouter(prefix="/api", tags=["Settings"])
 
     @router.get("/settings", summary="Read current application settings")
-    async def get_settings() -> dict[str, Any]:  # type: ignore[misc]
+    async def get_settings() -> dict[str, Any]:
         """Return current configuration (env vars + user prefs)."""
-        library_path = get_library_fn()  # type: ignore[union-attr]
+        library_path = get_library_fn()
         if not library_path:
             raise HTTPException(status_code=404, detail="No library configured")
 
         try:
-            config = load_config_fn(library_path)  # type: ignore[union-attr]
+            config = load_config_fn(library_path)
         except Exception as exc:  # noqa: BLE001 — return best-effort if config unreadable
             raise HTTPException(status_code=503, detail=f"Config error: {exc}")
 
@@ -68,7 +68,7 @@ def _build_router(
 
         # Try to read the actual prefs object from config
         if hasattr(config, 'prefs'):
-            p = config.prefs  # type: Prefs from cutfinder.config
+            p = config.prefs  # prefs from cutfinder.config
             prefs["source_folders"] = getattr(p, 'source_folders', [])
             prefs["library_path"] = config.library_path if hasattr(config, 'library_path') else None
             prefs["text_model"] = getattr(p, 'text_model', "Qwen3-VL-8B-Instruct")
@@ -81,22 +81,22 @@ def _build_router(
         return {"env": env, "prefs": prefs}
 
     @router.put("/settings", summary="Update user preferences")
-    async def update_settings(  # type: ignore[misc]
+    async def update_settings(
         body: dict[str, Any],
-    ) -> dict[str, str]:  # type: ignore[misc]
+    ) -> dict[str, str]:
         """Apply partial prefs update.
 
         Only fields present in the request body are updated; others
         retain their current values.  The update is persisted to disk
         via :func:`cutfinder.config.save_prefs`.
         """
-        library_path = get_library_fn()  # type: ignore[union-attr]
+        library_path = get_library_fn()
         if not library_path:
             raise HTTPException(status_code=404, detail="No library configured")
 
         # Load current prefs first
         try:
-            config = load_config_fn(library_path)  # type: ignore[union-attr]
+            config = load_config_fn(library_path)
         except Exception as exc:  # noqa: BLE001
             raise HTTPException(status_code=503, detail=f"Config error: {exc}")
 
@@ -105,7 +105,7 @@ def _build_router(
 
         current_prefs = {}
         if config is not None and hasattr(config, 'prefs'):
-            p = config.prefs  # type: Prefs from cutfinder.config
+            p = config.prefs  # prefs from cutfinder.config
             current_prefs.update({
                 "source_folders": getattr(p, 'source_folders', []),
                 "library_path": config.library_path if hasattr(config, 'library_path') else None,
@@ -126,13 +126,13 @@ def _build_router(
                 # Validate types
                 expected_type = type(current_prefs[key])  # e.g. int, float, str, list
                 if expected_type is bool:
-                    value = bool(value)  # type: ignore[assignment]
+                    value = bool(value)
                 elif expected_type is int:
-                    value = int(value)  # type: ignore[assignment]
+                    value = int(value)
                 elif expected_type is float or expected_type is int and key == 'vad_threshold':
-                    value = float(value)  # type: ignore[assignment]
+                    value = float(value)
                 elif expected_type is list and not isinstance(value, (list, tuple)):
-                    value = [value]  # type: ignore[assignment]
+                    value = [value]
 
                 current_prefs[key] = value
             elif key == "library_path":
@@ -143,7 +143,7 @@ def _build_router(
 
         # Save via config module
         try:
-            save_prefs_fn(current_prefs, lib_path)  # type: ignore[union-attr]
+            save_prefs_fn(current_prefs, lib_path)
         except Exception as exc:  # noqa: BLE001
             raise HTTPException(status_code=503, detail=f"Save error: {exc}")
 

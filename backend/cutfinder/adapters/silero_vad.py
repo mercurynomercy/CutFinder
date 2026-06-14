@@ -15,7 +15,7 @@ import subprocess
 from pathlib import Path
 from typing import Optional
 
-import torch  # type: ignore[import]
+import torch
 
 from ..ports.speech import SpeechDetector
 
@@ -95,7 +95,7 @@ def _audio_bytes_to_tensor(raw: bytes, duration_s: float) -> torch.Tensor | None
         # Cast raw bytes to int16 values, then normalize to [-1, 1]
         samples = struct.unpack(f"<{num_samples}h", raw)
         # Convert tuple → numpy array → torch tensor (torch.from_numpy needs np.ndarray)
-        import numpy as _np  # type: ignore[import]
+        import numpy as _np
 
         tensor = torch.from_numpy(_np.array(samples, dtype=_np.int16)).float() / 32768.0
 
@@ -137,14 +137,15 @@ class SileroSpeechDetector(SpeechDetector):
     ) -> None:
         self._threshold = threshold
         # Lazy-loaded; set after first __init__ call in speech_ratio()
-        self._model = model  # type: ignore[assignment]
+        self._model = model
 
     def _ensure_model_loaded(self) -> None:
         """Load the Silero VAD ONNX model on first use (cached per instance)."""
         if self._model is not None:
             return
 
-        import silero_vad  # type: ignore[import] — installed per pyproject.toml
+        # silero_vad is installed per pyproject.toml (lazy-loaded)
+        import silero_vad  # noqa: E402, type: ignore[import-not-found]
 
         self._model = silero_vad.load_silero_vad(onnx=True, opset_version=16)
 
@@ -183,11 +184,11 @@ class SileroSpeechDetector(SpeechDetector):
             return 0.0
 
         # Silero VAD returns list of {"start": ..., "end": ...} dicts
-        import silero_vad  # type: ignore[import]
+        import silero_vad  # noqa: E402, type: ignore[import-not-found]
 
         speech_timestamps = silero_vad.get_speech_timestamps(
             tensor,
-            self._model,  # type: ignore[arg-type]
+            self._model,
             threshold=self._threshold,
             sampling_rate=16000,
             return_seconds=True,  # timestamps in seconds directly
@@ -198,4 +199,4 @@ class SileroSpeechDetector(SpeechDetector):
         )
 
         # Clamp ratio to [0, 1] (should always be in range but safety first)
-        return min(1.0, max(0.0, total_speech / duration))
+        return float(min(1.0, max(0.0, total_speech / duration)))

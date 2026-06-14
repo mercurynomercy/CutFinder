@@ -23,7 +23,7 @@ import subprocess
 from pathlib import Path
 from typing import Optional
 
-import numpy as np  # type: ignore[import]
+import numpy as np
 
 from ..domain.models import Segment, Transcript
 from ..ports.speech import Transcriber
@@ -134,8 +134,8 @@ class MlxWhisperTranscriber(Transcriber):
         if audio_array is None:
             raise RuntimeError(f"Failed to decode audio from video file: {path}")
 
-        # Run mlx-whisper transcription
-        import mlx_whisper  # type: ignore[import] — installed per pyproject.toml
+        # Run mlx-whisper transcription (installed per pyproject.toml)
+        import mlx_whisper  # type: ignore[import-untyped]
 
         result = mlx_whisper.transcribe(
             audio_array,
@@ -147,12 +147,12 @@ class MlxWhisperTranscriber(Transcriber):
         # Map result dict → Transcript domain model
         full_text = result.get("text", "") or ""
 
-        segments_data: list[dict] = result.get("segments", [])
+        segments_data: list[dict[str, object]] = result.get("segments", [])
         segments = [
             Segment(
-                start_s=float(seg["start"]),
-                end_s=float(seg["end"]),
-                text=seg.get("text", ""),
+                start_s=float(seg["start"]),  # type: ignore[arg-type]
+                end_s=float(seg["end"]),      # type: ignore[arg-type]
+                text=str(seg.get("text", "")),  # type: ignore[arg-type]
             )
             for seg in segments_data
         ]
