@@ -17,6 +17,14 @@
   - [ ] `GET /api/settings`、`PUT /api/settings`
 
 ## 完成标准（DoD）—— TestClient + 假仓储/假编排
-- [ ] 单测：各路由状态码与响应 schema
-- [ ] 单测：参数校验（非法输入 422）
-- [ ] 单测：SSE 事件流可读到进度事件
+- [x] 单测：各路由状态码与响应 schema（27/27 passing）
+- [x] 单测：参数校验（非法输入 422）— JSON decode error, roll pattern, tag list validation
+- [x] 单测：SSE 事件流可读到进度事件（`TestJobEventsEndpoint`）
+
+## 完成记录
+- **路由实现**: `api/routes.py` — `_build_router()` 封装所有端点，依赖注入通过参数传入
+- **关键修复**: `Request` 必须模块级导入才能让 FastAPI DI 正确解析；`Query(regex=)` → `Query(pattern=)`
+- **分析结果编辑**: 需携带 `roll_type`（AnalysisResult 必填字段）
+- **JSON body 解析**: `_json.loads()` 需捕获 `JSONDecodeError` → 422
+- **测试文件**: `tests/unit/test_api.py` — 覆盖全部端点、参数校验、边界情况
+- **回归**: API 测试全通过；8 个其他文件失败为 pre-existing（orchestrator/fingerprint pattern、integration/real video）

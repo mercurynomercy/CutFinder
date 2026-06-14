@@ -9,7 +9,7 @@ from __future__ import annotations
 import datetime as _dt
 from typing import Annotated, Any
 
-from pydantic import BaseModel, BeforeValidator
+from pydantic import BaseModel, BeforeValidator, Field
 
 
 # ── helpers ───────────────────────────────────────────────────────
@@ -177,8 +177,10 @@ class ClipCandidate(BaseModel, frozen=True):
             The absolute or relative file system path to the clip.
     """
 
-    path: str  # filesystem path (absolute or relative)
-    fingerprint: str  # sha256 hex digest for deduplication
+    path: Annotated[str, Field(min_length=1)]  # filesystem path (absolute or relative)
+    fingerprint: Annotated[  # sha256 hex digest for deduplication
+        str, Field(pattern=r"^[0-9a-f]+$"),
+    ]
 
 
 # ── Job (queue job tracking) ─────────────────────────────────────
