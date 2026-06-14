@@ -34,6 +34,17 @@ export default function App() {
     return () => { cancelled = true }
   }, [])
 
+  // Expose a custom event for e2e tests to navigate without clicking (avoids overlay issues).
+  // Usage: window.dispatchEvent(new CustomEvent('cutfinder:navigate', { detail: { clipId: 2 } }))
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail as { clipId: number } | undefined
+      if (detail?.clipId !== undefined) setSelectedClipId(detail.clipId)
+    }
+    window.addEventListener('cutfinder:navigate', handler)
+    return () => window.removeEventListener('cutfinder:navigate', handler)
+  }, [])
+
   // Filter clips client-side (date, roll_type, tag)
   const filteredClips = clips.filter((clip) => {
     if (appliedFilters.roll_type && clip.roll_type !== appliedFilters.roll_type) return false

@@ -8,7 +8,7 @@ Usage:
   <DetailPanel clipId={clipId} onClose={() => setSelectedClip(null)} />
 */
 
-import { useEffect, useState } from 'react'
+import React, { useEffect, useState } from 'react'
 
 import type { ClipDetail, TagItem, TranscriptData } from '@/api/client'
 import { api, ApiError } from '@/api/client'
@@ -45,17 +45,16 @@ function TagEditor({ tags, onUpdate }: TagEditorProps) {
     if (!name) return
 
     try {
-      await api.setTags(0, { tags: [...tags.map((t) => ({ name: t.name })), { name }] })
+      await onUpdate([...tags.map((t) => ({ name: t.name })), { name, source: 'manual' as const }])
       setNewTag('')
     } catch (err) {
-      // Optimistic update — if it fails, revert. For now just log.
       console.error('Failed to add tag:', err)
     }
   }
 
   const handleDelete = async (index: number, name: string) => {
     try {
-      await api.setTags(0, { tags: tags.filter((_, i) => i !== index) })
+      await onUpdate(tags.filter((_, i) => i !== index))
     } catch (err) {
       console.error('Failed to remove tag:', err)
     }
@@ -68,7 +67,7 @@ function TagEditor({ tags, onUpdate }: TagEditorProps) {
   return (
     <div className="space-y-2">
       {/* Existing tags */}
-      {tags.length > 0 && (
+      {tags?.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
           {tags.map((tag, i) => (
             <Chip key={tag.name} source={tag.source}>
@@ -170,6 +169,18 @@ export function DetailPanel({ clipId, onClose }: DetailPanelProps) {
   const [editSummary, setEditSummary] = useState('')
   const [saving, setSaving] = useState(false)
 
+  // Close on Escape key press
+  useEffect(() => {
+    if (clipId === null) return
+
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+
+    document.addEventListener('keydown', handleKey)
+    return () => document.removeEventListener('keydown', handleKey)
+  }, [clipId, onClose])
+
   // Fetch clip detail when id changes
   useEffect(() => {
     if (clipId === null) return
@@ -230,13 +241,21 @@ export function DetailPanel({ clipId, onClose }: DetailPanelProps) {
 
   if (clipId === null || clipId === undefined) return null
 
-  return (
-    <div className="fixed inset-0 z-50 flex justify-end" role="dialog" aria-modal>
-      {/* Backdrop */}
-      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
+  // Wrapper that prevents clicks from bubbling into backdrop
+  const stopPropagation: React.MouseEventHandler = (e) => {
+    e.stopPropagation()
+  }
 
-      {/* Slide-in drawer */}
-      <div className="relative flex h-full w-[480px] max-w-full bg-[--surface-1] shadow-xl">
+  return (
+    <div className="fixed inset-0 z-50 flex justify-end" role="dialog" aria-modal onClick={onClose}>
+      {/* Backdrop — catches clicks (outer div handles click-outside) */}
+      <div className="absolute inset-0 bg-black/50" />
+
+      {/* Slide-in drawer — stops propagation so clicks inside don't close */}
+      <div
+        className="relative flex h-full w-[480px] max-w-full bg-[--surface-1] shadow-xl"
+        onClick={stopPropagation}
+      >
         {/* Close button */}
         <button
           onClick={onClose}
@@ -328,7 +347,11 @@ export function DetailPanel({ clipId, onClose }: DetailPanelProps) {
                   <label className="mb-1 block text-xs font-medium uppercase tracking-wider text-[--text-muted]">
                     Tags
                   </label>
-                  <TagEditor tags={clip.tags} onUpdate={() => Promise.resolve()} />
+                  <TagEditor tags={clip.tags} onUpdate={async (next) => {
+                    if (!clip) return
+                    await api.setTags(clip.id, { tags: next })
+                    setClip((prev) => prev ? { ...prev, tags: next } : null)
+                  }} />
                 </div>
 
                 {/* ── Transcript (collapsible, A-roll only) */}
@@ -358,7 +381,7 @@ export function DetailPanel({ clipId, onClose }: DetailPanelProps) {
                         <span>{clip.fps} fps</span>
                       </div>
                     )}
-                    {codec && (
+                    {clip.codec && (
                       <div className="flex justify-between gap-4">
                         <span className="text-[--text-muted]">Codec</span>
                         <span>{clip.codec}</span>
