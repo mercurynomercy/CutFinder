@@ -17,8 +17,8 @@ Tracker for call assertions in tests:
 
 from __future__ import annotations
 
-from ..domain.models import SummaryResult
-from ..ports.ai import Summarizer
+from cutfinder.domain.models import SummaryResult
+from cutfinder.ports.ai import Summarizer
 
 
 class FakeSummarizer(Summarizer):

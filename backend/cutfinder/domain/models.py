@@ -156,6 +156,31 @@ class ClipFilter(BaseModel, frozen=True):
     tag: str | None = None        # exact match on tag name
 
 
+# ── ClipCandidate (Scanner output) ───────────────────────────────
+
+class ClipCandidate(BaseModel, frozen=True):
+    """A single file discovered by the scanner that needs processing.
+
+    Produced by :meth:`~Scanner.scan`; consumed by the pipeline orchestrator.
+    ``fingerprint`` is a sha256 hex digest used for deduplication against the
+    catalog database.
+
+    Examples
+    --------
+    >>> c = ClipCandidate(path="/tmp/clip.mp4", fingerprint="abc123")
+    >>> c.path
+    '/tmp/clip.mp4'
+
+    Tracker for call assertions in tests:
+
+        path :: Path
+            The absolute or relative file system path to the clip.
+    """
+
+    path: str  # filesystem path (absolute or relative)
+    fingerprint: str  # sha256 hex digest for deduplication
+
+
 # ── Job (queue job tracking) ─────────────────────────────────────
 
 class Job(BaseModel, frozen=True):

@@ -7,6 +7,7 @@ Exports:
     - FakeTranscriber (transcription adapter)
     - FakeSummarizer (text summarization adapter)
     - FakeVisionTagger, make_sample_result (vision tagger for B-roll testing)
+    - FakeCatalogRepository (repository fake for Scanner tests)
 """
 
 from .fake_media import (
@@ -30,8 +31,10 @@ from .fake_transcriber import (
 )
 from .fake_library import FakeLibraryWriter
 from .omlx_vision import FakeVisionTagger, make_sample_result
+from .fake_repository import FakeCatalogRepository
 
 __all__ = [
+    "FakeCatalogRepository",
     "FakeFrameExtractor",
     "FakeLibraryWriter",
     "FakeProbe",
