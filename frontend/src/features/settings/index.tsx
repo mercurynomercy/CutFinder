@@ -41,6 +41,57 @@ function validatePrefs(prefs: UpdateSettingsBody): FieldError[] {
   return errors
 }
 
+// ── Folder picker (macOS <input webkitdirectory>) ───────────────
+
+interface FolderPickerButtonProps {
+  label: string
+  icon?: React.ReactNode | null
+  onChange: (folderPath: string) => void
+}
+
+function FolderPickerButton({ label, icon = null, onChange }: FolderPickerButtonProps) {
+  const inputRef = React.useRef<HTMLInputElement>(null)
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => inputRef.current?.click()}
+        className="mt-2 inline-flex items-center gap-1.5 rounded-md bg-[--surface-2] px-3 py-1.5 text-xs font-medium text-[--text-secondary] hover:bg-[--surface-3]"
+      >
+        {icon}
+        {label}
+      </button>
+      {/* Hidden file input — webkitdirectory enables folder selection on macOS */}
+      <input
+        ref={inputRef}
+        type="file"
+        className="hidden"
+        // @ts-expect-error webkitdirectory is a non-standard but widely-supported attribute
+        webkitdirectory=""
+        // @ts-expect-error webkitmozdirectory is an older Firefox variant
+        webkitmozdirectory=""
+        onChange={(e) => {
+          const files = e.target.files
+          if (!files || files.length === 0) return
+
+          // Find the common ancestor folder from selected file paths
+          const path = files[0].webkitRelativePath || ''
+          // e.g. "MyFolder/sub/dir/video.mp4" → "MyFolder/"
+          const parts = path.split('/')
+          if (parts.length <= 1) return // single file selected, not a folder
+
+          const ancestorPath = parts.slice(0, -1).join('/')
+          if (ancestorPath) onChange(ancestorPath)
+
+          // Reset so the same folder can be re-selected
+          e.target.value = ''
+        }}
+      />
+    </>
+  )
+}
+
 // ── Extension tag (for the whitelist) ────────────────────────────
 
 function ExtensionTag({ value, onRemove }: { value: string; onRemove: () => void }) {
@@ -172,6 +223,7 @@ export function SettingsPage({ onSave }: SettingsPageProps) {
             placeholder="/Users/you/Movies/CutFinder Library"
             className="flex-1 rounded-md border border-[--border] bg-[--surface-2] px-3 py-1.5 text-sm outline-none focus:border-[--primary]"
           />
+          <FolderPickerButton label="Choose…" icon={null} onChange={(folder) => setNewLibraryPath(folder)} />
           <Button onClick={handleSetLibrary} disabled={saving || !newLibraryPath.trim()}>
             {saving ? 'Setting…' : 'Set library'}
           </Button>
@@ -190,38 +242,71 @@ export function SettingsPage({ onSave }: SettingsPageProps) {
   return (
     <div className="flex flex-1 overflow-auto p-6">
       <form onSubmit={(e) => { e.preventDefault(); handleSave() }} className="w-full max-w-2xl space-y-6">
-        <h1 className="text-xl font-semibold tracking-tight text-[--text-primary]">Settings</h1>
+        <div className="flex items-center justify-between gap-4">
+          <h1 className="text-xl font-semibold tracking-tight text-[--text-primary]">Settings</h1>
+          <Button variant="ghost" size="sm" onClick={() => onSave?.()}>
+            Back to gallery
+          </Button>
+        </div>
 
-        {/* ── Source folders ─────────────────────── */}
+        {/* ── Source folders (read-only input for scan) ─────────────── */}
         <fieldset className="rounded-lg border border-[--border] bg-[--surface-1] p-4">
           <legend className="text-sm font-medium text-[--text-primary]">Source folders</legend>
+          <p className="mt-1 text-xs leading-relaxed text-[--text-secondary]">
+            这些文件夹是你的原始视频素材（只读，不会被修改或移动）。扫描时 CutFinder
+            只会读取这些文件夹里的文件。
+          </p>
           <div className="mt-3 space-y-2">
             {(prefs.source_folders || []).map((folder: string, i: number) => (
               <div key={i} className="flex items-center gap-2">
                 <input
                   type="text"
                   value={folder}
-                  onChange={(e) => {
-                    const folders = [...prefs.source_folders] as string[]
-                    folders[i] = e.target.value
-                    updateField('source_folders', folders as unknown as UpdateSettingsBody[keyof UpdateSettingsBody])
-                  }}
-                  className="flex-1 rounded-md border border-[--border] bg-[--surface-2] px-3 py-1.5 text-sm outline-none focus:border-[--primary]"
+                  readOnly
+                  className="flex-1 rounded-md border border-[--border] bg-[--surface-3] px-3 py-1.5 text-sm outline-none opacity-70"
                 />
               </div>
             ))}
           </div>
+
+          {/* Hidden file input for folder picker — macOS only (webkitdirectory) */}
+          <FolderPickerButton
+            label="Add folder"
+            icon={
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24">
+                <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M2 12.75a4.75 4.75 0 0 1 .836-2.69l2.475-3.08A4.75 4.75 0 0 1 8.692 3h6.616a4.75 4.75 0 0 1 3.352 1.38l2.475 3.08a4.75 4.75 0 0 1 .836 2.69v6.5a4.75 4.75 0 0 1-4.75 4.75H6.75a4.75 4.75 0 0 1-4.75-4.75z" />
+              </svg>
+            }
+            onChange={(folder) => {
+              if (!prefs || prefs.source_folders.includes(folder)) return
+              updateField('source_folders', [...(prefs.source_folders || []), folder])
+            }}
+          />
         </fieldset>
 
-        {/* ── Library path ─────────────────────── */}
+        {/* ── Library path (where organized copies go) ─────────────── */}
         <fieldset className="rounded-lg border border-[--border] bg-[--surface-1] p-4">
           <legend className="text-sm font-medium text-[--text-primary]">Library path</legend>
-          <input
-            type="text"
-            value={prefs.library_path || ''}
-            onChange={(e) => updateField('library_path', e.target.value)}
-            className="mt-2 w-full rounded-md border border-[--border] bg-[--surface-2] px-3 py-1.5 text-sm outline-none focus:border-[--primary]"
-          />
+          <p className="mt-1 text-xs leading-relaxed text-[--text-secondary]">
+            组织后的素材副本、缩略图和目录数据库会存储在这里。一旦设置，此路径不可更改。
+          </p>
+          <div className="mt-2 flex gap-2">
+            <input
+              type="text"
+              value={prefs.library_path || ''}
+              readOnly
+              className="flex-1 rounded-md border border-[--border] bg-[--surface-3] px-3 py-1.5 text-sm outline-none opacity-70"
+            />
+            <FolderPickerButton
+              label="Choose…"
+              icon={
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24">
+                  <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M2 12.75a4.75 4.75 0 0 1 .836-2.69l2.475-3.08A4.75 4.75 0 0 1 8.692 3h6.616a4.75 4.75 0 0 1 3.352 1.38l2.475 3.08a4.75 4.75 0 0 1 .836 2.69v6.5a4.75 4.75 0 0 1-4.75 4.75H6.75a4.75 4.75 0 0 1-4.75-4.75z" />
+                </svg>
+              }
+              onChange={(folder) => updateField('library_path', folder)}
+            />
+          </div>
         </fieldset>
 
         {/* ── Model selectors ─────────────────── */}
