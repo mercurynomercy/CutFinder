@@ -6,8 +6,8 @@
 ## 子任务
 - [x] Makefile 补全：`dev`、`models`、`check-omlx`、`test-integration`、`e2e`
 - [x] `check-omlx`：解析 OMLX `/v1/models` 校验所需文本/视觉模型是否就绪
-- [ ] 集成测 fixtures 指向 `testVideo/`：A=`MVI_5298.MP4`，B=`MVI_5368.MP4`/`DJI_20260515175239_0097_D.MP4`
-- [ ] 另补小样本：1 段无内嵌时间（验日期回退）、1 段非白名单扩展名（验跳过）
+- [x] 集成测 fixtures 指向 `testVideo/`：A=`MVI_5298.MP4`，B=`MVI_5368.MP4`/`DJI_20260515175239_0097_D.MP4`
+- [x] 另补小样本：1 段无内嵌时间（验日期回退）、1 段非白名单扩展名（验跳过）
 - [x] Playwright e2e：扫描 → 缩略图 → 按类型/标签筛选 → 编辑标签/纠正 A/B → 搜索命中（后端用假适配器 + 预置 DB）
 
 ## 完成标准（DoD）
