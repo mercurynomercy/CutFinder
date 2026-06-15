@@ -189,9 +189,23 @@ class Job(BaseModel, frozen=True):
     """Represents a scan+process job in the queue."""
 
     id: int | None = None
-    status: str  # JobStatus (running / done / failed)
+    status: str  # JobStatus (queued / running / done / failed / cancelled)
+    kind: str = "scan"  # "scan" | "reanalyze"
     total: int = 0
     done: int = 0
     failed: int = 0
     started_at: str | None = None
     finished_at: str | None = None
+
+
+# ── JobFailedItem (per-item failure record for retry) ────────────
+
+class JobFailedItem(BaseModel, frozen=True):
+    """A single failed queue item, recorded so a job can be retried."""
+
+    job_id: int
+    kind: str                      # "clip" | "reanalyze"
+    path: str | None = None        # ClipCandidate.path  (kind="clip")
+    fingerprint: str | None = None  # ClipCandidate.fingerprint (kind="clip")
+    clip_id: int | None = None     # (kind="reanalyze")
+    error: str | None = None

@@ -73,6 +73,8 @@ function makeJobStatus(overrides: Partial<JobStatus> = {}): JobStatus {
     done: (overrides.done as number) ?? 3,
     failed: overrides.failed ?? 0,
     started_at: overrides.started_at ?? '2024-06-15T10:30:00Z',
+    finished_at: overrides.finished_at ?? null,
+    kind: overrides.kind ?? 'scan',
   }
 }
 
@@ -86,6 +88,16 @@ const ALL_CLIPS: ClipSummary[] = [
   makeClipSummary({ id: 5, source_path: '/media/vlog/2024-06/MVI_5315.MP4', roll_type: 'a' as const, summary: 'A-roll narration about wildlife spotting.', tags: [makeTag('wildlife', 'auto'), makeTag('birds', 'auto')] }),
   makeClipSummary({ id: 6, source_path: '/media/vlog/2024-06/DJI_5375.MP4', roll_type: 'b' as const, description: 'Forest trail with autumn foliage.', tags: [makeTag('forest', 'auto'), makeTag('autumn', 'manual')] }),
 ]
+
+// ── Jobs queue state (mutable, in-memory) ────────────────
+// Reset by re-importing is not needed; tests override via server.use().
+
+let JOBS_QUEUE: JobStatus[] = [
+  makeJobStatus({ id: 1, kind: 'scan', status: 'running', total: 10, done: 4, failed: 0 }),
+  makeJobStatus({ id: 2, kind: 'reanalyze', status: 'failed', total: 5, done: 3, failed: 2 }),
+  makeJobStatus({ id: 3, kind: 'scan', status: 'done', total: 8, done: 8, failed: 0 }),
+]
+let JOBS_PAUSED = false
 
 // ── Handlers (aligned with backend routes in routes.py) ────
 
@@ -148,6 +160,40 @@ export const handlers = [
   // POST /api/scan — enqueue clips for processing (returns job id)
   http.post('http://localhost:5080/api/scan', () => {
     return HttpResponse.json({ job_id: 42 })
+  }),
+
+  // GET /api/jobs — list all jobs + global pause flag
+  http.get('http://localhost:5080/api/jobs', () => {
+    return HttpResponse.json({ jobs: JOBS_QUEUE, paused: JOBS_PAUSED })
+  }),
+
+  // DELETE /api/jobs/:id — delete a job record (cancels first if active)
+  http.delete('http://localhost:5080/api/jobs/:id', ({ params }) => {
+    const id = Number(params.id)
+    JOBS_QUEUE = JOBS_QUEUE.filter((j) => j.id !== id)
+    return HttpResponse.json({ status: 'ok', job_id: id })
+  }),
+
+  // POST /api/jobs/:id/retry — re-enqueue failed items (400 if none failed)
+  http.post('http://localhost:5080/api/jobs/:id/retry', ({ params }) => {
+    const id = Number(params.id)
+    const job = JOBS_QUEUE.find((j) => j.id === id)
+    if (!job || job.failed === 0) {
+      return HttpResponse.json({ detail: 'No failed items to retry' }, { status: 400 })
+    }
+    return HttpResponse.json({ job_id: id })
+  }),
+
+  // POST /api/jobs/pause — globally pause processing
+  http.post('http://localhost:5080/api/jobs/pause', () => {
+    JOBS_PAUSED = true
+    return HttpResponse.json({ paused: true })
+  }),
+
+  // POST /api/jobs/resume — globally resume processing
+  http.post('http://localhost:5080/api/jobs/resume', () => {
+    JOBS_PAUSED = false
+    return HttpResponse.json({ paused: false })
   }),
 
   // GET /api/jobs/:id — get job status (aligned with JobStatus schema)

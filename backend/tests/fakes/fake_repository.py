@@ -58,6 +58,7 @@ from cutfinder.domain.models import (
     ClipFilter,
     ClipSummary,
     Job,
+    JobFailedItem,
     Tag,
     Transcript,
 )
@@ -74,6 +75,7 @@ class FakeCatalogRepository:
         self._transcripts: dict[int, Transcript] = {}  # clip_id -> Transcript
 
         self._jobs: dict[int, Job] = {}
+        self._failed_items: dict[int, list[JobFailedItem]] = {}  # job_id -> [JobFailedItem]
         self._next_clip_id: int = 1
         self._next_job_id: int = 1
 
@@ -313,13 +315,14 @@ class FakeCatalogRepository:
 
     # ── Job CRUD (queue tracking) ───────────────────────────────────
 
-    def create_job(self, total: int = 0) -> Job:
-        """Create a new job with status='running' and return it."""
+    def create_job(self, total: int = 0, kind: str = "scan") -> Job:
+        """Create a new job with status='queued' and return it."""
         jid = self._next_job_id
         self._next_job_id += 1
         job = Job(
             id=jid,
-            status="running",
+            status="queued",
+            kind=kind,
             total=total,
             done=0,
             failed=0,
@@ -329,18 +332,43 @@ class FakeCatalogRepository:
         self.create_job_calls.append(job)
         return job
 
-    def update_job(self, job_id: int, done: int = 0, failed: int = 0) -> None:
-        """Update job progress counters."""
+    def update_job(self, job_id: int, **fields: Any) -> None:
+        """Update arbitrary job fields (status/done/failed/...)."""
         job = self._jobs.get(job_id)
-        if job:
-            self._jobs[job_id] = job.model_copy(update={
-                "done": done,
-                "failed": failed,
-            })
+        if not job:
+            return
+        # Auto-set finished_at when moving to a terminal status.
+        if fields.get("status") in ("done", "failed", "cancelled") and "finished_at" not in fields:
+            fields["finished_at"] = _dt.datetime.now(_dt.timezone.utc).isoformat()
+        self._jobs[job_id] = job.model_copy(update=fields)
 
     def get_job(self, job_id: int) -> Job | None:
         """Return the job with *job_id*, or ``None``."""
         return self._jobs.get(job_id)
+
+    def list_jobs(self, limit: int | None = None) -> list[Job]:
+        """Return jobs newest-first (by id desc), optionally limited."""
+        jobs = sorted(self._jobs.values(), key=lambda j: j.id or 0, reverse=True)
+        if limit is not None:
+            jobs = jobs[:limit]
+        return jobs
+
+    def delete_job(self, job_id: int) -> None:
+        """Delete a job and its recorded failed items."""
+        self._jobs.pop(job_id, None)
+        self._failed_items.pop(job_id, None)
+
+    def record_failed_item(self, item: JobFailedItem) -> None:
+        """Record one failed queue item for later retry."""
+        self._failed_items.setdefault(item.job_id, []).append(item)
+
+    def get_failed_items(self, job_id: int) -> list[JobFailedItem]:
+        """Return all recorded failed items for a job."""
+        return list(self._failed_items.get(job_id, []))
+
+    def clear_failed_items(self, job_id: int) -> None:
+        """Remove all recorded failed items for a job."""
+        self._failed_items.pop(job_id, None)
 
     # ── LibraryWriter adapter (for copy_into tracking) ───────────────
 

@@ -294,6 +294,178 @@ class TestSSEEvents:
         # SSE routes use GET and return StreamingResponse (content-type: text/event-stream)
 
 
+# ── 2b. Job queue management (GET /jobs, DELETE, retry, pause/resume) ─
+
+class _FakeJobQueue:
+    """Minimal worker-queue stand-in for job-management routes."""
+
+    def __init__(self, retry_result: bool = True) -> None:
+        self._paused = False
+        self.cancelled: list[int] = []
+        self._retry_result = retry_result
+
+    @property
+    def is_paused(self) -> bool:
+        return self._paused
+
+    def pause(self) -> None:
+        self._paused = True
+
+    def resume(self) -> None:
+        self._paused = False
+
+    def cancel_job(self, job_id: int) -> None:
+        self.cancelled.append(job_id)
+
+    async def retry_job(self, job_id: int) -> bool:
+        return self._retry_result
+
+
+class TestJobQueueManagement:
+    """Verify GET /jobs, DELETE /jobs/{id}, retry, pause/resume."""
+
+    def test_list_jobs_shape(self) -> None:
+        from cutfinder.api.routes import _build_router as main_router
+
+        repo = FakeCatalogRepository()
+        repo.create_job(total=3, kind="scan")
+        repo.create_job(total=1, kind="reanalyze")
+
+        queue = _FakeJobQueue()
+        app = FastAPI()
+        app.include_router(main_router(_ctx(repository=repo, worker_queue=queue)))
+
+        client = TestClient(app, raise_server_exceptions=False)  # type: ignore[arg-type]
+        resp = client.get("/api/jobs")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "paused" in data and data["paused"] is False
+        assert isinstance(data["jobs"], list) and len(data["jobs"]) == 2
+        # Newest first.
+        assert data["jobs"][0]["kind"] == "reanalyze"
+        first = data["jobs"][0]
+        for key in ("id", "kind", "status", "total", "done", "failed",
+                    "started_at", "finished_at"):
+            assert key in first
+
+    def test_list_jobs_no_queue(self) -> None:
+        from cutfinder.api.routes import _build_router as main_router
+
+        repo = FakeCatalogRepository()
+        app = FastAPI()
+        app.include_router(main_router(_ctx(repository=repo, worker_queue=None)))
+
+        client = TestClient(app, raise_server_exceptions=False)  # type: ignore[arg-type]
+        resp = client.get("/api/jobs")
+        assert resp.status_code == 503
+
+    def test_delete_job_cancels_and_deletes(self) -> None:
+        from cutfinder.api.routes import _build_router as main_router
+
+        repo = FakeCatalogRepository()
+        job = repo.create_job(total=2)  # status 'queued'
+
+        queue = _FakeJobQueue()
+        app = FastAPI()
+        app.include_router(main_router(_ctx(repository=repo, worker_queue=queue)))
+
+        client = TestClient(app, raise_server_exceptions=False)  # type: ignore[arg-type]
+        resp = client.delete(f"/api/jobs/{job.id}")
+        assert resp.status_code == 200
+        assert resp.json()["job_id"] == job.id
+        # Queued job → cancelled then removed.
+        assert queue.cancelled == [job.id]
+        assert repo.get_job(job.id) is None
+
+    def test_delete_job_not_found(self) -> None:
+        from cutfinder.api.routes import _build_router as main_router
+
+        repo = FakeCatalogRepository()
+        queue = _FakeJobQueue()
+        app = FastAPI()
+        app.include_router(main_router(_ctx(repository=repo, worker_queue=queue)))
+
+        client = TestClient(app, raise_server_exceptions=False)  # type: ignore[arg-type]
+        resp = client.delete("/api/jobs/9999")
+        assert resp.status_code == 404
+
+    def test_delete_terminal_job_no_cancel(self) -> None:
+        from cutfinder.api.routes import _build_router as main_router
+
+        repo = FakeCatalogRepository()
+        job = repo.create_job(total=1)
+        repo.update_job(job.id, status="done")
+
+        queue = _FakeJobQueue()
+        app = FastAPI()
+        app.include_router(main_router(_ctx(repository=repo, worker_queue=queue)))
+
+        client = TestClient(app, raise_server_exceptions=False)  # type: ignore[arg-type]
+        resp = client.delete(f"/api/jobs/{job.id}")
+        assert resp.status_code == 200
+        assert queue.cancelled == []  # not cancelled, already terminal
+        assert repo.get_job(job.id) is None
+
+    def test_retry_400_when_nothing_failed(self) -> None:
+        from cutfinder.api.routes import _build_router as main_router
+
+        repo = FakeCatalogRepository()
+        job = repo.create_job(total=1)
+        queue = _FakeJobQueue(retry_result=False)
+        app = FastAPI()
+        app.include_router(main_router(_ctx(repository=repo, worker_queue=queue)))
+
+        client = TestClient(app, raise_server_exceptions=False)  # type: ignore[arg-type]
+        resp = client.post(f"/api/jobs/{job.id}/retry")
+        assert resp.status_code == 400
+
+    def test_retry_200_when_failures(self) -> None:
+        from cutfinder.api.routes import _build_router as main_router
+
+        repo = FakeCatalogRepository()
+        job = repo.create_job(total=1)
+        queue = _FakeJobQueue(retry_result=True)
+        app = FastAPI()
+        app.include_router(main_router(_ctx(repository=repo, worker_queue=queue)))
+
+        client = TestClient(app, raise_server_exceptions=False)  # type: ignore[arg-type]
+        resp = client.post(f"/api/jobs/{job.id}/retry")
+        assert resp.status_code == 200
+        assert resp.json()["job_id"] == job.id
+
+    def test_retry_404_when_job_missing(self) -> None:
+        from cutfinder.api.routes import _build_router as main_router
+
+        repo = FakeCatalogRepository()
+        queue = _FakeJobQueue()
+        app = FastAPI()
+        app.include_router(main_router(_ctx(repository=repo, worker_queue=queue)))
+
+        client = TestClient(app, raise_server_exceptions=False)  # type: ignore[arg-type]
+        resp = client.post("/api/jobs/9999/retry")
+        assert resp.status_code == 404
+
+    def test_pause_resume_flip_is_paused(self) -> None:
+        from cutfinder.api.routes import _build_router as main_router
+
+        repo = FakeCatalogRepository()
+        queue = _FakeJobQueue()
+        app = FastAPI()
+        app.include_router(main_router(_ctx(repository=repo, worker_queue=queue)))
+
+        client = TestClient(app, raise_server_exceptions=False)  # type: ignore[arg-type]
+
+        resp = client.post("/api/jobs/pause")
+        assert resp.status_code == 200 and resp.json()["paused"] is True
+        assert queue.is_paused is True
+        assert client.get("/api/jobs").json()["paused"] is True
+
+        resp = client.post("/api/jobs/resume")
+        assert resp.status_code == 200 and resp.json()["paused"] is False
+        assert queue.is_paused is False
+        assert client.get("/api/jobs").json()["paused"] is False
+
+
 # ── 4. Clip list/detail/edit/correct (DoD: CRUD + corrections) ─
 
 class TestClipListEndpoint:

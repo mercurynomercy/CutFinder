@@ -25,11 +25,18 @@ export interface ClipCandidate {
 
 export interface JobStatus {
   id: number
-  status: string          // 'pending' | 'running' | 'done' | 'failed'
+  status: string          // 'pending' | 'queued' | 'running' | 'done' | 'failed' | 'cancelled'
   total: number
   done: number
   failed: number
   started_at: string | null
+  finished_at?: string | null
+  kind?: 'scan' | 'reanalyze'
+}
+
+export interface JobsQueueResponse {
+  jobs: JobStatus[]
+  paused: boolean
 }
 
 export interface ClipSummary {
@@ -205,6 +212,31 @@ export const api = {
   /** GET /api/jobs/{id} — job status. */
   getJob(id: number): Promise<JobStatus> {
     return _fetch(`/api/jobs/${id}`)
+  },
+
+  /** GET /api/jobs — list all jobs + global pause state. */
+  listJobs(): Promise<JobsQueueResponse> {
+    return _fetch('/api/jobs')
+  },
+
+  /** DELETE /api/jobs/{id} — delete a job (cancels first if running/queued). */
+  deleteJob(id: number): Promise<{ status: string; job_id: number }> {
+    return _fetch(`/api/jobs/${id}`, { method: 'DELETE' })
+  },
+
+  /** POST /api/jobs/{id}/retry — re-enqueue a job's failed items. */
+  retryJob(id: number): Promise<{ job_id: number }> {
+    return _fetch(`/api/jobs/${id}/retry`, { method: 'POST' })
+  },
+
+  /** POST /api/jobs/pause — globally pause processing. */
+  pauseJobs(): Promise<{ paused: boolean }> {
+    return _fetch('/api/jobs/pause', { method: 'POST' })
+  },
+
+  /** POST /api/jobs/resume — globally resume processing. */
+  resumeJobs(): Promise<{ paused: boolean }> {
+    return _fetch('/api/jobs/resume', { method: 'POST' })
   },
 
   /** GET /api/settings — current config. */

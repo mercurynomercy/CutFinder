@@ -494,3 +494,248 @@ class TestLifecycleAndEdgeCases:
 
         assert len(orch.process_clip_calls) == 3
 
+
+# ── 6. Pause / resume (global gate) ──────────────────────────────────
+
+class TestPauseResume:
+    """Verify the global pause gate blocks processing and resume continues."""
+
+    @pytest.mark.asyncio
+    async def test_pause_blocks_remaining_resume_continues(self) -> None:
+        """In-flight item finishes, then worker blocks; resume processes the rest."""
+        repo = FakeCatalogRepository()
+        orch = _make_fake_orchestrator(process_result=1)
+
+        calls: list[str] = []
+
+        def process(candidate: ClipCandidate) -> int | None:
+            calls.append(candidate.path)
+            if candidate.path == "/tmp/0.mp4":
+                queue.pause()  # pause while processing the first item
+            return 1
+
+        orch.process_clip = process  # type: ignore[method-assign]
+        queue = WorkerQueue(orchestrator=orch, repository=repo)
+
+        await queue.start()
+        candidates = [_make_candidate(f"/tmp/{i}.mp4", fingerprint=f"a{i}") for i in range(3)]
+        job_id = await queue.enqueue_scan(candidates)
+
+        # First item finishes (and triggers pause); the rest stay queued.
+        await asyncio.sleep(0.15)
+        assert calls == ["/tmp/0.mp4"]
+        assert queue.is_paused is True
+
+        queue.resume()
+        assert queue.is_paused is False
+        while True:
+            job = repo.get_job(job_id)
+            if job and job.done >= 3:
+                break
+            await asyncio.sleep(0.02)
+
+        await queue.stop()
+        assert calls == ["/tmp/0.mp4", "/tmp/1.mp4", "/tmp/2.mp4"]
+
+
+# ── 7. Cancel (skip a job's queued items) ────────────────────────────
+
+class TestCancel:
+    """Verify cancel_job drops a job's queued items without processing."""
+
+    @pytest.mark.asyncio
+    async def test_cancel_skips_queued_items(self) -> None:
+        repo = FakeCatalogRepository()
+        orch = _make_fake_orchestrator(process_result=1)
+        queue = WorkerQueue(orchestrator=orch, repository=repo)
+
+        # Pause before start so the items sit in the queue unprocessed.
+        queue.pause()
+        await queue.start()
+        candidates = [_make_candidate(f"/tmp/c{i}.mp4", fingerprint=f"b{i}") for i in range(2)]
+        job_id = await queue.enqueue_scan(candidates)
+
+        queue.cancel_job(job_id)
+        queue.resume()
+        await asyncio.sleep(0.15)
+
+        await queue.stop()
+        # No clip processed; counters untouched.
+        assert orch.process_clip_calls == []
+        job = repo.get_job(job_id)
+        assert job is not None
+        assert job.done == 0 and job.failed == 0
+
+
+# ── 8. Job status transitions + terminal SSE events ──────────────────
+
+class TestJobStatusTransitions:
+    """Verify queued→running→done/failed and job_completed/job_failed events."""
+
+    @pytest.mark.asyncio
+    async def test_transition_to_done(self) -> None:
+        repo = FakeCatalogRepository()
+        orch = _make_fake_orchestrator(process_result=1)
+        events: list[dict[str, Any]] = []
+        queue = WorkerQueue(
+            orchestrator=orch, repository=repo,
+            progress_callback=lambda e: events.append(e),
+        )
+
+        await queue.start()
+        job_id = await queue.enqueue_scan([_make_candidate("/tmp/a.mp4")])
+
+        while True:
+            job = repo.get_job(job_id)
+            if job and job.status in ("done", "failed"):
+                break
+            await asyncio.sleep(0.02)
+
+        await queue.stop()
+        job = repo.get_job(job_id)
+        assert job.status == "done"
+        assert any(
+            e["type"] == "job_completed" and e["job_id"] == job_id for e in events
+        )
+
+    @pytest.mark.asyncio
+    async def test_transition_to_failed(self) -> None:
+        repo = FakeCatalogRepository()
+
+        def always_fail(candidate: ClipCandidate) -> int | None:
+            raise RuntimeError("boom")
+
+        orch = _make_fake_orchestrator(process_result=1)
+        orch.process_clip = always_fail  # type: ignore[method-assign]
+        events: list[dict[str, Any]] = []
+        queue = WorkerQueue(
+            orchestrator=orch, repository=repo,
+            progress_callback=lambda e: events.append(e),
+        )
+
+        await queue.start()
+        job_id = await queue.enqueue_scan([_make_candidate("/tmp/bad.mp4")])
+
+        while True:
+            job = repo.get_job(job_id)
+            if job and job.status in ("done", "failed"):
+                break
+            await asyncio.sleep(0.02)
+
+        await queue.stop()
+        job = repo.get_job(job_id)
+        assert job.status == "failed"
+        assert any(
+            e["type"] == "job_failed" and e["job_id"] == job_id for e in events
+        )
+
+    @pytest.mark.asyncio
+    async def test_two_jobs_independent_counters(self) -> None:
+        """Interleaved jobs keep per-job counters (no shared-var misattribution)."""
+        repo = FakeCatalogRepository()
+        orch = _make_fake_orchestrator(process_result=1)
+        queue = WorkerQueue(orchestrator=orch, repository=repo)
+
+        await queue.start()
+        j1 = await queue.enqueue_scan(
+            [_make_candidate(f"/tmp/j1_{i}.mp4", fingerprint=f"a{i}") for i in range(2)],
+        )
+        j2 = await queue.enqueue_scan(
+            [_make_candidate(f"/tmp/j2_{i}.mp4", fingerprint=f"b{i}") for i in range(3)],
+        )
+
+        while True:
+            jj1 = repo.get_job(j1)
+            jj2 = repo.get_job(j2)
+            if jj1 and jj2 and jj1.done >= 2 and jj2.done >= 3:
+                break
+            await asyncio.sleep(0.02)
+
+        await queue.stop()
+        assert repo.get_job(j1).done == 2 and repo.get_job(j1).total == 2
+        assert repo.get_job(j2).done == 3 and repo.get_job(j2).total == 3
+        assert repo.get_job(j1).status == "done"
+        assert repo.get_job(j2).status == "done"
+
+
+# ── 9. Retry (re-enqueue failed items) ───────────────────────────────
+
+class TestRetry:
+    """Verify retry_job re-enqueues only failed items and resets counters."""
+
+    @pytest.mark.asyncio
+    async def test_retry_reenqueues_only_failed(self) -> None:
+        repo = FakeCatalogRepository()
+        orch = _make_fake_orchestrator(process_result=1)
+
+        def process_fail_bad(candidate: ClipCandidate) -> int | None:
+            orch.process_clip_calls.append(candidate)
+            if candidate.path == "/tmp/bad.mp4":
+                raise RuntimeError("boom")
+            return 1
+
+        orch.process_clip = process_fail_bad  # type: ignore[method-assign]
+        queue = WorkerQueue(orchestrator=orch, repository=repo)
+
+        await queue.start()
+        job_id = await queue.enqueue_scan([
+            _make_candidate("/tmp/good.mp4", fingerprint="aa"),
+            _make_candidate("/tmp/bad.mp4", fingerprint="bb"),
+        ])
+
+        while True:
+            job = repo.get_job(job_id)
+            if job and job.status in ("done", "failed"):
+                break
+            await asyncio.sleep(0.02)
+
+        job = repo.get_job(job_id)
+        assert job.status == "failed"
+        assert job.done == 2 and job.failed == 1
+        assert len(repo.get_failed_items(job_id)) == 1
+
+        # Now succeed for everything on retry.
+        def process_ok(candidate: ClipCandidate) -> int | None:
+            orch.process_clip_calls.append(candidate)
+            return 1
+
+        orch.process_clip = process_ok  # type: ignore[method-assign]
+        calls_before = len(orch.process_clip_calls)
+
+        ok = await queue.retry_job(job_id)
+        assert ok is True
+
+        while True:
+            job = repo.get_job(job_id)
+            if job and job.status in ("done", "failed"):
+                break
+            await asyncio.sleep(0.02)
+
+        await queue.stop()
+        job = repo.get_job(job_id)
+        assert job.status == "done"
+        assert job.done == 2 and job.failed == 0
+        assert repo.get_failed_items(job_id) == []
+        # Only the failed item was re-enqueued (one additional process call).
+        retried = orch.process_clip_calls[calls_before:]
+        assert [c.path for c in retried] == ["/tmp/bad.mp4"]
+
+    @pytest.mark.asyncio
+    async def test_retry_returns_false_when_no_failures(self) -> None:
+        repo = FakeCatalogRepository()
+        orch = _make_fake_orchestrator(process_result=1)
+        queue = WorkerQueue(orchestrator=orch, repository=repo)
+
+        await queue.start()
+        job_id = await queue.enqueue_scan([_make_candidate("/tmp/ok.mp4")])
+
+        while True:
+            job = repo.get_job(job_id)
+            if job and job.status in ("done", "failed"):
+                break
+            await asyncio.sleep(0.02)
+
+        await queue.stop()
+        ok = await queue.retry_job(job_id)
+        assert ok is False
+

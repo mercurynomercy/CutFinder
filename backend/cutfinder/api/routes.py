@@ -81,6 +81,79 @@ def _build_router(ctx: Any) -> Any:
         logger.info("Scan enqueued, job_id=%s", job_id)
         return {"job_id": job_id}
 
+    # ── Job queue management (GET /jobs, DELETE, retry, pause/resume) ─
+    @router.get("/jobs")
+    async def list_jobs() -> dict[str, Any]:
+        """List all jobs (newest first) plus the global pause flag."""
+        if ctx.repository is None or ctx.worker_queue is None:
+            raise HTTPException(status_code=503, detail="Job queue not available")
+
+        jobs = ctx.repository.list_jobs()
+        return {
+            "jobs": [
+                {
+                    "id": j.id,
+                    "kind": getattr(j, "kind", "scan"),
+                    "status": j.status,
+                    "total": j.total,
+                    "done": j.done,
+                    "failed": j.failed,
+                    "started_at": j.started_at,
+                    "finished_at": j.finished_at,
+                }
+                for j in jobs
+            ],
+            "paused": ctx.worker_queue.is_paused,
+        }
+
+    @router.delete("/jobs/{job_id}")
+    async def delete_job(job_id: int) -> dict[str, Any]:
+        """Delete a job, cancelling it first if still queued/running."""
+        if ctx.repository is None or ctx.worker_queue is None:
+            raise HTTPException(status_code=503, detail="Job queue not available")
+
+        job = ctx.repository.get_job(job_id)
+        if job is None:
+            raise HTTPException(status_code=404, detail="Job not found")
+
+        if job.status in ("queued", "running"):
+            ctx.worker_queue.cancel_job(job_id)
+            ctx.repository.update_job(job_id, status="cancelled")
+
+        ctx.repository.delete_job(job_id)
+        return {"status": "ok", "job_id": job_id}
+
+    @router.post("/jobs/{job_id}/retry")
+    async def retry_job(job_id: int) -> dict[str, Any]:
+        """Re-enqueue a job's failed items under the same job_id."""
+        if ctx.repository is None or ctx.worker_queue is None:
+            raise HTTPException(status_code=503, detail="Job queue not available")
+
+        job = ctx.repository.get_job(job_id)
+        if job is None:
+            raise HTTPException(status_code=404, detail="Job not found")
+
+        ok = await ctx.worker_queue.retry_job(job_id)
+        if not ok:
+            raise HTTPException(status_code=400, detail="No failed items to retry")
+        return {"job_id": job_id}
+
+    @router.post("/jobs/pause")
+    async def pause_jobs() -> dict[str, Any]:
+        """Globally pause the worker (in-flight item finishes first)."""
+        if ctx.worker_queue is None:
+            raise HTTPException(status_code=503, detail="Worker queue not available")
+        ctx.worker_queue.pause()
+        return {"paused": True}
+
+    @router.post("/jobs/resume")
+    async def resume_jobs() -> dict[str, Any]:
+        """Resume the globally-paused worker."""
+        if ctx.worker_queue is None:
+            raise HTTPException(status_code=503, detail="Worker queue not available")
+        ctx.worker_queue.resume()
+        return {"paused": False}
+
     # ── Job status (GET /jobs/{id}) ─────────────────────────────
     @router.get("/jobs/{job_id}")
     async def get_job_status(job_id: int) -> dict[str, Any]:

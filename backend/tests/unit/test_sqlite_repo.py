@@ -480,8 +480,14 @@ class TestJobCrud:
         job = repo.create_job(10)
 
         assert isinstance(job.id, int) and job.id > 0
-        assert job.status == "running"
+        assert job.status == "queued"
+        assert job.kind == "scan"
         assert job.total == 10
+
+    def test_create_job_with_kind(self, repo):
+        job = repo.create_job(1, kind="reanalyze")
+        assert job.kind == "reanalyze"
+        assert repo.get_job(job.id).kind == "reanalyze"
 
     def test_create_job_stored_in_db(self, repo):
         job = repo.create_job(5)
@@ -492,7 +498,7 @@ class TestJobCrud:
         ).fetchone()
 
         assert row is not None
-        assert row[0] == "running"
+        assert row[0] == "queued"
         assert row[1] == 5
 
     def test_update_job(self, repo):
@@ -520,3 +526,102 @@ class TestJobCrud:
 
     def test_get_nonexistent_job(self, repo):
         assert repo.get_job(999_999) is None
+
+    def test_update_job_cancelled_sets_finished_at(self, repo):
+        job = repo.create_job(3)
+        repo.update_job(job.id, status="cancelled")
+        fetched = repo.get_job(job.id)
+        assert fetched.status == "cancelled"
+        assert fetched.finished_at is not None
+
+
+# ── Job queue management (list / delete / failed items) ──────────
+
+class TestJobQueueManagement:
+    def test_list_jobs_newest_first(self, repo):
+        j1 = repo.create_job(1)
+        j2 = repo.create_job(2)
+        j3 = repo.create_job(3)
+
+        jobs = repo.list_jobs()
+        ids = [j.id for j in jobs]
+        assert ids == [j3.id, j2.id, j1.id]
+
+    def test_list_jobs_respects_limit(self, repo):
+        for _ in range(5):
+            repo.create_job(1)
+
+        jobs = repo.list_jobs(limit=2)
+        assert len(jobs) == 2
+
+    def test_delete_job_removes_job_and_failed_items(self, repo):
+        from cutfinder.domain.models import JobFailedItem
+
+        job = repo.create_job(2)
+        repo.record_failed_item(JobFailedItem(
+            job_id=job.id, kind="clip", path="/tmp/a.mp4", fingerprint="ab", error="boom",
+        ))
+        assert len(repo.get_failed_items(job.id)) == 1
+
+        repo.delete_job(job.id)
+        assert repo.get_job(job.id) is None
+        assert repo.get_failed_items(job.id) == []
+
+    def test_record_get_clear_failed_items(self, repo):
+        from cutfinder.domain.models import JobFailedItem
+
+        job = repo.create_job(2)
+        repo.record_failed_item(JobFailedItem(
+            job_id=job.id, kind="clip", path="/tmp/x.mp4", fingerprint="ff", error="e1",
+        ))
+        repo.record_failed_item(JobFailedItem(
+            job_id=job.id, kind="reanalyze", clip_id=7, error="e2",
+        ))
+
+        items = repo.get_failed_items(job.id)
+        assert len(items) == 2
+        assert items[0].kind == "clip" and items[0].path == "/tmp/x.mp4"
+        assert items[1].kind == "reanalyze" and items[1].clip_id == 7
+
+        repo.clear_failed_items(job.id)
+        assert repo.get_failed_items(job.id) == []
+
+
+# ── Schema migration (old jobs table without `kind`) ─────────────
+
+class TestKindMigration:
+    def test_migration_adds_kind_to_old_jobs_table(self):
+        """An old-shape jobs table (no `kind`) is migrated, defaulting to 'scan'."""
+        import sqlite3 as _sqlite3
+
+        from cutfinder.adapters.sqlite_repo import SqliteRepository
+
+        conn = _sqlite3.connect(":memory:")
+        # Simulate a pre-existing DB: jobs table WITHOUT a kind column,
+        # already holding a row.
+        conn.execute("""
+            CREATE TABLE jobs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                status TEXT NOT NULL DEFAULT 'running',
+                total INTEGER DEFAULT 0,
+                done INTEGER DEFAULT 0,
+                failed INTEGER DEFAULT 0,
+                started_at TEXT,
+                finished_at TEXT
+            )
+        """)
+        conn.execute("INSERT INTO jobs (status, total) VALUES ('done', 4)")
+        conn.commit()
+
+        # Instantiating the repo runs execute_schema() → migration.
+        repo = SqliteRepository(conn)
+
+        # The pre-existing row gets the default kind 'scan'.
+        existing = repo.get_job(1)
+        assert existing is not None
+        assert existing.kind == "scan"
+
+        # And new jobs still work with kind.
+        new_job = repo.create_job(1, kind="reanalyze")
+        assert repo.get_job(new_job.id).kind == "reanalyze"
+        repo.close()

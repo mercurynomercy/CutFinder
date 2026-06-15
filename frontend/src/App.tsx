@@ -14,6 +14,7 @@ import { Filters, type FiltersState as FilterState } from '@/features/filters'
 import { Gallery, type GalleryProps } from '@/features/gallery'
 import { DetailPanel, type DetailPanelProps as DetailPanelPropsType } from '@/features/detail'
 import { JobsPanel, type JobsPanelProps } from '@/features/jobs'
+import { JobsQueuePage } from '@/features/jobs-queue'
 import { SettingsPage } from '@/features/settings'
 
 // ── App state ────────────────────────────────────────
@@ -22,6 +23,7 @@ export default function App() {
   const [clips, setClips] = useState<ClipSummary[]>([])
   const [loading, setLoading] = useState(true)
   const [showSettings, setShowSettings] = useState(false)
+  const [showJobs, setShowJobs] = useState(false)
   const [selectedClipId, setSelectedClipId] = useState<DetailPanelPropsType['clipId']>(null)
   const [activeJobId, setActiveJobId] = useState<JobsPanelProps['activeJobId']>(null)
   const [appliedFilters, setAppliedFilters] = useState<Partial<FilterState>>({})
@@ -106,6 +108,11 @@ export default function App() {
     return <SettingsPage onSave={() => { setShowSettings(false); refreshClips() }} />
   }
 
+  // Jobs queue view (full-screen, replaces main layout)
+  if (showJobs) {
+    return <JobsQueuePage onClose={() => setShowJobs(false)} />
+  }
+
   return (
     <div className="flex h-screen w-full flex-col bg-[--bg-canvas] text-[--text-primary]">
       {/* Top progress bar (absolute, sticky) */}
@@ -121,6 +128,15 @@ export default function App() {
             className="rounded-md bg-[--primary] px-4 py-1.5 text-sm font-medium text-white shadow hover:bg-[--primary]/90 transition-colors"
           >
             Scan
+          </button>
+          <button
+            onClick={() => setShowJobs(true)}
+            className="rounded-md p-1.5 text-[--text-secondary] hover:bg-[--surface-3] transition-colors"
+            aria-label="任务队列"
+          >
+            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24">
+              <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01" />
+            </svg>
           </button>
           <button
             onClick={() => setShowSettings(true)}

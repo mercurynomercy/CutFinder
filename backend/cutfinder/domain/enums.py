@@ -20,9 +20,11 @@ class Source(str, Enum):
 class JobStatus(str, Enum):
     """Queue job lifecycle state."""
 
+    QUEUED = "queued"
     RUNNING = "running"
     DONE = "done"
     FAILED = "failed"
+    CANCELLED = "cancelled"
 
 
 class DateSource(str, Enum):

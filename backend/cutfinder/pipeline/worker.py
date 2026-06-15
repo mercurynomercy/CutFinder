@@ -26,6 +26,7 @@ from typing import Any, Callable
 
 from cutfinder.domain.models import (
     ClipCandidate,
+    JobFailedItem,
 )
 from cutfinder.ports.repository import CatalogRepository
 
@@ -137,11 +138,15 @@ class WorkerQueue:
         # Reference to orchestrator (may be None)
         self._orchestrator = orchestrator
 
-        # Track the current job being processed (for counter updates)
-        self._current_job_id: int | None = None
-
         # Auto-increment counter for job IDs when no repository is available
         self._next_job_counter: int = 0
+
+        # Global pause gate — set means "running", cleared means "paused".
+        self._resume: asyncio.Event = asyncio.Event()
+        self._resume.set()
+
+        # Jobs whose remaining queued items should be skipped.
+        self._cancelled_jobs: set[int] = set()
 
     # ── Lifecycle ────────────────────────────────────────────────
 
@@ -160,7 +165,7 @@ class WorkerQueue:
             # Re-raise any exception from a finished task.
             logger.warning("WorkerQueue: previous worker task is done, re-raising exception")
             self._worker_task.result()
-        logger.info("WorkerQueue: spawning worker task for job %s", self._current_job_id)
+        logger.info("WorkerQueue: spawning worker task")
         self._worker_task = asyncio.create_task(self._worker_loop())
 
     async def stop(self) -> None:
@@ -170,10 +175,31 @@ class WorkerQueue:
         before returning.  Safe to call even if ``start()`` was never
         called or the worker is already stopped.
         """
+        # Ensure the worker isn't blocked on a pause gate so it can drain + exit.
+        self._resume.set()
         self._queue.put_nowait(_STOP_SENTINEL)
         if self._worker_task and not self._worker_task.done():
             await self._worker_task
         self._worker_task = None
+
+    # ── Pause / resume / cancel (global + per-job control) ───────
+
+    def pause(self) -> None:
+        """Pause the worker: the in-flight item finishes, then it blocks."""
+        self._resume.clear()
+
+    def resume(self) -> None:
+        """Resume a paused worker. Queued items are preserved."""
+        self._resume.set()
+
+    @property
+    def is_paused(self) -> bool:
+        """True if the worker is currently paused."""
+        return not self._resume.is_set()
+
+    def cancel_job(self, job_id: int) -> None:
+        """Mark a job cancelled; its remaining queued items are skipped."""
+        self._cancelled_jobs.add(job_id)
 
     # ── Job submission (public API) ──────────────────────────────
 
@@ -206,20 +232,18 @@ class WorkerQueue:
             if job_id is not None and (self._repository.get_job(job_id) is not None):
                 pass  # reuse existing job record
             elif job_id is None:
-                job = self._repository.create_job(total=len(candidates))
+                job = self._repository.create_job(total=len(candidates), kind="scan")
                 job_id = job.id
 
         if job_id is None:
             self._next_job_counter += 1
             job_id = self._next_job_counter
 
-        self._current_job_id = job_id  # track for counter updates in _process_clip
-
         # Emit progress events for batch start and per-clip processing
         self._emit({"type": "job_started", "job_id": job_id, "total": len(candidates)})
 
         for candidate in candidates:
-            await self._queue.put(("clip", candidate))
+            await self._queue.put(("clip", candidate, job_id))
 
         return job_id
 
@@ -248,16 +272,15 @@ class WorkerQueue:
             if job_id is not None and (self._repository.get_job(job_id) is not None):
                 pass  # reuse existing job record
             elif job_id is None:
-                job = self._repository.create_job(total=1)
+                job = self._repository.create_job(total=1, kind="reanalyze")
                 job_id = job.id
 
         if job_id is None:
             self._next_job_counter += 1
             job_id = self._next_job_counter
 
-        self._current_job_id = job_id  # track for counter updates in _process_reanalyze
         self._emit({"type": "job_started", "job_id": job_id, "total": 1})
-        await self._queue.put(("reanalyze", clip_id))
+        await self._queue.put(("reanalyze", clip_id, job_id))
 
         return job_id  # pyright: ignore[reportPossiblyUnboundVariable]
 
@@ -270,7 +293,7 @@ class WorkerQueue:
             A :class:`ClipCandidate` to process.
 
         """
-        await self._queue.put(("clip", candidate))
+        await self._queue.put(("clip", candidate, None))
 
     async def enqueue_reanalyze_task(self, clip_id: int) -> None:
         """Enqueue a single re-analysis task (no job tracking).
@@ -281,7 +304,46 @@ class WorkerQueue:
             Database ID of the existing processed clip.
 
         """
-        await self._queue.put(("reanalyze", clip_id))
+        await self._queue.put(("reanalyze", clip_id, None))
+
+    async def retry_job(self, job_id: int) -> bool:
+        """Re-enqueue a job's failed items under the same job_id.
+
+        Returns ``False`` (no-op) when the job has no recorded failures.
+        """
+        if self._repository is None:
+            return False
+
+        items = self._repository.get_failed_items(job_id)
+        if not items:
+            return False
+
+        self._repository.clear_failed_items(job_id)
+
+        job = self._repository.get_job(job_id)
+        n = len(items)
+        if job is not None:
+            self._repository.update_job(
+                job_id,
+                status="queued",
+                done=max(job.done - n, 0),
+                failed=max(job.failed - n, 0),
+            )
+
+        # A retried job is no longer cancelled.
+        self._cancelled_jobs.discard(job_id)
+
+        for item in items:
+            if item.kind == "reanalyze":
+                await self._queue.put(("reanalyze", item.clip_id, job_id))
+            else:
+                await self._queue.put((
+                    "clip",
+                    ClipCandidate(path=item.path, fingerprint=item.fingerprint),
+                    job_id,
+                ))
+
+        return True
 
     # ── SSE subscriber management ────────────────────────────────
 
@@ -336,6 +398,10 @@ class WorkerQueue:
         logger.info("Worker loop started")
         try:
             while True:
+                # Global pause gate — block here so the in-flight item (if any)
+                # has already finished. Queued items are preserved meanwhile.
+                await self._resume.wait()
+
                 item = await self._queue.get()
 
                 # Stop sentinel — drain remaining then exit
@@ -343,44 +409,107 @@ class WorkerQueue:
                     self._queue.task_done()
                     break
 
-                kind, payload = item
+                kind, payload, job_id = item
+
+                # Skip items belonging to a cancelled job (no counters, no work).
+                if job_id is not None and job_id in self._cancelled_jobs:
+                    self._queue.task_done()
+                    continue
+
+                # Transition a freshly-started job 'queued' -> 'running' once.
+                if job_id is not None and self._repository is not None:
+                    job = self._repository.get_job(job_id)
+                    if job is not None and job.status == "queued":
+                        self._repository.update_job(job_id, status="running")
 
                 try:
                     if kind == "clip":
-                        await self._process_clip(payload)
+                        success, error = await self._process_clip(payload)
                     elif kind == "reanalyze":
-                        await self._process_reanalyze(payload)
+                        success, error = await self._process_reanalyze(payload)
+                    else:
+                        success, error = True, None
 
-                except Exception as exc:  # noqa: BLE001 — error isolation per clip
+                except Exception as exc:  # noqa: BLE001 — error isolation per item
                     logger.error(
                         "Worker processing error (continuing): %s", exc, exc_info=True,
                     )
+                    success, error = False, str(exc)
 
+                self._update_job_after_item(job_id, kind, payload, success, error)
                 self._queue.task_done()
 
         except asyncio.CancelledError:
             # Normal shutdown — drain remaining items if possible
             pass
 
-    async def _process_clip(self, candidate: ClipCandidate) -> None:
-        """Process a single clip through the orchestrator pipeline."""
+    def _update_job_after_item(
+        self,
+        job_id: int | None,
+        kind: str,
+        payload: Any,
+        success: bool,
+        error: str | None,
+    ) -> None:
+        """Update per-job counters + terminal status for one processed item."""
+        if job_id is None or self._repository is None:
+            return
+
+        job = self._repository.get_job(job_id)
+        if job is None:
+            return
+
+        if success:
+            self._repository.update_job(job_id, done=job.done + 1)
+        else:
+            self._repository.update_job(
+                job_id, done=job.done + 1, failed=job.failed + 1,
+            )
+            if kind == "reanalyze":
+                self._repository.record_failed_item(JobFailedItem(
+                    job_id=job_id, kind="reanalyze", clip_id=payload, error=error,
+                ))
+            else:
+                self._repository.record_failed_item(JobFailedItem(
+                    job_id=job_id, kind="clip",
+                    path=payload.path, fingerprint=payload.fingerprint, error=error,
+                ))
+
+        # Terminal transition once all items are accounted for.
+        job = self._repository.get_job(job_id)
+        if (
+            job is not None
+            and job.status in ("queued", "running")
+            and job.done >= job.total
+        ):
+            if job.failed > 0:
+                self._repository.update_job(job_id, status="failed")
+                self._emit({
+                    "type": "job_failed", "job_id": job_id,
+                    "done": job.done, "total": job.total, "failed": job.failed,
+                })
+            else:
+                self._repository.update_job(job_id, status="done")
+                self._emit({
+                    "type": "job_completed", "job_id": job_id,
+                    "done": job.done, "total": job.total, "failed": job.failed,
+                })
+
+    async def _process_clip(self, candidate: ClipCandidate) -> tuple[bool, str | None]:
+        """Process a single clip through the orchestrator pipeline.
+
+        Returns ``(success, error)`` — counters are updated by the caller.
+        """
         self._emit({"type": "clip_started", "path": candidate.path})
 
         try:
             clip_id = self._orchestrator.process_clip(candidate) if self._orchestrator else None
-
-            # Update job counters (current job only)
-            if self._repository and self._current_job_id is not None:
-                job = self._repository.get_job(self._current_job_id)
-                if job is not None:
-                    self._repository.update_job(self._current_job_id, done=job.done + 1)
-
-            # Emit completion event with clip_id
             self._emit({
                 "type": "clip_done",
                 "path": candidate.path,
                 **({"clip_id": clip_id} if clip_id is not None else {}),
             })
+            return True, None
 
         except Exception as exc:  # noqa: BLE001 — error isolation
             self._emit({
@@ -388,34 +517,24 @@ class WorkerQueue:
                 "path": candidate.path,
                 "error": str(exc),
             })
+            return False, str(exc)
 
-            # Update job counters on failure (current job only)
-            if self._repository and self._current_job_id is not None:
-                job = self._repository.get_job(self._current_job_id)
-                if job is not None:
-                    self._repository.update_job(
-                        self._current_job_id, done=job.done + 1, failed=job.failed + 1,
-                    )
+    async def _process_reanalyze(self, clip_id: int) -> tuple[bool, str | None]:
+        """Re-analyze a single existing clip.
 
-    async def _process_reanalyze(self, clip_id: int) -> None:
-        """Re-analyze a single existing clip."""
+        Returns ``(success, error)`` — counters are updated by the caller.
+        """
         self._emit({"type": "reanalyze_started", "clip_id": clip_id})
 
         try:
             success = (
                 self._orchestrator.reanalyze(clip_id) if self._orchestrator else True
             )
-
-            # Update job counters (current job only)
-            if self._repository and self._current_job_id is not None:
-                job = self._repository.get_job(self._current_job_id)
-                if job is not None:
-                    self._repository.update_job(self._current_job_id, done=job.done + 1)
-
             if success:
                 self._emit({"type": "reanalyze_done", "clip_id": clip_id})
-            else:
-                self._emit({"type": "reanalyze_error", "clip_id": clip_id})
+                return True, None
+            self._emit({"type": "reanalyze_error", "clip_id": clip_id})
+            return False, "reanalyze returned False"
 
         except Exception as exc:  # noqa: BLE001 — error isolation
             self._emit({
@@ -423,13 +542,7 @@ class WorkerQueue:
                 "clip_id": clip_id,
                 "error": str(exc),
             })
-
-            if self._repository and self._current_job_id is not None:
-                job = self._repository.get_job(self._current_job_id)
-                if job is not None:
-                    self._repository.update_job(
-                        self._current_job_id, done=job.done + 1, failed=job.failed + 1,
-                    )
+            return False, str(exc)
 
 
 

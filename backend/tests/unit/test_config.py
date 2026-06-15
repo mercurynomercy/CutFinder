@@ -67,8 +67,10 @@ class TestEnvSettings:
         monkeypatch.setenv("OMLX_API_KEY", "test-key-123")
         monkeypatch.delenv("OMLX_BASE_URL", raising=False)
 
+        # _env_file=None isolates the unit test from the repo-root .env, which
+        # EnvSettings otherwise always loads (see config._ROOT_ENV_FILE).
         with pytest.raises(ValueError, match="Missing required environment variables: OMLX_BASE_URL"):
-            EnvSettings()
+            EnvSettings(_env_file=None)
 
     def test_missing_api_key_raises(
         self, monkeypatch: pytest.MonkeyPatch
@@ -78,7 +80,7 @@ class TestEnvSettings:
         monkeypatch.delenv("OMLX_API_KEY", raising=False)
 
         with pytest.raises(ValueError, match="Missing required environment variables: OMLX_API_KEY"):
-            EnvSettings()
+            EnvSettings(_env_file=None)
 
     def test_missing_both_keys_raises(
         self, monkeypatch: pytest.MonkeyPatch
@@ -88,7 +90,7 @@ class TestEnvSettings:
         monkeypatch.delenv("OMLX_API_KEY", raising=False)
 
         with pytest.raises(ValueError, match="Missing required environment variables: OMLX_BASE_URL, OMLX_API_KEY"):
-            EnvSettings()
+            EnvSettings(_env_file=None)
 
     def test_empty_string_treated_as_missing(
         self, monkeypatch: pytest.MonkeyPatch
@@ -108,7 +110,7 @@ class TestEnvSettings:
         monkeypatch.setenv("OMLX_API_KEY", "test-key-123")
         monkeypatch.delenv("WHISPER_MODEL_PATH", raising=False)
 
-        assert EnvSettings().WHISPER_MODEL_PATH == ""
+        assert EnvSettings(_env_file=None).WHISPER_MODEL_PATH == ""
 
     def test_whisper_model_path_from_env(
         self, monkeypatch: pytest.MonkeyPatch

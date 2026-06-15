@@ -20,6 +20,7 @@ from ..domain.models import (
     ClipFilter,
     ClipSummary,
     Job,
+    JobFailedItem,
     Tag,
     Transcript,
 )
@@ -76,6 +77,17 @@ CREATE TABLE IF NOT EXISTS jobs (
     failed       INTEGER  DEFAULT 0,
     started_at   TEXT,
     finished_at  TEXT
+)"""
+
+_CREATE_JOB_FAILED_ITEMS = """
+CREATE TABLE IF NOT EXISTS job_failed_items (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    job_id      INTEGER NOT NULL,
+    kind        TEXT NOT NULL,
+    path        TEXT,
+    fingerprint TEXT,
+    clip_id     INTEGER,
+    error       TEXT
 )"""
 
 _CREATE_FTS = """
@@ -152,6 +164,14 @@ class SqliteRepository:
         c.execute(_CREATE_TAGS)
         c.execute(_CREATE_TRANSCRIPTS)
         c.execute(_CREATE_JOBS)
+        c.execute(_CREATE_JOB_FAILED_ITEMS)
+
+        # Migration: older on-disk DBs have a jobs table without `kind`.
+        c.execute("PRAGMA table_info(jobs)")
+        job_cols = {row[1] for row in c.fetchall()}
+        if "kind" not in job_cols:
+            c.execute("ALTER TABLE jobs ADD COLUMN kind TEXT NOT NULL DEFAULT 'scan'")
+
         c.execute(_CREATE_FTS)
 
         # FTS5 triggers — IF NOT EXISTS so they're idempotent.
@@ -519,17 +539,17 @@ class SqliteRepository:
 
     # ── Job CRUD ──────────────────────────────────────────────
 
-    def create_job(self, total: int) -> Job:
+    def create_job(self, total: int, kind: str = "scan") -> Job:
         c = self._conn.cursor()
         now = _dt.datetime.now(_dt.timezone.utc).isoformat()
         c.execute("""
-            INSERT INTO jobs (status, total, done, failed, started_at)
-            VALUES ('running', ?, 0, 0, ?)
-        """, (total, now))
+            INSERT INTO jobs (status, kind, total, done, failed, started_at)
+            VALUES ('queued', ?, ?, 0, 0, ?)
+        """, (kind, total, now))
         self._conn.commit()
 
         job_id = c.execute("SELECT id FROM jobs ORDER BY id DESC LIMIT 1").fetchone()[0]
-        return Job(id=job_id, status="running", total=total, done=0, failed=0, started_at=now)
+        return Job(id=job_id, status="queued", kind=kind, total=total, done=0, failed=0, started_at=now)
 
     def update_job(self, job_id: int, **fields: Any) -> None:
         if not fields:
@@ -548,9 +568,9 @@ class SqliteRepository:
         c = self._conn.cursor()
         c.execute(sql, values)
 
-        # Auto-set finished_at if status changed to done/failed.
+        # Auto-set finished_at if status changed to a terminal state.
         new_status = fields.get("status")
-        if new_status in ("done", "failed"):
+        if new_status in ("done", "failed", "cancelled"):
             c.execute("UPDATE jobs SET finished_at = ? WHERE id = ?", (
                 _dt.datetime.now(_dt.timezone.utc).isoformat(), job_id,
             ))
@@ -560,7 +580,7 @@ class SqliteRepository:
     def get_job(self, job_id: int) -> Job | None:
         c = self._conn.cursor()
         c.execute("""
-            SELECT id, status, total, done, failed, started_at, finished_at
+            SELECT id, status, total, done, failed, started_at, finished_at, kind
             FROM jobs WHERE id = ?
         """, (job_id,))
         row = c.fetchone()
@@ -570,8 +590,61 @@ class SqliteRepository:
         return Job(
             id=row[0], status=row[1], total=row[2] or 0,
             done=row[3] or 0, failed=row[4] or 0,
-            started_at=row[5], finished_at=row[6],
+            started_at=row[5], finished_at=row[6], kind=row[7] or "scan",
         )
+
+    def list_jobs(self, limit: int | None = None) -> list[Job]:
+        c = self._conn.cursor()
+        sql = """
+            SELECT id, status, total, done, failed, started_at, finished_at, kind
+            FROM jobs ORDER BY id DESC
+        """
+        if limit is not None:
+            sql += " LIMIT ?"
+            c.execute(sql, (limit,))
+        else:
+            c.execute(sql)
+        return [
+            Job(
+                id=row[0], status=row[1], total=row[2] or 0,
+                done=row[3] or 0, failed=row[4] or 0,
+                started_at=row[5], finished_at=row[6], kind=row[7] or "scan",
+            )
+            for row in c.fetchall()
+        ]
+
+    def delete_job(self, job_id: int) -> None:
+        c = self._conn.cursor()
+        c.execute("DELETE FROM job_failed_items WHERE job_id = ?", (job_id,))
+        c.execute("DELETE FROM jobs WHERE id = ?", (job_id,))
+        self._conn.commit()
+
+    def record_failed_item(self, item: JobFailedItem) -> None:
+        c = self._conn.cursor()
+        c.execute("""
+            INSERT INTO job_failed_items (job_id, kind, path, fingerprint, clip_id, error)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (item.job_id, item.kind, item.path, item.fingerprint, item.clip_id, item.error))
+        self._conn.commit()
+
+    def get_failed_items(self, job_id: int) -> list[JobFailedItem]:
+        c = self._conn.cursor()
+        c.execute("""
+            SELECT job_id, kind, path, fingerprint, clip_id, error
+            FROM job_failed_items WHERE job_id = ? ORDER BY id
+        """, (job_id,))
+        return [
+            JobFailedItem(
+                job_id=row[0], kind=row[1], path=row[2],
+                fingerprint=row[3], clip_id=row[4], error=row[5],
+            )
+            for row in c.fetchall()
+        ]
+
+    def clear_failed_items(self, job_id: int) -> None:
+        c = self._conn.cursor()
+        c.execute("DELETE FROM job_failed_items WHERE job_id = ?", (job_id,))
+        self._conn.commit()
 
     def close(self) -> None:
         """Close the underlying connection.  Idempotent (sqlite3 allows it)."""

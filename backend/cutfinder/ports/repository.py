@@ -12,6 +12,7 @@ from ..domain.models import (
     Transcript,
     AnalysisResult,
     Job,
+    JobFailedItem,
     ClipFilter,
 )
 
@@ -89,11 +90,26 @@ class CatalogRepository(Protocol):
 
     # ── Job queue tracking ────────────────────────────────────────
 
-    def create_job(self, total: int) -> Job:
-        """Create a new running job record. Returns the ``Job``."""
+    def create_job(self, total: int, kind: str = "scan") -> Job:
+        """Create a new queued job record. Returns the ``Job``."""
 
     def update_job(self, job_id: int, **fields: Any) -> None:
-        """Update selected fields of a running/completed job."""
+        """Update selected fields of a queued/running/completed job."""
 
     def get_job(self, job_id: int) -> Job | None:
         """Fetch a single job record."""
+
+    def list_jobs(self, limit: int | None = None) -> list[Job]:
+        """List jobs newest-first, optionally limited."""
+
+    def delete_job(self, job_id: int) -> None:
+        """Delete a job and its recorded failed items."""
+
+    def record_failed_item(self, item: JobFailedItem) -> None:
+        """Record one failed queue item for later retry."""
+
+    def get_failed_items(self, job_id: int) -> list[JobFailedItem]:
+        """Return all recorded failed items for a job."""
+
+    def clear_failed_items(self, job_id: int) -> None:
+        """Remove all recorded failed items for a job."""

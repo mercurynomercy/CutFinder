@@ -73,7 +73,7 @@ e2e: frontend-deps
 
 # ── 8. frontend — start Vite dev server only ───────────────────
 frontend: frontend-deps env-boilerplate
-	$(VITE) --port 5082
+	cd frontend && $(VITE)
 
 # ── 9. backend — start uvicorn dev server only (with --reload) ─
 backend: env-boilerplate

@@ -22,6 +22,10 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _REQUIRED_ENV_VARS = ("OMLX_BASE_URL", "OMLX_API_KEY")
 
+# Repo root, anchored to this file (backend/cutfinder/config.py -> repo root).
+# Used so the root ``.env`` is found even when the process runs from backend/.
+_ROOT_ENV_FILE = Path(__file__).resolve().parents[2] / ".env"
+
 
 class EnvSettings(BaseSettings):
     """Environment-driven configuration from ``.env`` / OS env vars.
@@ -31,7 +35,9 @@ class EnvSettings(BaseSettings):
     """
 
     model_config = SettingsConfigDict(
-        env_file=(".env",),
+        # Both the repo-root .env (the documented location) and a CWD-local
+        # .env are honoured; the latter wins for overlapping keys.
+        env_file=(_ROOT_ENV_FILE, ".env"),
         env_file_encoding="utf-8",
     )
 
