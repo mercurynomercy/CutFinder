@@ -258,4 +258,9 @@ export const api = {
   setLibrary(path: string): Promise<{ status: string; library_path: string }> {
     return _fetch('/api/library', { method: 'POST', body: JSON.stringify({ path }) })
   },
+
+  /** POST /api/pick-folder — open a native macOS folder chooser; path is null if cancelled. */
+  pickFolder(): Promise<{ path: string | null }> {
+    return _fetch('/api/pick-folder', { method: 'POST' })
+  },
 } as const

@@ -479,6 +479,36 @@ def _build_router(ctx: Any) -> Any:
             for c in clips
         ]
 
+    # ── Native folder picker (POST /pick-folder) ───────────
+    @router.post("/pick-folder")
+    async def pick_folder() -> dict[str, Optional[str]]:
+        """Open a native macOS folder chooser and return the absolute path.
+
+        Returns ``{"path": "/abs/path"}`` on selection, or ``{"path": None}``
+        if the user cancels.  Uses ``osascript`` (macOS only) so the path is a
+        real absolute filesystem path — a browser ``<input>`` cannot provide one.
+        """
+        import asyncio as _asyncio
+
+        script = 'POSIX path of (choose folder with prompt "选择文件夹")'
+        try:
+            proc = await _asyncio.create_subprocess_exec(
+                "osascript", "-e", script,
+                stdout=_asyncio.subprocess.PIPE,
+                stderr=_asyncio.subprocess.PIPE,
+            )
+        except FileNotFoundError as exc:  # osascript absent (non-macOS host)
+            raise HTTPException(
+                status_code=501, detail="Native folder picker unavailable on this platform",
+            ) from exc
+
+        out, _err = await proc.communicate()
+        if proc.returncode != 0:
+            return {"path": None}  # user cancelled the dialog
+
+        path = out.decode().strip().rstrip("/")
+        return {"path": path or None}
+
     return router
 
 

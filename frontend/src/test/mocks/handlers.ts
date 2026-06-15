@@ -214,6 +214,11 @@ export const handlers = [
     return HttpResponse.json({ status: 'ok', library_path: body.path ?? '' })
   }),
 
+  // POST /api/pick-folder — native macOS folder chooser (absolute path)
+  http.post('http://localhost:5080/api/pick-folder', () => {
+    return HttpResponse.json({ path: '/Users/jan/Movies/Vlog' })
+  }),
+
   // GET /api/settings — get current settings
   http.get('http://localhost:5080/api/settings', () => {
     return HttpResponse.json({ env: {}, prefs: makeSettingsPrefs() })

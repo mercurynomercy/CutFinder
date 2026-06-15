@@ -921,6 +921,56 @@ class TestEdgeCases:
         assert resp.status_code == 422
 
 
+# ── Native folder picker (POST /pick-folder) ─────────────────
+
+
+class TestPickFolder:
+    """The native macOS folder chooser endpoint (osascript)."""
+
+    def _client(self) -> TestClient:
+        return TestClient(_build_app(), raise_server_exceptions=False)
+
+    def test_returns_absolute_path_and_strips_trailing_slash(
+        self, monkeypatch: Any,
+    ) -> None:
+        class _FakeProc:
+            returncode = 0
+
+            async def communicate(self) -> tuple[bytes, bytes]:
+                return (b"/Users/me/Videos/\n", b"")
+
+        async def _fake_exec(*_a: Any, **_k: Any) -> Any:
+            return _FakeProc()
+
+        monkeypatch.setattr(asyncio, "create_subprocess_exec", _fake_exec)
+        resp = self._client().post("/api/pick-folder")
+        assert resp.status_code == 200
+        assert resp.json() == {"path": "/Users/me/Videos"}
+
+    def test_cancel_returns_null_path(self, monkeypatch: Any) -> None:
+        class _FakeProc:
+            returncode = 1  # osascript exits non-zero when the user cancels
+
+            async def communicate(self) -> tuple[bytes, bytes]:
+                return (b"", b"User canceled.")
+
+        async def _fake_exec(*_a: Any, **_k: Any) -> Any:
+            return _FakeProc()
+
+        monkeypatch.setattr(asyncio, "create_subprocess_exec", _fake_exec)
+        resp = self._client().post("/api/pick-folder")
+        assert resp.status_code == 200
+        assert resp.json() == {"path": None}
+
+    def test_missing_osascript_returns_501(self, monkeypatch: Any) -> None:
+        async def _fake_exec(*_a: Any, **_k: Any) -> Any:
+            raise FileNotFoundError("osascript")
+
+        monkeypatch.setattr(asyncio, "create_subprocess_exec", _fake_exec)
+        resp = self._client().post("/api/pick-folder")
+        assert resp.status_code == 501
+
+
 # ── Public exports (module-level marker) ─────────────────────
 
 __all__: list[str] = []  # noqa: PLE0611 — module-level helper, no direct exports

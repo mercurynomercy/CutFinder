@@ -8,7 +8,7 @@ Usage:
   <SettingsPage onSave={(prefs) => handleSave(prefs)} />
 */
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 
 import type { SettingsPrefs, UpdateSettingsBody } from '@/api/client'
 import { api, ApiError } from '@/api/client'
@@ -41,7 +41,11 @@ function validatePrefs(prefs: UpdateSettingsBody): FieldError[] {
   return errors
 }
 
-// ── Folder picker (macOS <input webkitdirectory>) ───────────────
+// ── Folder picker (native macOS dialog via backend osascript) ───
+// A browser <input webkitdirectory> only exposes the folder *name*
+// (webkitRelativePath), never an absolute path — useless for a local tool
+// that resolves real filesystem paths. So we ask the backend to open a native
+// macOS chooser (POST /api/pick-folder) which returns the absolute path.
 
 interface FolderPickerButtonProps {
   label: string
@@ -50,45 +54,30 @@ interface FolderPickerButtonProps {
 }
 
 function FolderPickerButton({ label, icon = null, onChange }: FolderPickerButtonProps) {
-  const inputRef = useRef<HTMLInputElement>(null)
+  const [picking, setPicking] = useState(false)
+
+  const handlePick = async () => {
+    setPicking(true)
+    try {
+      const { path } = await api.pickFolder()
+      if (path) onChange(path) // null = user cancelled the dialog
+    } catch {
+      // backend unreachable / non-macOS — silently ignore
+    } finally {
+      setPicking(false)
+    }
+  }
 
   return (
-    <>
-      <button
-        type="button"
-        onClick={() => inputRef.current?.click()}
-        className="mt-2 inline-flex items-center gap-1.5 rounded-md bg-[--surface-2] px-3 py-1.5 text-xs font-medium text-[--text-secondary] hover:bg-[--surface-3]"
-      >
-        {icon}
-        {label}
-      </button>
-      {/* Hidden file input — webkitdirectory enables folder selection on macOS */}
-      <input
-        ref={inputRef}
-        type="file"
-        className="hidden"
-        // @ts-expect-error webkitdirectory is a non-standard but widely-supported attribute
-        webkitdirectory=""
-        // @ts-expect-error webkitmozdirectory is an older Firefox variant
-        webkitmozdirectory=""
-        onChange={(e) => {
-          const files = e.target.files
-          if (!files || files.length === 0) return
-
-          // Find the common ancestor folder from selected file paths
-          const path = files[0].webkitRelativePath || ''
-          // e.g. "MyFolder/sub/dir/video.mp4" → "MyFolder/"
-          const parts = path.split('/')
-          if (parts.length <= 1) return // single file selected, not a folder
-
-          const ancestorPath = parts.slice(0, -1).join('/')
-          if (ancestorPath) onChange(ancestorPath)
-
-          // Reset so the same folder can be re-selected
-          e.target.value = ''
-        }}
-      />
-    </>
+    <button
+      type="button"
+      onClick={handlePick}
+      disabled={picking}
+      className="mt-2 inline-flex items-center gap-1.5 rounded-md bg-[--surface-2] px-3 py-1.5 text-xs font-medium text-[--text-secondary] hover:bg-[--surface-3] disabled:opacity-50"
+    >
+      {icon}
+      {picking ? '选择中…' : label}
+    </button>
   )
 }
 
