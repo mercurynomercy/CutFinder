@@ -16,6 +16,7 @@ Edge cases handled:
 from __future__ import annotations
 
 import subprocess
+import tempfile
 from pathlib import Path
 
 from ..ports.media import FrameExtractor, ThumbnailMaker
@@ -155,10 +156,13 @@ class FfmpegFrameExtractor(FrameExtractor):
             # Evenly spaced, including the start frame (i=0) but not forcing end at exact boundary
             timestamps = [duration * i / n for i in range(n)]
 
+        # Write frames into a dedicated temp dir — NEVER the source folder
+        # (originals are read-only). The caller cleans up this dir after use.
+        tmp_dir = Path(tempfile.mkdtemp(prefix="cutfinder_frames_"))
+
         output_paths: list[Path] = []
         for i, ts in enumerate(timestamps):
-            out_path = path.parent / f"_frame_{i:04d}.png"  # temp name; caller should rename
-            _ensure_parent(out_path)
+            out_path = tmp_dir / f"frame_{i:04d}.jpg"
 
             cmd = [
                 self._executable,
@@ -166,7 +170,10 @@ class FfmpegFrameExtractor(FrameExtractor):
                 "-ss", str(ts),
                 "-i", str(path),
                 "-vframes", "1",
-                "-pix_fmt", "rgb24",   # ensure RGB pixels (no alpha channel)
+                # Downscale to fit within 1280x720 (preserve aspect) — vision
+                # models don't need 4K, and full-res frames balloon the request.
+                "-vf", "scale=w=1280:h=720:force_original_aspect_ratio=decrease",
+                "-q:v", "3",           # high-quality JPEG (mjpeg scale 2-31)
                 str(out_path),
             ]
 

@@ -112,16 +112,18 @@ class OmlxVisionTagger(VisionTagger):
         if not frame_paths:
             return VisionResult(description="", tags=[])
 
-        import json as _json  # lazy to avoid top-level cold start
         from openai import OpenAI, APIConnectionError
 
+        from ._jsonparse import parse_json_object
+
         def _encode_frame(path: Path) -> dict[str, Any]:
-            """Read image file and return base64 data URI dict."""
+            """Read image file and return base64 data URI dict (mime by suffix)."""
             raw = path.read_bytes()
             b64 = base64.b64encode(raw).decode("ascii")
+            mime = "image/jpeg" if path.suffix.lower() in (".jpg", ".jpeg") else "image/png"
             return {
                 "type": "image_url",
-                "image_url": {"url": f"data:image/png;base64,{b64}"},
+                "image_url": {"url": f"data:{mime};base64,{b64}"},
             }
 
         # Build multi-frame visual message: one text + N images in single user message
@@ -139,24 +141,15 @@ class OmlxVisionTagger(VisionTagger):
                     api_key=self._config.env.OMLX_API_KEY,
                 )
 
-                response = client.chat.completions.create(  # type: ignore[call-overload]  # OMLX accepts plain dict messages / response_format
+                # NOTE: no strict json_schema response_format — grammar-constrained
+                # decoding makes the quantized MLX vision model collapse into a
+                # repetition loop. We prompt for JSON and parse it leniently
+                # instead, and cap max_tokens so a misbehaving model can't hang.
+                response = client.chat.completions.create(
                     model=self._model,
-                    messages=[{"role": "user", "content": content}],
-                    response_format={"type": "json_schema", "json_schema": {
-                        "name": "vision_result",
-                        "strict": True,
-                        "schema": {
-                            "type": "object",
-                            "properties": {
-                                "description": {"type": "string"},
-                                "tags": {
-                                    "type": "array",
-                                    "items": {"type": "string"},
-                                },
-                            },
-                            "required": ["description", "tags"],
-                        },
-                    }},
+                    messages=[{"role": "user", "content": content}],  # type: ignore[list-item,misc]  # OMLX accepts plain dict messages
+                    max_tokens=512,
+                    temperature=0.7,
                 )
 
             except APIConnectionError as e:
@@ -182,10 +175,9 @@ class OmlxVisionTagger(VisionTagger):
             if not raw_content:
                 continue  # retry on empty
 
-            try:
-                data = _json.loads(raw_content)
-            except (ValueError, TypeError):
-                continue  # retry on non-JSON
+            data = parse_json_object(raw_content)
+            if data is None:
+                continue  # retry on non-JSON / unparseable output
 
             description = data.get("description", "") or ""
             tags_raw: Any = data.get("tags")

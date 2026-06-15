@@ -111,30 +111,14 @@ class OmlxSummarizer(Summarizer):
         if not transcript_text or not transcript_text.strip():
             return SummaryResult(summary="", tags=[])
 
-        import json as _json  # lazy to avoid top-level cold start
-
         from openai import OpenAI, APIConnectionError
+
+        from ._jsonparse import parse_json_object
 
         client = OpenAI(
             base_url=self._config.env.OMLX_BASE_URL,
             api_key=self._config.env.OMLX_API_KEY,
         )
-
-        json_schema = {
-            "name": "summary_result",
-            "strict": True,
-            "schema": {
-                "type": "object",
-                "properties": {
-                    "summary": {"type": "string"},
-                    "tags": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                    },
-                },
-                "required": ["summary", "tags"],
-            },
-        }
 
         prompt_template = _SUMMARIZE_PROMPTS.get(
             self._config.prefs.output_language, _SUMMARIZE_PROMPT_ZH
@@ -144,10 +128,14 @@ class OmlxSummarizer(Summarizer):
 
         for attempt in range(1 + max_retries):
             try:
-                response = client.chat.completions.create(  # type: ignore[call-overload]  # OMLX accepts plain dict messages / response_format
+                # NOTE: no strict json_schema response_format — grammar-constrained
+                # decoding makes the quantized MLX models collapse into a repetition
+                # loop. We prompt for JSON and parse it leniently, capping max_tokens.
+                response = client.chat.completions.create(
                     model=self._model,
                     messages=[{"role": "user", "content": prompt}],
-                    response_format={"type": "json_schema", "json_schema": json_schema},
+                    max_tokens=512,
+                    temperature=0.7,
                 )
             except APIConnectionError as e:
                 if attempt == max_retries:
@@ -172,10 +160,9 @@ class OmlxSummarizer(Summarizer):
             if not raw_content:
                 continue  # retry on empty
 
-            try:
-                data = _json.loads(raw_content)
-            except (ValueError, TypeError):
-                continue  # retry on non-JSON
+            data = parse_json_object(raw_content)
+            if data is None:
+                continue  # retry on non-JSON / unparseable output
 
             summary = data.get("summary", "") or ""
             tags_raw: Any = data.get("tags")

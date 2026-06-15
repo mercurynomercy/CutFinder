@@ -430,11 +430,31 @@ class Orchestrator:
         if self.frame_extractor is not None and isinstance(path, str):
             frame_paths = self.frame_extractor.extract(Path(path), self.num_frames)
 
-        vision_result: VisionResult | None = None
-        if self.vision_tagger is not None and frame_paths:
-            vision_result = self.vision_tagger.describe(frame_paths)
+        try:
+            vision_result: VisionResult | None = None
+            if self.vision_tagger is not None and frame_paths:
+                vision_result = self.vision_tagger.describe(frame_paths)
 
-        return AnalysisResult(roll_type="b", vision_result=vision_result, transcript=None)
+            return AnalysisResult(roll_type="b", vision_result=vision_result, transcript=None)
+        finally:
+            self._cleanup_frames(frame_paths)
+
+    @staticmethod
+    def _cleanup_frames(frame_paths: list[Path]) -> None:
+        """Delete extracted frame files and their temp dir (if one)."""
+        import shutil
+
+        for fp in frame_paths:
+            try:
+                fp.unlink()
+            except OSError:
+                pass
+        # Remove the extractor's temp dir, but only if it is one (defensive:
+        # never rmtree a real source/library folder).
+        if frame_paths:
+            parent = frame_paths[0].parent
+            if parent.name.startswith("cutfinder_frames_"):
+                shutil.rmtree(parent, ignore_errors=True)
 
     def _build_clip(
         self,

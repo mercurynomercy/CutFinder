@@ -138,7 +138,7 @@ class TestPrefs:
         assert prefs.vision_model == "Qwen3-VL-8B"
         assert prefs.whisper_model == "mlx-community/whisper-large-v3-mlx"
         assert prefs.extensions == [".mov", ".mp4", ".m4v"]
-        assert prefs.broll_frame_count == 3
+        assert prefs.broll_frame_count == 5
         assert prefs.vad_threshold == 0.15
 
     def test_custom_values(self) -> None:
@@ -241,7 +241,7 @@ class TestLoadConfig:
 
         config = load_config(tmp_library.parent)
         assert config.prefs.source_folders == []
-        assert config.prefs.broll_frame_count == 3
+        assert config.prefs.broll_frame_count == 5
 
 
 # ── save_prefs tests (round-trip) ────────────────────────────────────

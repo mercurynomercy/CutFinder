@@ -222,8 +222,8 @@ class TestRequestParams:
         kwargs = mock_client_cls.return_value.chat.completions.create.call_args[1]
         assert kwargs["model"] == "Qwen2.5-VL-7B"
 
-    def test_structured_json_format(self, monkeypatch):
-        """response_format uses json_schema type for structured output."""
+    def test_no_strict_schema_but_bounded_tokens(self, monkeypatch):
+        """No strict json_schema (it makes MLX models loop); max_tokens is capped."""
         config = _make_config(monkeypatch)
 
         mock_response = MagicMock()
@@ -233,9 +233,6 @@ class TestRequestParams:
         mock_client_cls = MagicMock()
         mock_client_cls.return_value.chat.completions.create.return_value = mock_response
 
-        mod = _import_adapter()
-        tagger = mod.OmlxVisionTagger(config)
-
         _mock_openai_module(monkeypatch, MagicMock(OpenAI=mock_client_cls))
         mod = _import_adapter()
         tagger = mod.OmlxVisionTagger(config)
@@ -244,13 +241,28 @@ class TestRequestParams:
         tagger.describe(frames)
 
         kwargs = mock_client_cls.return_value.chat.completions.create.call_args[1]
-        assert kwargs["response_format"]["type"] == "json_schema"
-        schema = kwargs["response_format"]["json_schema"]
-        assert schema["name"] == "vision_result"
-        assert schema["strict"] is True
-        props = schema["schema"]["properties"]
-        assert "description" in props
-        assert "tags" in props
+        assert "response_format" not in kwargs
+        assert kwargs["max_tokens"] == 512
+
+    def test_parses_fenced_json(self, monkeypatch):
+        """A ```json fenced / prose-wrapped response is still parsed."""
+        config = _make_config(monkeypatch)
+
+        mock_response = MagicMock()
+        mock_response.choices = [MagicMock(message=MagicMock(
+            content='这是描述：\n```json\n{"description":"湖边日落","tags":["日落","湖"]}\n```',
+            refusal=None))]
+
+        mock_client_cls = MagicMock()
+        mock_client_cls.return_value.chat.completions.create.return_value = mock_response
+
+        _mock_openai_module(monkeypatch, MagicMock(OpenAI=mock_client_cls))
+        mod = _import_adapter()
+        tagger = mod.OmlxVisionTagger(config)
+
+        result = tagger.describe([_make_fake_frame(Path("/tmp"), "f1.png")])
+        assert result.description == "湖边日落"
+        assert result.tags == ["日落", "湖"]
 
 
 # ── image_encoding tests ────────────────────────────────────────

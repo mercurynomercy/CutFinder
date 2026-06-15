@@ -248,7 +248,8 @@ class TestRequestParams:
         summarizer.summarize("test")
         assert client_cls.return_value.chat.completions.create.call_args.kwargs["model"] == "Qwen2.5-7B-Instruct"
 
-    def test_response_format_is_json_schema(self, monkeypatch):
+    def test_no_strict_schema_but_bounded_tokens(self, monkeypatch):
+        """No strict json_schema (it makes MLX models loop); max_tokens is capped."""
         config = _make_config(monkeypatch)
         summarizer = _mocked_summarizer(config, monkeypatch)
 
@@ -262,19 +263,27 @@ class TestRequestParams:
         monkeypatch.setitem(__import__("sys").modules, "openai", MagicMock(OpenAI=client_cls))  # type: ignore[attr-defined]
 
         summarizer.summarize("test")
-        fmt = client_cls.return_value.chat.completions.create.call_args.kwargs["response_format"]
-        assert fmt == {"type": "json_schema", "json_schema": {
-            "name": "summary_result",
-            "strict": True,
-            "schema": {
-                "type": "object",
-                "properties": {
-                    "summary": {"type": "string"},
-                    "tags": {"type": "array", "items": {"type": "string"}},
-                },
-                "required": ["summary", "tags"],
-            },
-        }}
+        kwargs = client_cls.return_value.chat.completions.create.call_args.kwargs
+        assert "response_format" not in kwargs
+        assert kwargs["max_tokens"] == 512
+
+    def test_parses_fenced_json(self, monkeypatch):
+        """A ```json fenced response is still parsed (lenient parsing)."""
+        config = _make_config(monkeypatch)
+        summarizer = _mocked_summarizer(config, monkeypatch)
+
+        choice = MagicMock()
+        choice.message.content = '```json\n{"summary": "旅行日记", "tags": ["旅行"]}\n```'
+        choice.message.refusal = None  # type: ignore[attr-defined]
+        mock_response = MagicMock()
+        mock_response.choices = [choice]
+
+        client_cls = MagicMock(return_value=MagicMock(chat=MagicMock(completions=MagicMock(create=MagicMock(return_value=mock_response)))))
+        monkeypatch.setitem(__import__("sys").modules, "openai", MagicMock(OpenAI=client_cls))  # type: ignore[attr-defined]
+
+        result = summarizer.summarize("test")
+        assert result.summary == "旅行日记"
+        assert result.tags == ["旅行"]
 
 
 # ── JSON parsing tests (happy path) ─────────────────────────────

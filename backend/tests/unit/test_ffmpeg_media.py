@@ -274,6 +274,40 @@ class TestFfmpegFrameExtractor:
         expected_ts = pytest.approx([0.0, 10.0 / 3.0, 20.0 / 3.0])
         assert timestamps_seen == expected_ts
 
+    def test_frames_go_to_tempdir_as_downscaled_jpeg(
+        self, tmp_path: Path
+    ) -> None:
+        """Frames are written to a temp dir (never the read-only source folder),
+        as downscaled .jpg images."""
+        extractor = FfmpegFrameExtractor()
+        source_dir = tmp_path / "originals"
+        source_dir.mkdir()
+        video_path = source_dir / "clip.mp4"
+        video_path.write_bytes(b"\x00")
+
+        seen_cmds: list[list[str]] = []
+
+        def mock_run(cmd, **kwargs):
+            if "ffprobe" in cmd:
+                return _make_ffprobe_proc(duration=6.0)
+            seen_cmds.append(cmd)
+            out = Path(cmd[-1])
+            out.write_bytes(b"\xff\xd8\xff")  # fake JPEG bytes
+            return _make_ffmpeg_proc()
+
+        with patch("subprocess.run", side_effect=mock_run):
+            result = extractor.extract(video_path, count=2)
+
+        assert len(result) == 2
+        for p in result:
+            assert p.suffix == ".jpg"
+            assert p.parent.name.startswith("cutfinder_frames_")
+            # never written into the read-only source folder
+            assert source_dir not in p.parents
+        # ffmpeg command downscales the frame
+        assert "-vf" in seen_cmds[0]
+        assert any("scale=" in arg for arg in seen_cmds[0])
+
     def test_even_spacing_custom_count(
         self, tmp_path: Path
     ) -> None:
