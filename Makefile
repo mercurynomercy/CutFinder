@@ -24,7 +24,19 @@ install-mise:
 	mise install
 
 brew-bundle:
-	brew bundle --file Brewfile
+	@missing=false; \
+	for formula in $$(awk -F'"' '/^brew "/{print $$2}' Brewfile); do \
+		if ! brew list --versions "$$formula" >/dev/null 2>&1; then \
+			echo "brew-bundle: $$formula not installed — running brew bundle"; \
+			missing=true; break; \
+		fi; \
+	done; \
+	if [ "$$missing" = false ]; then \
+		echo "brew-bundle: all deps already installed"; \
+	fi; \
+	if [ "$$missing" = true ]; then \
+		brew bundle --file Brewfile; \
+	fi
 
 uv-sync:
 	cd backend && $(UV) sync
