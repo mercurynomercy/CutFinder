@@ -112,12 +112,16 @@ def create_app(  # noqa: C901 — simple linear assembly, not complex
         from cutfinder.adapters.silero_vad import SileroSpeechDetector
         from cutfinder.pipeline.orchestrator import Orchestrator
 
+        # A custom WHISPER_MODEL_PATH (env) overrides the whisper_model pref so
+        # the model loads from a local directory instead of the HF cache.
+        whisper_model = config.env.WHISPER_MODEL_PATH or prefs.whisper_model
+
         orchestrator = Orchestrator(
             probe=FfmpegProbe(),
             thumbnail_maker=FfmpegThumbnailMaker(),
             frame_extractor=FfmpegFrameExtractor(default_count=prefs.broll_frame_count),
             speech_detector=SileroSpeechDetector(threshold=prefs.vad_threshold),
-            transcriber=MlxWhisperTranscriber(model=prefs.whisper_model),
+            transcriber=MlxWhisperTranscriber(model=whisper_model),
             summarizer=OmlxSummarizer(config),
             vision_tagger=OmlxVisionTagger(config),
             repository=repository,

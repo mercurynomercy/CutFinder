@@ -51,9 +51,9 @@ env-boilerplate:
 dev: uv-sync frontend-deps env-boilerplate
 	@bash scripts/dev.sh
 
-# ── 3. models — download MLX Whisper model cache ───────────────
+# ── 3. models — download MLX Whisper model (honors WHISPER_MODEL_PATH) ──
 models: uv-sync
-	cd backend && $(UV) run python -c "from mlx_whisper.load_models import load_model; load_model('mlx-community/whisper-large-v3-mlx')"
+	cd backend && set -a && [ -f ../.env ] && . ../.env; set +a; $(UV) run python ../scripts/download_whisper.py
 
 # ── 4. check-omlx — verify OMLX endpoint & models are ready ────
 check-omlx: uv-sync

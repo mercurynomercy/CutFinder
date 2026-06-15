@@ -142,8 +142,16 @@ cd frontend && npx vite        # http://localhost:5080
 ### 下载 Whisper 模型（首次转写前，可选预热）
 
 ```bash
-make models                     # 预下载 mlx-whisper large-v3 到本地缓存
+make models                     # 预下载 mlx-whisper large-v3-mlx
 ```
+
+默认下载到 HuggingFace 缓存（`~/.cache/huggingface`）。若想把模型放到自定义目录，在根 `.env` 里设置：
+
+```ini
+WHISPER_MODEL_PATH=/Users/you/AI/Models/ASRs/mlx-community/whisper-large-v3-mlx
+```
+
+设置后：`make models` 会把模型下载到该目录；运行时 CutFinder 直接从此路径离线加载（覆盖 `whisper_model` 偏好），不再用 HF 缓存。
 
 ---
 

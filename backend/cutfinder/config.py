@@ -43,6 +43,15 @@ class EnvSettings(BaseSettings):
         default="",
         description="API key for authenticating with the OMLX server.",
     )
+    WHISPER_MODEL_PATH: str = Field(
+        default="",
+        description=(
+            "Optional local directory holding the mlx-whisper model. When set "
+            "(and present on disk), it is loaded from here instead of being "
+            "downloaded into the HuggingFace cache. Overrides the whisper_model "
+            "preference."
+        ),
+    )
 
     def __init__(self, **data: Any) -> None:  # noqa: ANN401
         super().__init__(**data)
