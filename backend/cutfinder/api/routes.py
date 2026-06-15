@@ -18,15 +18,12 @@ from fastapi import Request  # noqa: E402 — needed for dependency injection in
 logger = _logging.getLogger(__name__)
 
 
-def _build_router(
-    repository: Any,                # CatalogRepository (may be None)
-    orchestrator: Any,              # Orchestrator (may be None)
-    worker_queue: Any,              # WorkerQueue (may be None)
-    thumbnail_root: Optional[str] = None,  # Library path root for thumbnails (may be None)
-) -> Any:
+def _build_router(ctx: Any) -> Any:
     """Construct and return the main application ``APIRouter``.
 
-    Parameters are injected at startup time by :func:`api.app.create_app`.
+    ``ctx`` is a mutable :class:`api.app.LibraryContext`; handlers read
+    ``ctx.repository`` / ``ctx.worker_queue`` per request so the library can be
+    (re)bound at runtime without re-mounting routes.
     """
 
     from fastapi import APIRouter, HTTPException, Query  # Request is imported at module level for DI
@@ -40,7 +37,7 @@ def _build_router(
         candidates: list[dict[str, str]],
     ) -> dict[str, int]:
         """Accept a list of clip candidates and enqueue them for processing."""
-        if worker_queue is None:
+        if ctx.worker_queue is None:
             raise HTTPException(status_code=503, detail="Worker queue not available")
 
         from pydantic import ValidationError  # noqa: E402
@@ -51,17 +48,17 @@ def _build_router(
         except ValidationError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
-        job_id = await worker_queue.enqueue_scan(candidates_obj)
+        job_id = await ctx.worker_queue.enqueue_scan(candidates_obj)
         return {"job_id": job_id}
 
     # ── Job status (GET /jobs/{id}) ─────────────────────────────
     @router.get("/jobs/{job_id}")
     async def get_job_status(job_id: int) -> dict[str, Any]:
         """Return the current status of a scan/reanalyze job."""
-        if repository is None:
+        if ctx.repository is None:
             raise HTTPException(status_code=503, detail="Job tracking not available")
 
-        job = repository.get_job(job_id)
+        job = ctx.repository.get_job(job_id)
         if job is None:
             raise HTTPException(status_code=404, detail="Job not found")
 
@@ -83,7 +80,7 @@ def _build_router(
         import asyncio as _asyncio
 
         async def event_generator() -> AsyncIterator[str]:
-            sid, queue = worker_queue.subscribe()
+            sid, queue = ctx.worker_queue.subscribe()
             try:
                 while True:
                     event = await queue.get()
@@ -99,7 +96,7 @@ def _build_router(
                 pass  # client disconnected
 
             finally:
-                worker_queue.unsubscribe(sid)
+                ctx.worker_queue.unsubscribe(sid)
 
         return StreamingResponse(
             event_generator(),
@@ -119,12 +116,12 @@ def _build_router(
         tag: Optional[str] = Query(None),
     ) -> list[dict[str, Any]]:
         """Return a list of clips, optionally filtered."""
-        if repository is None:
+        if ctx.repository is None:
             raise HTTPException(status_code=503, detail="Catalog not available")
 
         from cutfinder.domain.models import ClipFilter  # noqa: E402
         filters = ClipFilter(date=date, roll_type=roll_type, tag=tag)
-        clips = repository.query_clips(filters)
+        clips = ctx.repository.query_clips(filters)
 
         return [
             {
@@ -147,15 +144,15 @@ def _build_router(
         clip_id: int,
     ) -> dict[str, Any]:
         """Return detailed information for a single clip."""
-        if repository is None:
+        if ctx.repository is None:
             raise HTTPException(status_code=503, detail="Catalog not available")
 
-        clip = repository.get_clip(clip_id)
+        clip = ctx.repository.get_clip(clip_id)
         if clip is None:
             raise HTTPException(status_code=404, detail="Clip not found")
 
-        tags = repository.get_tags(clip_id)
-        transcript = repository.get_transcript(clip_id)
+        tags = ctx.repository.get_tags(clip_id)
+        transcript = ctx.repository.get_transcript(clip_id)
 
         result = {
             "id": clip.id,
@@ -209,14 +206,14 @@ def _build_router(
     ) -> dict[str, Any]:
         """Override the AI-generated A/B classification for a clip."""
 
-        if repository is None:
+        if ctx.repository is None:
             raise HTTPException(status_code=503, detail="Catalog not available")
 
-        clip = repository.get_clip(clip_id)
+        clip = ctx.repository.get_clip(clip_id)
         if clip is None:
             raise HTTPException(status_code=404, detail="Clip not found")
 
-        repository.correct_roll(clip_id, roll)
+        ctx.repository.correct_roll(clip_id, roll)
         return {"status": "ok", "clip_id": clip_id, "roll_type": roll}
 
     # ── Summary/Description edit (PATCH /clips/{id}) ─────────
@@ -234,10 +231,10 @@ def _build_router(
         if not isinstance(body, dict):
             raise HTTPException(status_code=422, detail="Body must be a JSON object")
 
-        if repository is None:
+        if ctx.repository is None:
             raise HTTPException(status_code=503, detail="Catalog not available")
 
-        clip = repository.get_clip(clip_id)
+        clip = ctx.repository.get_clip(clip_id)
         if clip is None:
             raise HTTPException(status_code=404, detail="Clip not found")
 
@@ -260,7 +257,7 @@ def _build_router(
 
         if fields:  # - always has roll_type
             result_obj = AnalysisResult(**fields)
-            repository.update_analysis(clip_id, result_obj)
+            ctx.repository.update_analysis(clip_id, result_obj)
 
         return {"status": "ok", "clip_id": clip_id}
 
@@ -283,10 +280,10 @@ def _build_router(
         if not isinstance(raw_tags, list):
             raise HTTPException(status_code=422, detail="'tags' must be a list")
 
-        if repository is None:
+        if ctx.repository is None:
             raise HTTPException(status_code=503, detail="Catalog not available")
 
-        clip = repository.get_clip(clip_id)
+        clip = ctx.repository.get_clip(clip_id)
         if clip is None:
             raise HTTPException(status_code=404, detail="Clip not found")
 
@@ -296,7 +293,7 @@ def _build_router(
             for t in raw_tags if "name" in t
         ]
 
-        repository.set_tags(clip_id, tag_objects)
+        ctx.repository.set_tags(clip_id, tag_objects)
         return {"status": "ok", "clip_id": clip_id, "tags_count": len(tag_objects)}
 
     # ── Re-analyze (POST /clips/{id}/reanalyze) ─────────────
@@ -305,14 +302,14 @@ def _build_router(
         clip_id: int,
     ) -> dict[str, Any]:
         """Trigger re-analysis of an existing clip."""
-        if worker_queue is None:
+        if ctx.worker_queue is None:
             raise HTTPException(status_code=503, detail="Worker queue not available")
 
-        clip = repository.get_clip(clip_id)
+        clip = ctx.repository.get_clip(clip_id)
         if clip is None:
             raise HTTPException(status_code=404, detail="Clip not found")
 
-        job_id = await worker_queue.enqueue_reanalyze(clip_id)
+        job_id = await ctx.worker_queue.enqueue_reanalyze(clip_id)
         return {"job_id": job_id}
 
     # ── Thumbnail (GET /clips/{id}/thumbnail) ───────────────
@@ -322,10 +319,10 @@ def _build_router(
     ) -> StreamingResponse:
         """Serve the thumbnail image for a clip from the library directory."""
 
-        if repository is None:
+        if ctx.repository is None:
             raise HTTPException(status_code=503, detail="Catalog not available")
 
-        clip = repository.get_clip(clip_id)
+        clip = ctx.repository.get_clip(clip_id)
         if clip is None:
             raise HTTPException(status_code=404, detail="Clip not found")
 
@@ -363,10 +360,10 @@ def _build_router(
         q: str = Query(..., min_length=1),
     ) -> list[dict[str, Any]]:
         """Search clips by full-text match on summary, description, transcript."""
-        if repository is None:
+        if ctx.repository is None:
             raise HTTPException(status_code=503, detail="Catalog not available")
 
-        clips = repository.search(q)
+        clips = ctx.repository.search(q)
         return [
             {
                 "id": c.id,

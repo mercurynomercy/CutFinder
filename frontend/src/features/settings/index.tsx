@@ -8,10 +8,11 @@ Usage:
   <SettingsPage onSave={(prefs) => handleSave(prefs)} />
 */
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 
 import type { SettingsPrefs, UpdateSettingsBody } from '@/api/client'
 import { api, ApiError } from '@/api/client'
+import { Button } from '@/components/Button'
 
 // ── Validation helpers ────────────────────────────────────────────
 
@@ -72,20 +73,44 @@ export function SettingsPage({ onSave }: SettingsPageProps) {
   // Form inputs
   const [extensions, setExtensions] = useState('')
 
-  useEffect(() => {
-    let cancelled = false
-    setLoading(true)
-    api.getSettings()
-      .then((data) => {
-        if (!cancelled) setPrefs(data.prefs)
-      })
-      .catch((err: unknown) => {
-        if (!cancelled) setError(err instanceof Error ? err : new Error(String(err)))
-      })
-      .finally(() => { if (!cancelled) setLoading(false) })
+  // Library binding (when no library is bound, the user sets one here first).
+  const [libraryPath, setLibraryPath] = useState<string | null | undefined>(undefined)
+  const [newLibraryPath, setNewLibraryPath] = useState('')
 
-    return () => { cancelled = true }
+  const load = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const lib = await api.getLibrary()
+      setLibraryPath(lib.library_path)
+      if (lib.library_path) {
+        const data = await api.getSettings()
+        setPrefs(data.prefs)
+      }
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err : new Error(String(err)))
+    } finally {
+      setLoading(false)
+    }
   }, [])
+
+  useEffect(() => { void load() }, [load])
+
+  const handleSetLibrary = async () => {
+    const path = newLibraryPath.trim()
+    if (!path) return
+    setSaving(true)
+    setError(null)
+    try {
+      await api.setLibrary(path)
+      setNewLibraryPath('')
+      await load()
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err : new Error(String(err)))
+    } finally {
+      setSaving(false)
+    }
+  }
 
   const updateField = <K extends keyof UpdateSettingsBody>(key: K, value: UpdateSettingsBody[K]) => {
     setPrefs((prev) => (prev ? { ...prev, [key]: value } : prev))
@@ -128,6 +153,34 @@ export function SettingsPage({ onSave }: SettingsPageProps) {
   }
 
   if (loading) return <div className="p-6 text-[--text-muted]">Loading settings…</div>
+
+  // No library bound yet — prompt the user to set one (binds at runtime).
+  if (libraryPath === null) {
+    return (
+      <div className="p-6">
+        <h2 className="mb-2 text-lg font-medium text-[--text-primary]">Set up your library</h2>
+        <p className="mb-4 max-w-prose text-sm text-[--text-secondary]">
+          No library is configured yet. Enter an absolute path where CutFinder should
+          store organized copies, thumbnails, and its catalog.
+        </p>
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={newLibraryPath}
+            onChange={(e) => setNewLibraryPath(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') void handleSetLibrary() }}
+            placeholder="/Users/you/Movies/CutFinder Library"
+            className="flex-1 rounded-md border border-[--border] bg-[--surface-2] px-3 py-1.5 text-sm outline-none focus:border-[--primary]"
+          />
+          <Button onClick={handleSetLibrary} disabled={saving || !newLibraryPath.trim()}>
+            {saving ? 'Setting…' : 'Set library'}
+          </Button>
+        </div>
+        {error && <p className="mt-2 text-xs text-[--error]">{error.message}</p>}
+      </div>
+    )
+  }
+
   if (error) return <div className="p-6 text-[--error]">Failed to load settings: {error.message}</div>
   if (!prefs) return null
 

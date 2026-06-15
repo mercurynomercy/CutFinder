@@ -157,9 +157,20 @@ export const handlers = [
     return HttpResponse.json(makeJobStatus({ id }))
   }),
 
+  // GET /api/library — active library (bound by default in tests)
+  http.get('http://localhost:5080/api/library', () => {
+    return HttpResponse.json({ library_path: '/Users/jan/Media/CutFinder_Library' })
+  }),
+
+  // POST /api/library — bind a library path
+  http.post('http://localhost:5080/api/library', async ({ request }) => {
+    const body = await request.json() as { path?: string }
+    return HttpResponse.json({ status: 'ok', library_path: body.path ?? '' })
+  }),
+
   // GET /api/settings — get current settings
   http.get('http://localhost:5080/api/settings', () => {
-    return HttpResponse.json({ prefs: makeSettingsPrefs() })
+    return HttpResponse.json({ env: {}, prefs: makeSettingsPrefs() })
   }),
 
   // PUT /api/settings — update settings

@@ -90,6 +90,10 @@ export interface SettingsResponse {
   prefs: SettingsPrefs
 }
 
+export interface LibraryStatus {
+  library_path: string | null
+}
+
 export interface UpdateSettingsBody {
   source_folders?: string[]
   library_path?: string | null
@@ -211,5 +215,15 @@ export const api = {
   /** PUT /api/settings — update prefs. */
   putSettings(body: UpdateSettingsBody): Promise<{ status: string }> {
     return _fetch('/api/settings', { method: 'PUT', body: JSON.stringify(body) })
+  },
+
+  /** GET /api/library — the active library path (or null). */
+  getLibrary(): Promise<LibraryStatus> {
+    return _fetch('/api/library')
+  },
+
+  /** POST /api/library — bind a library path at runtime. */
+  setLibrary(path: string): Promise<{ status: string; library_path: string }> {
+    return _fetch('/api/library', { method: 'POST', body: JSON.stringify({ path }) })
   },
 } as const

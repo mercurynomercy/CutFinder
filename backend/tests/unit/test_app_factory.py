@@ -24,8 +24,12 @@ def omlx_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("OMLX_API_KEY", "test-key")
 
 
-def test_create_app_no_library_returns_503_for_catalog() -> None:
+def test_create_app_no_library_returns_503_for_catalog(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """With no library, catalog routes are mounted but report 503."""
+    monkeypatch.delenv("CUTFINDER_LIBRARY", raising=False)
+    monkeypatch.setattr("cutfinder.api.app._load_persisted_library", lambda: None)
     client = TestClient(create_app(None))
     assert client.get("/api/clips").status_code == 503
 
@@ -80,3 +84,28 @@ def test_create_app_with_library_starts_worker(tmp_path: Path, omlx_env: None) -
     """
     with TestClient(create_app(tmp_path)) as client:
         assert client.get("/api/clips").status_code == 200
+
+
+def test_set_library_binds_at_runtime(
+    tmp_path: Path, omlx_env: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """POST /api/library binds a library at runtime without restart."""
+    monkeypatch.delenv("CUTFINDER_LIBRARY", raising=False)
+    monkeypatch.setattr("cutfinder.api.app._load_persisted_library", lambda: None)
+    # Don't write to ~/.cutfinder during tests.
+    monkeypatch.setattr("cutfinder.api.app._persist_library", lambda _p: None)
+
+    with TestClient(create_app(None)) as client:
+        assert client.get("/api/clips").status_code == 503
+        assert client.get("/api/library").json() == {"library_path": None}
+
+        resp = client.post("/api/library", json={"path": str(tmp_path)})
+        assert resp.status_code == 200
+
+        # Now bound — catalog + settings work, and the path is reported back.
+        assert client.get("/api/clips").status_code == 200
+        assert client.get("/api/settings").status_code == 200
+        assert client.get("/api/library").json()["library_path"] == str(tmp_path.resolve())
+
+        # Missing path → 422.
+        assert client.post("/api/library", json={}).status_code == 422
