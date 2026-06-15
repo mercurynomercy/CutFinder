@@ -307,8 +307,12 @@ class Orchestrator:
             self.library_writer.copy_into(Path(src_str), date_str, roll_type)
             emit(ProgressEvent(step="copy", ok=True))
 
-            # Also record on repository for test assertions
-            self.repository.record_copy(src_str, date_str, roll_type)
+            # Optionally record the copy on the repository.  ``record_copy`` is
+            # not part of the CatalogRepository contract — it's a test hook on
+            # the fake — so only call it when the repository provides it.
+            record_copy = getattr(self.repository, "record_copy", None)
+            if callable(record_copy):
+                record_copy(src_str, date_str, roll_type)
 
         except Exception as exc:  # noqa: BLE001
             logger.warning("Library copy failed for clip %s, continuing: %s", candidate.path, exc)

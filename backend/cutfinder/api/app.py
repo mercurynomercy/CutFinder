@@ -7,16 +7,22 @@ mounted on the top-level :class:`fastapi.FastAPI` application.
 When ``library_path`` is ``None``, the catalog routes are still mounted
 but return 503 — useful for smoke tests and health checks.
 
+A module-level ``app`` is exported for ``uvicorn cutfinder.api.app:app``.
+It reads the optional ``CUTFINDER_LIBRARY`` environment variable; when unset
+the app starts in "no library" mode (catalog routes return 503 until a
+library is configured).
 """
 
 from __future__ import annotations
 
 import logging
+import os
+import sqlite3
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional, Union
 
 if TYPE_CHECKING:
-    from fastapi import FastAPI  # type: ignore[import-untyped]
+    from fastapi import FastAPI
 
 logger = logging.getLogger(__name__)
 
@@ -43,98 +49,107 @@ def create_app(  # noqa: C901 — simple linear assembly, not complex
     other modules receive them as parameters (injection).
     """
     # Lazy imports so this module can be imported without ffmpeg / OMLX etc.
-    from fastapi import FastAPI  # noqa: E402
+    from fastapi import FastAPI
 
     app = FastAPI(title="CutFinder", version="0.1.0")
 
-    # ── 1. Repository (SQLite-backed) ─────────────────────────────
     repository = None
-
-    if library_path is not None and str(library_path).strip():
-        try:
-            from cutfinder.infrastructure.sqlite import SQLiteRepository  # noqa: E402
-
-            db_path = Path(library_path) / ".cutfinder" / "catalog.sqlite"
-            repository = SQLiteRepository(db_path=str(db_path))
-
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("SQLite repository failed to initialise — catalog routes disabled: %s", exc)
-
-    # ── 2. Orchestrator (adapters for summarizer, vision tagger, etc.) ──
     orchestrator = None
+    load_config_fn = None
+    save_prefs_fn = None
 
-    if library_path is not None and str(library_path).strip():
+    has_library = library_path is not None and str(library_path).strip()
+
+    if has_library:
+        lib_dir = Path(str(library_path)).resolve()
+        cutfinder_dir = lib_dir / ".cutfinder"
+        cutfinder_dir.mkdir(parents=True, exist_ok=True)
+
+        from cutfinder.config import (
+            AppConfig,
+            EnvSettings,
+            Prefs,
+            load_config,
+            save_prefs,
+        )
+
+        # ── 1. Config — bootstrap default prefs on first run ─────────
+        # load_config() requires a persisted ``library_path`` pref; on a
+        # fresh library none exists yet, so default it to this directory.
         try:
-            from cutfinder.config import load_config  # noqa: E402
+            config = load_config(lib_dir)
+        except ValueError as exc:
+            if "library_path" in str(exc):
+                config = AppConfig(
+                    env=EnvSettings(),
+                    prefs=Prefs(library_path=str(lib_dir)),
+                )
+                # Persist the bootstrapped prefs so load_config() (used by the
+                # settings route) succeeds on subsequent calls.
+                save_prefs(config.prefs, lib_dir)
+            else:
+                raise  # missing OMLX env vars — surface the real error
 
-            config = load_config(library_path)
-            prefs = config.prefs
+        prefs = config.prefs
 
-            from cutfinder.adapters.summarizer import (  # noqa: E402
-                OmlxSummarizer,
-            )
+        # ── 2. Repository (SQLite-backed) ────────────────────────────
+        from cutfinder.adapters.sqlite_repo import SqliteRepository
 
-            summarizer = OmlxSummarizer(
-                api_key=config.env.OMLX_API_KEY,
-                base_url=config.env.OMLX_BASE_URL,
-                model_name=prefs.text_model,
-            )
+        db_path = cutfinder_dir / "catalog.sqlite"
+        conn = sqlite3.connect(str(db_path), check_same_thread=False)
+        repository = SqliteRepository(conn)
 
-            from cutfinder.adapters.vision_tagger import (  # noqa: E402
-                OmlxVisionTagger,
-            )
+        # ── 3. Orchestrator (full per-clip pipeline) ─────────────────
+        from cutfinder.adapters.ffmpeg_media import (
+            FfmpegFrameExtractor,
+            FfmpegThumbnailMaker,
+        )
+        from cutfinder.adapters.ffmpeg_probe import FfmpegProbe
+        from cutfinder.adapters.fs_library import FsLibraryWriter
+        from cutfinder.adapters.mlx_whisper import MlxWhisperTranscriber
+        from cutfinder.adapters.omlx_text import OmlxSummarizer
+        from cutfinder.adapters.omlx_vision import OmlxVisionTagger
+        from cutfinder.adapters.silero_vad import SileroSpeechDetector
+        from cutfinder.pipeline.orchestrator import Orchestrator
 
-            vision_tagger = OmlxVisionTagger(
-                api_key=config.env.OMLX_API_KEY,
-                base_url=config.env.OMLX_BASE_URL,
-                model_name=prefs.vision_model,
-            )
+        orchestrator = Orchestrator(
+            probe=FfmpegProbe(),
+            thumbnail_maker=FfmpegThumbnailMaker(),
+            frame_extractor=FfmpegFrameExtractor(default_count=prefs.broll_frame_count),
+            speech_detector=SileroSpeechDetector(threshold=prefs.vad_threshold),
+            transcriber=MlxWhisperTranscriber(model=prefs.whisper_model),
+            summarizer=OmlxSummarizer(config),
+            vision_tagger=OmlxVisionTagger(config),
+            repository=repository,
+            library_writer=FsLibraryWriter(config),
+            num_frames=prefs.broll_frame_count,
+        )
 
-            from cutfinder.pipeline.orchestrator import (  # noqa: E402
-                Orchestrator,
-            )
+        load_config_fn = load_config
+        save_prefs_fn = save_prefs
 
-            orchestrator = Orchestrator(
-                summarizer=summarizer,
-                vision_tagger=vision_tagger,
-            )
-
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("Orchestrator failed to initialise — analysis routes disabled: %s", exc)
-
-    # ── 3. Worker Queue (background processing + SSE broadcast) ──
+    # ── 4. Worker Queue (background processing + SSE broadcast) ──────
     worker_queue = None
 
     if orchestrator is not None or repository is not None:
-        from cutfinder.pipeline.worker import WorkerQueue  # noqa: E402
+        from cutfinder.pipeline.worker import WorkerQueue
 
         worker_queue = WorkerQueue(
             orchestrator=orchestrator,
             repository=repository,
         )
 
-    # ── 4. Config helpers (for settings routes) ─────────────────
-    load_config_fn = None
-    save_prefs_fn = None
-
-    if library_path is not None and str(library_path).strip():
-        from cutfinder.config import load_config as _lc  # noqa: E402
-        from cutfinder.config import save_prefs as _sp  # noqa: E402
-
-        load_config_fn = _lc
-        save_prefs_fn = _sp
-
     def get_library() -> Optional[str]:
         """Return the current library path (or None)."""
-        return str(library_path) if library_path else None
+        return str(library_path) if has_library else None
 
-    # ── 5. Assemble routers and mount on app ─────────────────────
-    from cutfinder.api.routes import _build_router as main_router  # noqa: E402
-    from cutfinder.api.settings_routes import (  # noqa: E402
+    # ── 5. Assemble routers and mount on app ────────────────────────
+    from cutfinder.api.routes import _build_router as main_router
+    from cutfinder.api.settings_routes import (
         _build_router as settings_router,
     )
 
-    thumbnail_root = str(library_path) if library_path else None
+    thumbnail_root = str(library_path) if has_library else None
 
     app.include_router(
         main_router(repository, orchestrator, worker_queue, thumbnail_root),
@@ -143,20 +158,24 @@ def create_app(  # noqa: C901 — simple linear assembly, not complex
     if load_config_fn is not None and save_prefs_fn is not None:
         app.include_router(settings_router(load_config_fn, save_prefs_fn, get_library))
 
-    # ── 6. Startup / shutdown — start/stop the worker queue ─────
+    # ── 6. Startup / shutdown — start/stop the worker queue ─────────
     @app.on_event("startup")
-    async def _startup() -> None:  # noqa: E402
+    async def _startup() -> None:
         if worker_queue is not None:
             await worker_queue.start()
 
     @app.on_event("shutdown")
-    async def _shutdown() -> None:  # noqa: E402
+    async def _shutdown() -> None:
         if worker_queue is not None:
             await worker_queue.stop()
 
     return app
 
 
-# ── Public exports ────────────────────────────────────────────────
+# ── Module-level ASGI app for `uvicorn cutfinder.api.app:app` ────────
+app = create_app(os.environ.get("CUTFINDER_LIBRARY") or None)
 
-__all__: list[str] = ["create_app"]  # noqa: PLE0611
+
+# ── Public exports ──────────────────────────────────────────────────
+
+__all__: list[str] = ["app", "create_app"]

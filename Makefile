@@ -53,23 +53,11 @@ dev: uv-sync frontend-deps env-boilerplate
 
 # ── 3. models — download MLX Whisper model cache ───────────────
 models: uv-sync
-	cd backend && $(UV) run python -c "import mlx_whisper; mlx_whisper.load_model('large-v3')"
+	cd backend && $(UV) run python -c "from mlx_whisper.load_models import load_model; load_model('mlx-community/whisper-large-v3-mlx')"
 
 # ── 4. check-omlx — verify OMLX endpoint & models are ready ────
 check-omlx: uv-sync
-	cd backend && $(UV) run python -c "\
-import os, httpx; \
-base = os.environ.get('OMLX_BASE_URL', 'http://localhost:8000/v1'); \
-key  = os.environ.get('OMLX_API_KEY', ''); \
-if not key: raise SystemExit('OMLX_API_KEY is empty — set it in .env'); \
-resp = httpx.get(f'{base}/models', headers={'Authorization': f'Bearer {key}'}); \
-resp.raise_for_status(); \
-models = [m['id'] for m in resp.json().get('data', [])]; \
-print('OMLX OK — models:', models); \
-required = ['qwen3.6-35b-a3b', 'qwen3-vl-8b-instruct']; \
-missing = [m for m in required if not any(m.lower() in mid.lower() for mid in models)]; \
-if missing: raise SystemExit('Missing required OMLX models: ' + ', '.join(missing)); \
-print('All required text/vision models are present.')"
+	cd backend && set -a && [ -f ../.env ] && . ../.env; set +a; $(UV) run python ../scripts/check_omlx.py
 
 # ── 5. test — unit tests only (no external deps) ───────────────
 test: uv-sync

@@ -328,7 +328,7 @@ class TestTranscriberInit:
         mod = _import_adapter()
         t = mod.MlxWhisperTranscriber()
 
-        assert t._model == "large-v3"
+        assert t._model == "mlx-community/whisper-large-v3-mlx"
         assert t._language == "zh"
 
     def test_custom_model_and_language(self):

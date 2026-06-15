@@ -52,7 +52,7 @@ class TestMlxWhisterRealVideo:
         video_path = _skip_if_missing("a_roll_canon")
 
         from cutfinder.adapters.mlx_whisper import MlxWhisperTranscriber
-        transcriber = MlxWhisperTranscriber(model="large-v3", language="zh")
+        transcriber = MlxWhisperTranscriber(model="mlx-community/whisper-large-v3-mlx", language="zh")
         transcript = transcriber.transcribe(video_path)
 
         assert len(transcript.full_text.strip()) > 0, (
@@ -71,7 +71,7 @@ class TestMlxWhisterRealVideo:
         video_path = _skip_if_missing("a_roll_canon")
 
         from cutfinder.adapters.mlx_whisper import MlxWhisperTranscriber
-        transcriber = MlxWhisperTranscriber(model="large-v3", language="zh")
+        transcriber = MlxWhisperTranscriber(model="mlx-community/whisper-large-v3-mlx", language="zh")
         transcript = transcriber.transcribe(video_path)
 
         for seg in transcript.segments:
@@ -85,7 +85,7 @@ class TestMlxWhisterRealVideo:
         video_path = _skip_if_missing("a_roll_canon")
 
         from cutfinder.adapters.mlx_whisper import MlxWhisperTranscriber
-        transcriber = MlxWhisperTranscriber(model="large-v3", language="zh")
+        transcriber = MlxWhisperTranscriber(model="mlx-community/whisper-large-v3-mlx", language="zh")
         transcript = transcriber.transcribe(video_path)
 
         concatenated = "".join(seg.text for seg in transcript.segments).strip()

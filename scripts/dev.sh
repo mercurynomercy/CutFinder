@@ -5,6 +5,15 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 PIDFILE="$ROOT/.dev-pids"
 
+# Load OMLX endpoint/key (and optional CUTFINDER_LIBRARY) from the root .env so
+# the backend can reach the model server. EnvSettings reads these at startup.
+if [ -f "$ROOT/.env" ]; then
+  set -a
+  # shellcheck disable=SC1091
+  . "$ROOT/.env"
+  set +a
+fi
+
 cleanup() {
   echo "Shutting down dev servers..."
   if [ -f "$PIDFILE" ]; then
@@ -18,7 +27,7 @@ trap cleanup EXIT INT TERM
 # ── Backend (FastAPI / uvicorn)
 echo "Starting backend on http://localhost:5081 ..."
 cd "$ROOT/backend"
-uv run uvicorn cutfinder.api.app:app --reload &
+uv run uvicorn cutfinder.api.app:app --reload --port 5081 &
 BACKEND_PID=$!
 echo "$BACKEND_PID" > "$PIDFILE"
 

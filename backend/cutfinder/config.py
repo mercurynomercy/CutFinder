@@ -59,8 +59,8 @@ class EnvSettings(BaseSettings):
 
 _DEFAULT_EXTENSIONS: list[str] = [".mov", ".mp4", ".m4v"]
 _DEFAULT_TEXT_MODEL: str = "Qwen3.6-35B-A3B"
-_DEFAULT_VISION_MODEL: str = "Qwen3-VL-8B-Instruct"
-_DEFAULT_WHISPER_MODEL: str = "large-v3"
+_DEFAULT_VISION_MODEL: str = "Qwen3-VL-8B"
+_DEFAULT_WHISPER_MODEL: str = "mlx-community/whisper-large-v3-mlx"
 
 
 class Prefs(BaseModel, frozen=True):

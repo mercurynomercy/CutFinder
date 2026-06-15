@@ -20,19 +20,18 @@ from cutfinder.adapters.omlx_vision import OmlxVisionTagger
 from cutfinder.config import EnvSettings
 
 
-def _make_test_frame(tmp_path: Path) -> Path:
-    """Create a minimal 1x1 PNG for OMLX to process."""
-    png_bytes = (
-        b"\x89PNG\r\n\x1a\n"
-        b"\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01"
-        b"\x08\x02\x00\x00\x00\x90wS\xde"
-        b"\x00\x00\x00\x0cIDATx\x9cc\xf8\xcf\xc0\x00\x00\x03"
-        b"\x01\x01\x00\x18\xdd\xe5\xd7"
-        b"\x00\x00\x00\x00IEND\xaeB`\x82"
-    )
-    p = tmp_path / "test_frame.png"
-    p.write_bytes(png_bytes)
-    return p
+def _real_frame(index: int = 0) -> Path:
+    """Return a real extracted frame from ``testVideo/``.
+
+    A 1x1 synthetic pixel is not describable by a vision model — the tagger
+    correctly rejects empty output — so integration tests use real frames.
+    Skips if the sample is missing.
+    """
+    root = Path(__file__).resolve().parents[3]
+    frame = root / "testVideo" / f"_frame_{index:04d}.png"
+    if not frame.is_file():
+        pytest.skip(f"Sample frame missing: {frame}")
+    return frame
 
 
 def _has_omlx_config() -> bool:
@@ -67,9 +66,9 @@ def vision_tagger(tmp_path_factory):
 class TestOmlxVisionTaggerIntegration:
     """Real OMLX integration tests — require running inference server."""
 
-    def test_single_frame_tagging(self, vision_tagger, tmp_path):
+    def test_single_frame_tagging(self, vision_tagger):
         """Send one frame to OMLX and verify structured JSON response."""
-        frame = _make_test_frame(tmp_path)
+        frame = _real_frame(0)
 
         result = vision_tagger.describe([frame])
         assert isinstance(result.description, str)
@@ -79,11 +78,11 @@ class TestOmlxVisionTaggerIntegration:
         for tag in result.tags:
             assert isinstance(tag, str)
 
-    def test_multi_frame_tagging(self, vision_tagger, tmp_path):
+    def test_multi_frame_tagging(self, vision_tagger):
         """Send multiple frames in one request — OMLX should handle multi-frame input."""
-        frame1 = _make_test_frame(tmp_path, "frame1.png")
-        # Reuse same frame for simplicity — OMLX should still return valid output
-        result = vision_tagger.describe([frame1, frame1])
+        frame1 = _real_frame(0)
+        frame2 = _real_frame(1)
+        result = vision_tagger.describe([frame1, frame2])
         assert isinstance(result.description, str)
         assert len(result.description) > 0
         assert isinstance(result.tags, list)
