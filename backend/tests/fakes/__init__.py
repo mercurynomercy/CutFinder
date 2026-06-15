@@ -37,6 +37,7 @@ __all__ = [
     "FakeCatalogRepository",
     "FakeFrameExtractor",
     "FakeLibraryWriter",
+    "FakeThumbnailMaker",
     "FakeProbe",
     "FakeSpeechDetector",
     "FakeSummarizer",

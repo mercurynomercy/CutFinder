@@ -20,8 +20,7 @@ from __future__ import annotations
 
 import json
 import types
-from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -283,7 +282,7 @@ class TestJsonParsing:
 
     def test_missing_summary_key_defaults_to_empty(self, monkeypatch):
         config = _make_config(monkeypatch)
-        summarizer = _mocked_summarizer(config, monkeypatch)
+        _mocked_summarizer(config, monkeypatch)
 
         choice = MagicMock()
         # "summary" key missing entirely; should default to "" and use tags, but since summary is empty
@@ -475,7 +474,8 @@ class TestRetryLogic:
         # Use distinct exception classes: APIConnectionError is a specific
         # class, and the side_effect raises DIFFERENT exceptions so they
         # are caught by `except Exception` (not the ACE handler).
-        class _APIConnErr(Exception): pass
+        class _APIConnErr(Exception):
+            pass
 
         config = _make_config(monkeypatch)
         mock_openai = types.ModuleType("openai")  # type: ignore[attr-defined]

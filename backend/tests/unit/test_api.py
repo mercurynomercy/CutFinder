@@ -18,10 +18,8 @@ Uses FastAPI ``TestClient`` with fake repository and orchestrator from
 from __future__ import annotations
 
 import asyncio
-import json as _json
-from typing import Any, Optional
+from typing import Any
 
-import pytest
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -29,7 +27,7 @@ from fastapi.testclient import TestClient
 
 # ── Fixtures / helpers ───────────────────────────────────────────────
 
-from tests.fakes import FakeCatalogRepository, make_sample  # noqa: E402
+from tests.fakes import FakeCatalogRepository  # noqa: E402
 
 
 def _build_app(
@@ -316,7 +314,6 @@ class TestClipListEndpoint:
         from cutfinder.api.routes import (  # noqa: E402
             _build_router as main_router,
         )
-        from cutfinder.domain.models import Clip  # noqa: E402
 
         repo = FakeCatalogRepository()
         repo.upsert_clip(_make_clip(id=1, source_path="/tmp/test.mp4", duration_s=10.5))
@@ -340,7 +337,6 @@ class TestClipListEndpoint:
         from cutfinder.api.routes import (  # noqa: E402
             _build_router as main_router,
         )
-        from cutfinder.domain.models import Clip  # noqa: E402
 
         repo = FakeCatalogRepository()
         repo.upsert_clip(_make_clip(id=1, source_path="/tmp/a.mp4", duration_s=10.5))
@@ -383,8 +379,7 @@ class TestClipDetailEndpoint:
         """Existing clip → 200 with full detail dict."""
         repo = FakeCatalogRepository()
 
-        from cutfinder.domain.models import Clip  # noqa: E402
-        clip = repo.upsert_clip(_make_clip(id=1, source_path="/tmp/detail.mp4", duration_s=15.0, width=1920, height=1080, fps=30.0))
+        repo.upsert_clip(_make_clip(id=1, source_path="/tmp/detail.mp4", duration_s=15.0, width=1920, height=1080, fps=30.0))
 
 
         from cutfinder.api.routes import (  # noqa: E402
@@ -622,7 +617,7 @@ class TestReanalyzeEndpoint:
             _build_router as main_router,
         )
 
-        repo = FakeCatalogRepository()
+        FakeCatalogRepository()
         router = main_router(repository=None, orchestrator=None, worker_queue=None)  # type: ignore[union-attr]
         from fastapi import FastAPI  # noqa: E402
 
@@ -642,7 +637,6 @@ class TestSearchEndpoint:
 
     def test_search_returns_results(self) -> None:
         """Query with matches → 200 with clip list."""
-        from cutfinder.domain.models import Clip  # noqa: E402
         repo = FakeCatalogRepository()
         repo.upsert_clip(_make_clip(id=1, source_path="/tmp/search.mp4", summary="A sunset at the beach with waves."))
 
@@ -698,7 +692,7 @@ class TestSettingsEndpoints:
 
         router = settings_router(  # type: ignore[call-arg]
             load_config_fn=lambda p: None,
-            save_prefs_fn=lambda p, l: None,
+            save_prefs_fn=lambda p, _label: None,
             get_library_fn=get_library_none,
         )
 

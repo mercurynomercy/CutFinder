@@ -198,7 +198,7 @@ class WorkerQueue:
         """
         # Create or validate job record
         if self._repository:
-            if job_id is not None and (existing := self._repository.get_job(job_id)):
+            if job_id is not None and (self._repository.get_job(job_id) is not None):
                 pass  # reuse existing job record
             elif job_id is None:
                 job = self._repository.create_job(total=len(candidates))
@@ -240,7 +240,7 @@ class WorkerQueue:
         """
         # Create or validate job record
         if self._repository:
-            if job_id is not None and (existing := self._repository.get_job(job_id)):
+            if job_id is not None and (self._repository.get_job(job_id) is not None):
                 pass  # reuse existing job record
             elif job_id is None:
                 job = self._repository.create_job(total=1)

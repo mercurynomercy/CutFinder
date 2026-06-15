@@ -81,7 +81,6 @@ def _make_transcriber(whisper_mock: MagicMock, extract_return: bytes | None = SA
     adapter._audio_bytes_to_array = _fake_convert  # type: ignore[attr-defined]
 
     return adapter.MlxWhisperTranscriber()
-    return transcriber
 
 
 def _mocked_transcriber(whisper_dict: dict, monkeypatch):
@@ -273,7 +272,7 @@ class TestTranscriberTranscribe:
 
         monkeypatch.setattr(Path, "is_file", lambda self: True)  # type: ignore[attr-defined]
 
-        transcriber = adapter.MlxWhisperTranscriber()
+        adapter.MlxWhisperTranscriber()
 
     def test_audio_decode_failure_raises_runtime_error(self, monkeypatch):
         """_audio_bytes_to_array returns None → RuntimeError."""

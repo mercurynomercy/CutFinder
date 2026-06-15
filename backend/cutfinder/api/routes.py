@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json as _json
 import logging as _logging
+from pathlib import Path
 from typing import Any, AsyncIterator, Optional
 
 from fastapi import Request  # noqa: E402 — needed for dependency injection in closures
@@ -27,7 +28,6 @@ def _build_router(
 
     Parameters are injected at startup time by :func:`api.app.create_app`.
     """
-    import os as _os
 
     from fastapi import APIRouter, HTTPException, Query  # Request is imported at module level for DI
     from starlette.responses import StreamingResponse
@@ -243,7 +243,7 @@ def _build_router(
 
         # Build a minimal analysis result with only provided fields
         from cutfinder.domain.models import (  # noqa: E402
-            AnalysisResult, SummaryResult, VisionResult, Transcript,  # noqa: E402
+            AnalysisResult, SummaryResult, VisionResult,  # noqa: E402
         )
 
         # Build a minimal analysis result with only provided fields.
