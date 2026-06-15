@@ -14,7 +14,10 @@ if [ -f "$ROOT/.env" ]; then
   set +a
 fi
 
+_cleaned=0
 cleanup() {
+  [ "$_cleaned" = 1 ] && return
+  _cleaned=1
   echo "Shutting down dev servers..."
   if [ -f "$PIDFILE" ]; then
     while read -r pid; do kill "$pid" 2>/dev/null || true; done < "$PIDFILE"
@@ -42,6 +45,9 @@ echo ""
 echo "Ready — open http://localhost:5080"
 echo "Press Ctrl+C to stop both servers."
 
-# Wait for any background process (keeps script alive)
-wait -n "$BACKEND_PID" "$FRONTEND_PID" 2>/dev/null || true
-cleanup
+# Keep the script alive until either server exits, then cleanup() runs via the
+# EXIT trap. Note: macOS ships bash 3.2, which lacks `wait -n`, so we poll
+# instead (portable). Ctrl+C is handled by the INT trap.
+while kill -0 "$BACKEND_PID" 2>/dev/null && kill -0 "$FRONTEND_PID" 2>/dev/null; do
+  sleep 1
+done
