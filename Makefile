@@ -59,9 +59,13 @@ models: uv-sync
 check-omlx: uv-sync
 	cd backend && set -a && [ -f ../.env ] && . ../.env; set +a; $(UV) run python ../scripts/check_omlx.py
 
-# ── 5. test — unit tests only (no external deps) ───────────────
+# ── 5. test — full suite (incl. integration; needs ffmpeg/OMLX) ─
 test: uv-sync
 	cd backend && $(UV) run pytest
+
+# ── 5b. test-unit — unit tests only, fast (no external deps) ───
+test-unit: uv-sync
+	cd backend && $(UV) run pytest tests/unit
 
 # ── 6. test-integration — real ffmpeg / OMLX (manual run) ──────
 test-integration: uv-sync
