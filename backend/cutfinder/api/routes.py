@@ -34,19 +34,47 @@ def _build_router(ctx: Any) -> Any:
     # ── Scan (POST /scan) ───────────────────────────────────────
     @router.post("/scan")
     async def post_scan(
-        candidates: list[dict[str, str]],
+        request: Request,  # injected by FastAPI (module-level import)
     ) -> dict[str, int]:
-        """Accept a list of clip candidates and enqueue them for processing."""
+        """Accept a list of clip candidates and enqueue them for processing.
+
+        When the body is absent or empty, scan configured source folders
+        automatically (the common case from the UI).
+        """
         if ctx.worker_queue is None:
             raise HTTPException(status_code=503, detail="Worker queue not available")
 
         from pydantic import ValidationError  # noqa: E402
         from cutfinder.domain.models import ClipCandidate  # noqa: E402
 
-        try:
-            candidates_obj = [ClipCandidate(**c) for c in candidates]
-        except ValidationError as exc:
-            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        body = await request.body()
+        if body and len(body.strip()) > 0:
+            # Explicit candidates provided — use them directly.
+            import json as _json  # noqa: E402
+
+            try:
+                candidates_list = _json.loads(body)  # type: ignore[assignment]
+            except _json.JSONDecodeError as exc:
+                raise HTTPException(status_code=422, detail="Body must be valid JSON") from exc
+            try:
+                candidates_obj = [ClipCandidate(**c) for c in candidates_list]  # type: ignore[arg-type]
+            except ValidationError as exc:
+                raise HTTPException(status_code=422, detail=str(exc)) from exc
+        else:
+            # No body — run a filesystem scan over configured source folders.
+            from cutfinder.config import load_config  # noqa: E402
+
+            if not ctx.library_path:
+                raise HTTPException(status_code=404, detail="No library configured")
+
+            config = load_config(ctx.library_path)
+            source_folders = [Path(p).resolve() for p in (config.prefs.source_folders or [])]
+            extensions = set(config.prefs.extensions) if config.prefs.extensions else None
+
+            from cutfinder.pipeline.scanner import Scanner  # noqa: E402
+
+            scanner = Scanner(repository=ctx.repository)
+            candidates_obj = scanner.scan(source_folders, extensions)
 
         job_id = await ctx.worker_queue.enqueue_scan(candidates_obj)
         return {"job_id": job_id}
