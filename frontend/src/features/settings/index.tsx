@@ -8,7 +8,7 @@ Usage:
   <SettingsPage onSave={(prefs) => handleSave(prefs)} />
 */
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 import type { SettingsPrefs, UpdateSettingsBody } from '@/api/client'
 import { api, ApiError } from '@/api/client'
@@ -50,7 +50,7 @@ interface FolderPickerButtonProps {
 }
 
 function FolderPickerButton({ label, icon = null, onChange }: FolderPickerButtonProps) {
-  const inputRef = React.useRef<HTMLInputElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
 
   return (
     <>
@@ -185,6 +185,11 @@ export function SettingsPage({ onSave }: SettingsPageProps) {
     updateField('extensions', prefs.extensions.filter((e: string) => e !== ext))
   }
 
+  const handleRemoveSourceFolder = (folder: string) => {
+    if (!prefs || !prefs.source_folders?.includes(folder)) return
+    updateField('source_folders', prefs.source_folders.filter((f: string) => f !== folder))
+  }
+
   const handleSave = async () => {
     if (!prefs) return
 
@@ -265,6 +270,16 @@ export function SettingsPage({ onSave }: SettingsPageProps) {
                   readOnly
                   className="flex-1 rounded-md border border-[--border] bg-[--surface-3] px-3 py-1.5 text-sm outline-none opacity-70"
                 />
+                <button
+                  type="button"
+                  onClick={() => handleRemoveSourceFolder(folder)}
+                  className="shrink-0 rounded-md p-1 text-[--text-muted] hover:bg-[--surface-3] hover:text-[--error]"
+                  aria-label={`Remove ${folder}`}
+                >
+                  <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24">
+                    <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
               </div>
             ))}
           </div>
