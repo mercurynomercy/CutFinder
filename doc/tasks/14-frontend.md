@@ -9,7 +9,7 @@
 - [ ] `api/`：唯一 HTTP 封装（REST + SSE 订阅）
 - [ ] `features/gallery`：缩略图墙（分页/虚拟滚动、空态）
 - [ ] `features/filters`：日期 / 类型 / 标签筛选
-- [ ] `features/search`：全文搜索框 + 结果
+- [x] `features/search`：全文搜索框 + 结果（18 tests pass, Vitest + RTL）
 - [ ] `features/detail`：简介、可编辑标签、改 A/B、**重新分析按钮**、转写全文
 - [ ] `features/settings`：源/库文件夹、模型名等表单
 - [ ] `features/jobs`：SSE 进度条、逐个完成提示

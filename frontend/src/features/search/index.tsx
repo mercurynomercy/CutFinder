@@ -18,7 +18,7 @@ export interface SearchProps {
 
 /** Debounce helper — returns a function that only calls `fn` after `ms` ms
  *  of inactivity. */
-function useDebounce<T extends (...args: unknown[]) => void>(fn: T, ms: number): T {
+export function useDebounce<T extends (...args: unknown[]) => void>(fn: T, ms: number): T {
   const [timer, setTimer] = useState<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
