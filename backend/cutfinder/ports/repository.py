@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Protocol
+from typing import Any, Protocol
 import datetime as _dt  # noqa: F401 — kept for type annotations below
 
 from ..domain.models import (
@@ -92,7 +92,7 @@ class CatalogRepository(Protocol):
     def create_job(self, total: int) -> Job:
         """Create a new running job record. Returns the ``Job``."""
 
-    def update_job(self, job_id: int, **fields) -> None:
+    def update_job(self, job_id: int, **fields: Any) -> None:
         """Update selected fields of a running/completed job."""
 
     def get_job(self, job_id: int) -> Job | None:

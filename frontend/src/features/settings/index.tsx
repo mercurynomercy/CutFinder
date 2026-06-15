@@ -234,6 +234,17 @@ export function SettingsPage({ onSave }: SettingsPageProps) {
             className="w-full rounded-md border border-[--border] bg-[--surface-2] px-3 py-1.5 text-sm outline-none focus:border-[--primary]"
           />
 
+          {/* AI output language */}
+          <label className="mt-4 block text-sm text-[--text-secondary]">AI output language</label>
+          <select
+            value={prefs.output_language}
+            onChange={(e) => updateField('output_language', e.target.value as 'zh' | 'en')}
+            className="w-full rounded-md border border-[--border] bg-[--surface-2] px-3 py-1.5 text-sm outline-none focus:border-[--primary]"
+          >
+            <option value="zh">中文</option>
+            <option value="en">English</option>
+          </select>
+
           {/* Field errors */}
           {fieldErrors.map((err) => (
             <p key={err.field} className="mt-1 text-xs text-[--error]">{err.message}</p>

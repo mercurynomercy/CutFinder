@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -87,6 +87,8 @@ class Prefs(BaseModel, frozen=True):
     extensions: list[str] = _DEFAULT_EXTENSIONS[:]
     broll_frame_count: int = Field(default=3, ge=1)
     vad_threshold: float = Field(default=0.15, gt=0, le=1)
+    # Language for AI-generated summaries / visual descriptions ("zh" or "en").
+    output_language: Literal["zh", "en"] = "zh"
 
 
 # ---------------------------------------------------------------------------

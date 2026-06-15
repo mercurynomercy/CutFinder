@@ -1,18 +1,12 @@
 import '@testing-library/jest-dom/vitest'
 
 // Global Vitest + RTL setup for the CutFinder frontend.
-import { afterAll, beforeAll } from 'vitest'
+import { afterAll, afterEach, beforeAll } from 'vitest'
 
-// MSW's setupWorker only works in a real browser environment.
-// For jsdom tests that don't need HTTP mocking, skip MSW setup entirely.
-const isBrowserEnvironment = typeof window !== 'undefined' && !!window.navigator?.serviceWorker
+import { server } from './mocks/server'
 
-if (isBrowserEnvironment) {
-  const { worker } = await import('./mocks/browser')
-
-  // Establish API mocking before all tests.
-  beforeAll(() => worker.listen({ onUnhandledRequest: 'bypass' }))
-
-  // Reset any request handlers that are added during tests.
-  afterAll(() => worker.resetHandlers())
-}
+// Establish API mocking (MSW node server) for all tests. jsdom has no service
+// worker, so we use setupServer (node) rather than the browser worker.
+beforeAll(() => server.listen({ onUnhandledRequest: 'bypass' }))
+afterEach(() => server.resetHandlers())
+afterAll(() => server.close())

@@ -29,7 +29,7 @@ from ..ports.ai import VisionTagger
 
 # ── prompt template ────────────────────────────────────────────────
 
-_VISION_PROMPT = """\
+_VISION_PROMPT_ZH = """\
 你是一个专业的视频画面分析助手。请仔细观察以下多张从视频中提取的画面帧，完成两件事：
 
 1. **画面描述**：用中文撰写一段简洁的描述（30-80字），概括这些帧中看到的视觉内容、场景、人物动作等。
@@ -40,6 +40,23 @@ _VISION_PROMPT = """\
 
 以下是多帧画面（按时间顺序排列）：
 """
+
+_VISION_PROMPT_EN = """\
+You are a professional video frame analysis assistant. Carefully examine the \
+following frames extracted from a video and do two things:
+
+1. **Description**: Write a concise description in English (30-80 words) \
+summarizing the visual content, scenes, and actions seen in these frames.
+2. **Tags**: Extract 5-10 keywords/phrases as visual tags covering scene, \
+objects, color, mood, etc.
+
+Reply ONLY in the following JSON format (no extra content):
+{{"description": "your description", "tags": ["tag1", "tag2", ...]}}
+
+The frames below are in chronological order:
+"""
+
+_VISION_PROMPTS = {"zh": _VISION_PROMPT_ZH, "en": _VISION_PROMPT_EN}
 
 
 # ── OmlxVisionTagger ─────────────────────────────────────────────
@@ -108,8 +125,9 @@ class OmlxVisionTagger(VisionTagger):
             }
 
         # Build multi-frame visual message: one text + N images in single user message
+        prompt = _VISION_PROMPTS.get(self._config.prefs.output_language, _VISION_PROMPT_ZH)
         image_parts = [_encode_frame(p) for p in frame_paths]
-        text_part: dict[str, str] = {"type": "text", "text": _VISION_PROMPT}
+        text_part: dict[str, str] = {"type": "text", "text": prompt}
         content: list[dict[str, Any]] = [text_part] + image_parts
 
         max_retries = 2
@@ -121,7 +139,7 @@ class OmlxVisionTagger(VisionTagger):
                     api_key=self._config.env.OMLX_API_KEY,
                 )
 
-                response = client.chat.completions.create(
+                response = client.chat.completions.create(  # type: ignore[call-overload]  # OMLX accepts plain dict messages / response_format
                     model=self._model,
                     messages=[{"role": "user", "content": content}],
                     response_format={"type": "json_schema", "json_schema": {

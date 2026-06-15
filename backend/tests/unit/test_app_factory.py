@@ -61,6 +61,7 @@ def test_create_app_with_library_serves_settings(
         "extensions",
         "broll_frame_count",
         "vad_threshold",
+        "output_language",
     }
     # The OMLX secret is masked, never returned in the clear.
     assert resp.json()["env"]["OMLX_API_KEY"] == "***MASKED***"

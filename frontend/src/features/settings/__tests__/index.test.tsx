@@ -5,19 +5,7 @@ import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { SettingsPage } from '../index'
 
-// MSW setup for HTTP mocking
-import { beforeAll, afterAll } from 'vitest'
-
-beforeAll(async () => {
-  const { worker } = await import('@/test/mocks/browser')
-})
-
-afterAll(async () => {
-  try {
-    const { worker } = await import('@/test/mocks/browser')
-    worker.close()
-  } catch { /* already closed */ }
-})
+// HTTP mocking is configured globally via src/test/setup.ts (MSW node server).
 
 describe('SettingsPage', () => {
   it('renders "Loading settings…" while fetching (MSW is fast, so we skip this for now)', () => {

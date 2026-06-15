@@ -12,8 +12,12 @@ import json  # noqa: F401 — used throughout for segments_json / JSONB
 from sqlite3 import IntegrityError, Connection as _Conn  # noqa: F401 — type hints
 import datetime as _dt
 
+from typing import Any
+
 from ..domain.models import (
+    AnalysisResult,
     Clip,
+    ClipFilter,
     ClipSummary,
     Job,
     Tag,
@@ -159,7 +163,7 @@ class SqliteRepository:
 
     # ── helpers / internal queries ───────────────────────────
 
-    def _row_to_clip_summary(self, row: tuple) -> ClipSummary:
+    def _row_to_clip_summary(self, row: tuple[Any, ...]) -> ClipSummary:
         """Convert a DB row to :class:`ClipSummary`."""
         return ClipSummary(**dict(zip(_CLIP_COLUMNS, row)))
 
@@ -210,7 +214,7 @@ class SqliteRepository:
                  clip.created_at, clip.processed_at, clip.fingerprint),
             )
         self._conn.commit()
-        return c.execute("SELECT id FROM clips WHERE fingerprint = ?", (clip.fingerprint,)).fetchone()[0]
+        return int(c.execute("SELECT id FROM clips WHERE fingerprint = ?", (clip.fingerprint,)).fetchone()[0])
 
     def get_clip(self, clip_id: int) -> Clip | None:
         c = self._conn.cursor()
@@ -260,7 +264,7 @@ class SqliteRepository:
 
     # ── Query / Filter / Search (FTS5) ─────────────────────
 
-    def query_clips(self, f):  # noqa: ANN001 — type is ClipFilter (import at runtime)
+    def query_clips(self, f: ClipFilter) -> list[ClipSummary]:
         """List clips matching optional filters."""
         c = self._conn.cursor()
 
@@ -381,7 +385,7 @@ class SqliteRepository:
 
     # ── Re-analyze: update only AI-generated fields ───────────
 
-    def update_analysis(self, clip_id: int, r) -> None:  # noqa: ANN001 — type is AnalysisResult
+    def update_analysis(self, clip_id: int, r: AnalysisResult) -> None:
         """Update transcript/summary/vision fields and auto-tags only.
 
         Manual tags (source='manual') are preserved; manual roll corrections
@@ -457,7 +461,7 @@ class SqliteRepository:
 
     # ── Transcript ────────────────────────────────────────────
 
-    def save_transcript(self, clip_id: int, t) -> None:  # noqa: ANN001 — type is Transcript
+    def save_transcript(self, clip_id: int, t: Transcript) -> None:
         c = self._conn.cursor()
         segments_json = json.dumps(
             [dict(start_s=s.start_s, end_s=s.end_s, text=s.text) for s in t.segments]
@@ -527,7 +531,7 @@ class SqliteRepository:
         job_id = c.execute("SELECT id FROM jobs ORDER BY id DESC LIMIT 1").fetchone()[0]
         return Job(id=job_id, status="running", total=total, done=0, failed=0, started_at=now)
 
-    def update_job(self, job_id: int, **fields) -> None:
+    def update_job(self, job_id: int, **fields: Any) -> None:
         if not fields:
             return
 
@@ -570,10 +574,8 @@ class SqliteRepository:
         )
 
     def close(self) -> None:
-        """Close the underlying connection.  Idempotent."""
-        if self._conn is not None:
-            self._conn.close()
-            self._conn = None
+        """Close the underlying connection.  Idempotent (sqlite3 allows it)."""
+        self._conn.close()
 
 
 # ── In-memory convenience wrapper (tests) ─────────────────────

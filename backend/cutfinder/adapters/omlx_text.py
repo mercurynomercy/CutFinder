@@ -27,7 +27,7 @@ from ..ports.ai import Summarizer
 
 # ── prompt template ────────────────────────────────────────────────
 
-_SUMMARIZE_PROMPT = """\
+_SUMMARIZE_PROMPT_ZH = """\
 你是一个专业的视频内容整理助手。请根据以下A-roll（有解说）视频的转写文本，完成两件事：
 
 1. **简介**：用中文撰写一段简洁的概述（30-80字），概括视频的核心内容和主题。
@@ -39,6 +39,24 @@ _SUMMARIZE_PROMPT = """\
 转写文本：
 {transcript_text}
 """
+
+_SUMMARIZE_PROMPT_EN = """\
+You are a professional video content organization assistant. Based on the \
+transcript of the following A-roll (narrated) video, do two things:
+
+1. **Summary**: Write a concise overview in English (30-80 words) capturing the \
+core content and theme.
+2. **Tags**: Extract 5-10 keywords/phrases as tags covering theme, scene, \
+emotion, etc.
+
+Reply ONLY in the following JSON format (no extra content):
+{{"summary": "your summary", "tags": ["tag1", "tag2", ...]}}
+
+Transcript:
+{transcript_text}
+"""
+
+_SUMMARIZE_PROMPTS = {"zh": _SUMMARIZE_PROMPT_ZH, "en": _SUMMARIZE_PROMPT_EN}
 
 
 # ── OmlxSummarizer ───────────────────────────────────────────────
@@ -118,12 +136,15 @@ class OmlxSummarizer(Summarizer):
             },
         }
 
-        prompt = _SUMMARIZE_PROMPT.format(transcript_text=transcript_text)
+        prompt_template = _SUMMARIZE_PROMPTS.get(
+            self._config.prefs.output_language, _SUMMARIZE_PROMPT_ZH
+        )
+        prompt = prompt_template.format(transcript_text=transcript_text)
         max_retries = 2
 
         for attempt in range(1 + max_retries):
             try:
-                response = client.chat.completions.create(
+                response = client.chat.completions.create(  # type: ignore[call-overload]  # OMLX accepts plain dict messages / response_format
                     model=self._model,
                     messages=[{"role": "user", "content": prompt}],
                     response_format={"type": "json_schema", "json_schema": json_schema},

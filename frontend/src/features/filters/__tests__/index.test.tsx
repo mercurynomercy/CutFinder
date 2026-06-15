@@ -5,20 +5,7 @@ import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Filters, type FiltersState } from '../index'
 
-// MSW setup for HTTP mocking
-import { beforeAll, afterAll } from 'vitest'
-
-beforeAll(async () => {
-  const { worker } = await import('@/test/mocks/browser')
-  // Only start if in browser environment (jsdom doesn't have service workers)
-})
-
-afterAll(async () => {
-  try {
-    const { worker } = await import('@/test/mocks/browser')
-    worker.close()
-  } catch { /* already closed */ }
-})
+// HTTP mocking is configured globally via src/test/setup.ts (MSW node server).
 
 describe('Filters', () => {
   it('renders with "Filters" heading text', async () => {

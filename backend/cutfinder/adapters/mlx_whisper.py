@@ -153,7 +153,7 @@ class MlxWhisperTranscriber(Transcriber):
             Segment(
                 start_s=float(seg["start"]),  # type: ignore[arg-type]
                 end_s=float(seg["end"]),      # type: ignore[arg-type]
-                text=str(seg.get("text", "")),  # type: ignore[arg-type]
+                text=str(seg.get("text", "")),
             )
             for seg in segments_data
         ]

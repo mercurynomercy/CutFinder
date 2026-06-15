@@ -82,6 +82,7 @@ export interface SettingsPrefs {
   extensions: string[]
   broll_frame_count: number
   vad_threshold: number
+  output_language: 'zh' | 'en'
 }
 
 export interface SettingsResponse {
@@ -98,6 +99,7 @@ export interface UpdateSettingsBody {
   extensions?: string[]
   broll_frame_count?: number
   vad_threshold?: number
+  output_language?: 'zh' | 'en'
 }
 
 export interface ClipFilter {
