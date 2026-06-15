@@ -21,7 +21,6 @@ openai = pytest.importorskip("openai")
 
 def _load_config() -> __import__("cutfinder.config", fromlist=["AppConfig"]).AppConfig:
     """Load config from .env file for real OMLX calls."""
-    import os  # noqa: I001 — top-level for side effect on pydantic-settings
     from pathlib import Path
 
     root = Path(__file__).resolve().parents[3]  # repo root

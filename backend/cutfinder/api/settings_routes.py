@@ -14,7 +14,7 @@ broken ``repository`` references.  It is not part of the v1 scope anyway.
 from __future__ import annotations
 
 import logging
-from typing import Any, Optional
+from typing import Any
 
 from fastapi import APIRouter, HTTPException
 from pydantic import Field as PydanticField
@@ -101,7 +101,6 @@ def _build_router(
             raise HTTPException(status_code=503, detail=f"Config error: {exc}")
 
         # Build updated prefs dict
-        from copy import deepcopy  # noqa: E402
 
         current_prefs = {}
         if config is not None and hasattr(config, 'prefs'):

@@ -1,6 +1,6 @@
 """Domain enums — scalar values used across the application."""
 
-from enum import Enum, auto
+from enum import Enum
 
 
 class RollType(str, Enum):

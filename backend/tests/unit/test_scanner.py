@@ -19,7 +19,6 @@ Tracker: doc/tasks/10-scanner.md — all DoD items covered.
 from __future__ import annotations
 
 import os
-import tempfile
 from pathlib import Path
 from typing import Any, Dict  # noqa: F401 — kept for type hints
 
@@ -251,7 +250,7 @@ class TestScanEdgeCases:
         os.chmod(fp, 0o000)  # noqa: S103 — test only, will be restored
 
         try:
-            candidates = scanner.scan([tmp_folder], {".mp4"})
+            scanner.scan([tmp_folder], {".mp4"})
             # Should not raise; file is simply skipped.
         finally:
             os.chmod(fp, 0o644)

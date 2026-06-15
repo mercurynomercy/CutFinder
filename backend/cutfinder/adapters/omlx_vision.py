@@ -23,7 +23,7 @@ import base64
 from pathlib import Path
 from typing import Any
 
-from ..config import AppConfig, _DEFAULT_VISION_MODEL
+from ..config import AppConfig
 from ..domain.models import VisionResult
 from ..ports.ai import VisionTagger
 
@@ -113,7 +113,6 @@ class OmlxVisionTagger(VisionTagger):
         content: list[dict[str, Any]] = [text_part] + image_parts
 
         max_retries = 2
-        prompt_text = _VISION_PROMPT
 
         for attempt in range(1 + max_retries):
             try:

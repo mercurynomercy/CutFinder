@@ -16,7 +16,7 @@ import struct
 import subprocess
 import sys
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -343,7 +343,7 @@ class TestCustomThreshold:
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
         """Custom threshold is passed through to get_speech_timestamps."""
-        sv_mock = sys.modules["silero_vad"]  # type: ignore[attr-defined]
+        sys.modules["silero_vad"]  # type: ignore[attr-defined]
 
         detector = SileroSpeechDetector(threshold=0.8)
         monkeypatch.setattr(Path, "is_file", lambda self: True)  # type: ignore[attr-defined]

@@ -17,7 +17,7 @@ from pathlib import Path
 import pytest
 
 from cutfinder.adapters.omlx_vision import OmlxVisionTagger
-from cutfinder.config import EnvSettings, load_config
+from cutfinder.config import EnvSettings
 
 
 def _make_test_frame(tmp_path: Path) -> Path:
@@ -51,7 +51,7 @@ def vision_tagger(tmp_path_factory):
         pytest.skip("OMLX credentials not configured (skip integration test)")
 
     # Use a temp library dir for config
-    lib_dir = tmp_path_factory.mktemp("omlx_vision_test")
+    tmp_path_factory.mktemp("omlx_vision_test")
     # We'll load config from env vars directly since we don't need a real library
 
     from cutfinder.config import AppConfig, Prefs

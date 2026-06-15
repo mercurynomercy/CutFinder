@@ -20,7 +20,7 @@ from cutfinder.pipeline.worker import WorkerQueue
 
 # ── Fixtures / helpers ───────────────────────────────────────────────
 
-from tests.fakes import FakeCatalogRepository, make_sample  # noqa: E402
+from tests.fakes import FakeCatalogRepository  # noqa: E402
 
 
 def _make_candidate(path: str = "/tmp/video.mp4", fingerprint: str = "abc123") -> ClipCandidate:
@@ -151,7 +151,7 @@ class TestProgressEvents:
         queue = WorkerQueue(orchestrator=orch, progress_callback=lambda e: events.append(e))
 
         await queue.start()
-        job_id = await queue.enqueue_reanalyze(clip_id=7)
+        await queue.enqueue_reanalyze(clip_id=7)
 
         while len(events) < 3:
             await asyncio.sleep(0.03)
@@ -197,7 +197,7 @@ class TestProgressEvents:
 
         await queue.start()
         c1 = _make_candidate("/tmp/id.mp4")
-        job_id = await queue.enqueue_scan([c1])
+        await queue.enqueue_scan([c1])
 
         while len(events) < 3:
             await asyncio.sleep(0.03)
@@ -215,7 +215,7 @@ class TestProgressEvents:
         queue = WorkerQueue(orchestrator=orch, progress_callback=lambda e: events.append(e))
 
         await queue.start()
-        job_id = await queue.enqueue_reanalyze(clip_id=123)
+        await queue.enqueue_reanalyze(clip_id=123)
 
         while len(events) < 3:
             await asyncio.sleep(0.03)

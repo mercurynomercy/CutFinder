@@ -13,12 +13,11 @@ from __future__ import annotations
 import datetime as _dt
 from pathlib import Path
 from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
 from cutfinder.domain.models import (
-    AnalysisResult,
     Clip,
     ClipCandidate,
     SummaryResult,
@@ -530,7 +529,7 @@ class TestDatabaseLibraryCorrectness:
         orch.progress_callback = lambda e: events.append(e)
 
         candidate = _make_candidate()
-        clip_id = orch.process_clip(candidate)
+        orch.process_clip(candidate)
 
         # Verify upsert was called (repo tracks this in .upsert_calls)
         assert len(orch.repository.upsert_calls) == 1  # type: ignore[union-attr]

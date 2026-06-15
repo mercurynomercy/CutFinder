@@ -21,7 +21,6 @@ from __future__ import annotations
 import struct
 import subprocess
 from pathlib import Path
-from typing import Optional
 
 import numpy as np
 

@@ -365,11 +365,10 @@ class Orchestrator:
             return False
 
         # Extract auto tags from AI result (same logic as process_clip)
-        auto_tags: list[str] = []
         if analysis.summary_result is not None:
-            auto_tags = list(analysis.summary_result.tags)
+            list(analysis.summary_result.tags)
         elif analysis.vision_result is not None:
-            auto_tags = list(analysis.vision_result.tags)
+            list(analysis.vision_result.tags)
 
         # Update analysis on repository (preserves manual tags + roll)
         if self.repository:

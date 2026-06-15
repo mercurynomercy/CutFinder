@@ -50,7 +50,7 @@ Tracker for call assertions in tests:
 from __future__ import annotations
 
 import datetime as _dt
-from typing import Any, Optional
+from typing import Any
 
 from cutfinder.domain.models import (
     AnalysisResult,
@@ -58,10 +58,8 @@ from cutfinder.domain.models import (
     ClipFilter,
     ClipSummary,
     Job,
-    SummaryResult,
     Tag,
     Transcript,
-    VisionResult,
 )
 
 
@@ -117,7 +115,7 @@ class FakeCatalogRepository:
 
         # Merge manual tags: preserve existing manually-set tags
         if old is not None and self._tags.get(cid):
-            manual_tags = {t.name for t in self._tags[cid] if t.source == "manual"}
+            {t.name for t in self._tags[cid] if t.source == "manual"}
             # Merge into clip's tags (clip.tags comes from analysis)
 
         # Store with the auto-assigned id so existing.id matches cid
@@ -305,7 +303,7 @@ class FakeCatalogRepository:
         """Persist the full-text transcription for *clip_id*."""
         self._transcripts[clip_id] = transcript
         # Also update the clip's stored transcript if it has that field
-        clip = self._clips.get(clip_id)
+        self._clips.get(clip_id)
         # Clip doesn't have a transcript field — it's stored separately in DB.
         self.save_transcript_calls.append((clip_id, transcript))
 

@@ -93,7 +93,7 @@ class TestEmptyApiKey:
             with pytest.raises(SystemExit) as exc_info:
                 mod.check_omlx(base_url="http://localhost:8000/v1", api_key="")
         assert exc_info.value.code == 1
-        msg = stderr_capture.getvalue() if hasattr(stderr_capture, "getvalue") else ""
+        stderr_capture.getvalue() if hasattr(stderr_capture, "getvalue") else ""
 
 
 class TestHttpErrors:

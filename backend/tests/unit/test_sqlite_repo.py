@@ -11,21 +11,18 @@ Run with:
 from __future__ import annotations
 
 import datetime as _dt  # noqa: F401 — kept for type hints
-from unittest.mock import patch
 
 import pytest  # noqa: F401 — used via conftest / pytest import below
 
-from cutfinder.adapters.sqlite_repo import SqliteRepository, MemoryRepository
+from cutfinder.adapters.sqlite_repo import MemoryRepository
 from cutfinder.domain.models import (
     AnalysisResult,
     Clip,
     ClipFilter,
-    Job,
     Segment,
     SummaryResult,
     Tag,
     Transcript,
-    VideoMetadata,
     VisionResult,
 )
 
@@ -303,7 +300,7 @@ class TestSearch:
 
 class TestFilterDateAndType:
     def test_combined_date_and_roll_filter(self, repo):
-        now = _dt.datetime.now(_dt.timezone.utc)
+        _dt.datetime.now(_dt.timezone.utc)
 
         c1 = _make_clip("fp_dt1", roll_type="a")
         c2 = _make_clip("fp_dt2", roll_type="b")

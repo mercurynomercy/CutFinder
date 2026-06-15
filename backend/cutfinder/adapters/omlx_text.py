@@ -19,10 +19,9 @@ Examples
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any
 
-from ..config import AppConfig, _DEFAULT_TEXT_MODEL
+from ..config import AppConfig
 from ..domain.models import SummaryResult
 from ..ports.ai import Summarizer
 

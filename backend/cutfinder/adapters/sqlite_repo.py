@@ -13,7 +13,6 @@ from sqlite3 import IntegrityError, Connection as _Conn  # noqa: F401 — type h
 import datetime as _dt
 
 from ..domain.models import (
-    AnalysisResult,
     Clip,
     ClipSummary,
     Job,
@@ -365,7 +364,7 @@ class SqliteRepository:
             return
 
         # Build a simple text representation of the clip's FTS row for tag matching.
-        c = self._conn.cursor()
+        self._conn.cursor()
         # We don't directly update FTS via tags alone, but we do need to make sure
         # that when search() runs the INSERT OR REPLACE into clips_fts, it captures tag data.
         # For now tags are searched via the tags table JOIN in query_clips(tag=...).
@@ -436,7 +435,7 @@ class SqliteRepository:
         if auto_tags:
             # Fetch existing manual tags.
             c.execute("SELECT name FROM tags WHERE clip_id = ? AND source = 'manual'", (clip_id,))
-            manual_names = {r[0] for r in c.fetchall()}
+            {r[0] for r in c.fetchall()}
 
             # Merge: keep manual, add/replace auto.
             existing = self.get_tags(clip_id)
