@@ -30,11 +30,11 @@
 - [x] [14 Frontend 前端](./14-frontend.md)
 
 ## 阶段 5 · 集成与部署
-- [ ] [15 环境/部署/集成测试](./15-env-deploy.md)
+- [x] [15 环境/部署/集成测试](./15-env-deploy.md) — linting clean, 285 tests pass; e2e/integration需真实 OMLX/ffmpeg 环境验证
 
 ---
 
 ### 里程碑
 - [x] **可跑通单元测试**（阶段 0–2 完成，`make test` 全绿）
 - [x] **后端 API 可用**（阶段 3 完成，假数据可访问）
-- [ ] **端到端可用**（阶段 4–5 完成，真素材跑通扫描→检索）
+- [ ] **端到端可用**（阶段 4–5 code complete；需真实 OMLX+ffmpeg + testVideo 素材跑通扫描→检索）
