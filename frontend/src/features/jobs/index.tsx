@@ -9,7 +9,7 @@ Usage:
   <JobsPanel activeJobId={currentScanJobId} />
 */
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 
 import type { JobEvent, JobStatus } from '@/api/client'
 import { api, ApiError } from '@/api/client'
@@ -28,7 +28,9 @@ let toastIdCounter = 0
 function useToast() {
   const [toasts, setToasts] = useState<ToastItem[]>([])
 
-  const addToast = (type: ToastItem['type'], message: string) => {
+  // Memoized so consumers can safely list addToast in effect deps without
+  // triggering an infinite render loop.
+  const addToast = useCallback((type: ToastItem['type'], message: string) => {
     const id = ++toastIdCounter
     setToasts((prev) => [...prev, { id, type, message }])
 
@@ -38,11 +40,11 @@ function useToast() {
     }, 5000)
 
     return id
-  }
+  }, [])
 
-  const removeToast = (id: number) => {
+  const removeToast = useCallback((id: number) => {
     setToasts((prev) => prev.filter((t) => t.id !== id))
-  }
+  }, [])
 
   return { toasts, addToast, removeToast } as const
 }
@@ -179,18 +181,18 @@ export function JobsPanel({ activeJobId }: JobsPanelProps) {
         }
       }
 
-      // Show toast for significant events
-      const lastEvent = events[events.length - 1] as JobEvent | undefined
-      if (lastEvent?.type === 'job_started') {
-        addToast('info', `Scan started — processing clips`)
-      } else if (lastEvent?.type === 'job_completed') {
-        addToast('success', `Scan completed — ${lastEvent.done} clips processed`)
-      } else if (lastEvent?.type === 'job_failed') {
-        addToast('error', `Scan failed — check logs for details`)
-      }
-
       return merged.slice(-20) // keep last 20 events for the task list
     })
+
+    // Show toast for the most recent significant event.
+    const lastEvent = events[events.length - 1] as JobEvent | undefined
+    if (lastEvent?.type === 'job_started') {
+      addToast('info', `Scan started — processing clips`)
+    } else if (lastEvent?.type === 'job_completed') {
+      addToast('success', `Scan completed — ${lastEvent.done} clips processed`)
+    } else if (lastEvent?.type === 'job_failed') {
+      addToast('error', `Scan failed — check logs for details`)
+    }
   }, [events, addToast])
 
   // If no active job and no events to show, render nothing

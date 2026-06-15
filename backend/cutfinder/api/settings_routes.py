@@ -17,7 +17,8 @@ import logging
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
-from pydantic import Field as PydanticField
+
+from cutfinder.config import Prefs
 
 logger = logging.getLogger(__name__)
 
@@ -41,44 +42,15 @@ def _build_router(
         try:
             config = load_config_fn(library_path)
         except Exception as exc:  # noqa: BLE001 — return best-effort if config unreadable
-            raise HTTPException(status_code=503, detail=f"Config error: {exc}")
+            raise HTTPException(status_code=503, detail=f"Config error: {exc}") from exc
 
-        # Build env vars dict (mask sensitive values)
-        import os  # noqa: E402
+        # Expose the OMLX endpoint but mask the secret key.
+        env = {
+            "OMLX_BASE_URL": config.env.OMLX_BASE_URL,
+            "OMLX_API_KEY": "***MASKED***" if config.env.OMLX_API_KEY else "",
+        }
 
-        env = {k: ("***MASKED**" if "KEY" in k else v)
-               for k, v in os.environ.items() if not k.startswith("_")}
-
-        # Build prefs dict
-        prefs = {}
-        if config is not None:
-            prefs = {
-                "source_folders": getattr(config, 'prefs', {}).get('source_folders', []),
-                "library_path": config.library_path if hasattr(config, 'library_path') else None,
-                "text_model": getattr(getattr(config, 'prefs', {}), 'text_model',
-                                      PydanticField().default or "Qwen3-VL-8B-Instruct"),
-                "vision_model": getattr(getattr(config, 'prefs', {}), 'vision_model',
-                                        PydanticField().default or "Qwen3-VL-8B-Instruct"),
-                "whisper_model": getattr(getattr(config, 'prefs', {}), 'whisper_model',
-                                         PydanticField().default or "large-v3"),
-                "extensions": getattr(getattr(config, 'prefs', {}), 'extensions', ['.mp4']),
-                "broll_frame_count": getattr(getattr(config, 'prefs', {}), 'broll_frame_count', 5),
-                "vad_threshold": getattr(getattr(config, 'prefs', {}), 'vad_threshold', 0.4),
-            }
-
-        # Try to read the actual prefs object from config
-        if hasattr(config, 'prefs'):
-            p = config.prefs  # prefs from cutfinder.config
-            prefs["source_folders"] = getattr(p, 'source_folders', [])
-            prefs["library_path"] = config.library_path if hasattr(config, 'library_path') else None
-            prefs["text_model"] = getattr(p, 'text_model', "Qwen3-VL-8B-Instruct")
-            prefs["vision_model"] = getattr(p, 'vision_model', "Qwen3-VL-8B-Instruct")
-            prefs["whisper_model"] = getattr(p, 'whisper_model', "large-v3")
-            prefs["extensions"] = getattr(p, 'extensions', [".mp4"])
-            prefs["broll_frame_count"] = getattr(p, 'broll_frame_count', 5)
-            prefs["vad_threshold"] = getattr(p, 'vad_threshold', 0.4)
-
-        return {"env": env, "prefs": prefs}
+        return {"env": env, "prefs": config.prefs.model_dump()}
 
     @router.put("/settings", summary="Update user preferences")
     async def update_settings(
@@ -98,53 +70,24 @@ def _build_router(
         try:
             config = load_config_fn(library_path)
         except Exception as exc:  # noqa: BLE001
-            raise HTTPException(status_code=503, detail=f"Config error: {exc}")
+            raise HTTPException(status_code=503, detail=f"Config error: {exc}") from exc
 
-        # Build updated prefs dict
+        # Apply only known prefs fields from the request body, then re-validate
+        # through the Prefs model (enforces ranges, types, etc.).
+        allowed = set(Prefs.model_fields)
+        updates = {k: v for k, v in body.items() if k in allowed}
+        merged = {**config.prefs.model_dump(), **updates}
 
-        current_prefs = {}
-        if config is not None and hasattr(config, 'prefs'):
-            p = config.prefs  # prefs from cutfinder.config
-            current_prefs.update({
-                "source_folders": getattr(p, 'source_folders', []),
-                "library_path": config.library_path if hasattr(config, 'library_path') else None,
-                "text_model": getattr(p, 'text_model', "Qwen3-VL-8B-Instruct"),
-                "vision_model": getattr(p, 'vision_model', "Qwen3-VL-8B-Instruct"),
-                "whisper_model": getattr(p, 'whisper_model', "large-v3"),
-                "extensions": getattr(p, 'extensions', [".mp4"]),
-                "broll_frame_count": getattr(p, 'broll_frame_count', 5),
-                "vad_threshold": getattr(p, 'vad_threshold', 0.4),
-            })
-
-        # Apply updates from request body (partial update)
-        for key, value in body.items():
-            if key == "library_path":
-                # library_path is set on config, not prefs — skip here; handled separately below
-                continue
-            if key in current_prefs:
-                # Validate types
-                expected_type = type(current_prefs[key])  # e.g. int, float, str, list
-                if expected_type is bool:
-                    value = bool(value)
-                elif expected_type is int:
-                    value = int(value)
-                elif expected_type is float or expected_type is int and key == 'vad_threshold':
-                    value = float(value)
-                elif expected_type is list and not isinstance(value, (list, tuple)):
-                    value = [value]
-
-                current_prefs[key] = value
-            elif key == "library_path":
-                pass  # handle below
-
-        # Update library path if provided (special handling)
-        lib_path = body.get("library_path") or current_prefs.get("library_path")
-
-        # Save via config module
         try:
-            save_prefs_fn(current_prefs, lib_path)
+            updated = Prefs(**merged)
+        except Exception as exc:  # noqa: BLE001 — pydantic ValidationError
+            raise HTTPException(status_code=422, detail=f"Invalid settings: {exc}") from exc
+
+        # Persist into the active library directory.
+        try:
+            save_prefs_fn(updated, library_path)
         except Exception as exc:  # noqa: BLE001
-            raise HTTPException(status_code=503, detail=f"Save error: {exc}")
+            raise HTTPException(status_code=503, detail=f"Save error: {exc}") from exc
 
         return {"status": "ok", "message": "Settings updated"}
 

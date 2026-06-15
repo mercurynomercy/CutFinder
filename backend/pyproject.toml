@@ -13,13 +13,16 @@ dependencies = [
     "openai",
     # Speech transcription — local mlx-whisper (separate from OMLX)
     "mlx-whisper",
-    # Speech detection — Silero VAD (lightweight)
+    # Speech detection — Silero VAD (ONNX path, see adapters/silero_vad.py)
     "torch>=2.0",
+    "silero-vad",
+    "onnxruntime",
     # HTTP client for SSE streaming (uvicorn handles server-side; httpx used in tests)
     "httpx",
 ]
 
-[project.optional-dependencies]
+# Development tooling — installed by default on `uv sync` (PEP 735 group).
+[dependency-groups]
 dev = [
     "pytest>=8.0",
     "pytest-asyncio",
@@ -56,6 +59,11 @@ disallow_untyped_defs = true
 [[tool.mypy.overrides]]
 module = "tests.*"
 disallow_untyped_defs = false
+
+# Third-party packages without type stubs / py.typed markers.
+[[tool.mypy.overrides]]
+module = ["silero_vad.*"]
+ignore_missing_imports = true
 
 [tool.ruff]
 line-length = 120

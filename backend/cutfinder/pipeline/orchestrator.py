@@ -30,8 +30,10 @@ from __future__ import annotations
 
 import datetime as _dt
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass, field  # noqa: F401 — field imported for future use
 from pathlib import Path
+from typing import Any
 
 from cutfinder.domain.models import (
     AnalysisResult,
@@ -154,9 +156,9 @@ class Orchestrator:
         self.frame_extractor = frame_extractor
 
         # Default speech detector returns 0.0 (no speech → B-roll) if not injected
-        self.speech_detector: SpeechDetector = speech_detector
-        if self.speech_detector is None:
-            self.speech_detector = _NoOpSpeechDetector()
+        self.speech_detector: SpeechDetector = (
+            speech_detector if speech_detector is not None else _NoOpSpeechDetector()
+        )
 
         self.transcriber = transcriber
         self.summarizer = summarizer
@@ -170,7 +172,7 @@ class Orchestrator:
         self.library_writer = library_writer
 
         # Default progress callback: no-op (tests can inject to inspect events)
-        self.progress_callback = lambda _evt: None
+        self.progress_callback: Callable[[ProgressEvent], None] = lambda _evt: None
 
         #: Number of frames to extract for B-roll vision tagging.
         self.num_frames = num_frames
@@ -304,11 +306,16 @@ class Orchestrator:
         try:
             date_str = meta.capture_time.strftime("%Y-%m-%d") if meta.capture_time else "unknown"
             src_str = candidate.path  # str from ClipCandidate
-            self.library_writer.copy_into(Path(src_str), date_str, roll_type)
+            if self.library_writer is not None:
+                self.library_writer.copy_into(Path(src_str), date_str, roll_type)
             emit(ProgressEvent(step="copy", ok=True))
 
-            # Also record on repository for test assertions
-            self.repository.record_copy(src_str, date_str, roll_type)
+            # Optionally record the copy on the repository.  ``record_copy`` is
+            # not part of the CatalogRepository contract — it's a test hook on
+            # the fake — so only call it when the repository provides it.
+            record_copy = getattr(self.repository, "record_copy", None)
+            if callable(record_copy):
+                record_copy(src_str, date_str, roll_type)
 
         except Exception as exc:  # noqa: BLE001
             logger.warning("Library copy failed for clip %s, continuing: %s", candidate.path, exc)
@@ -464,11 +471,12 @@ class Orchestrator:
 
     def _find_clip_by_fp(self, fp: str) -> Clip | None:
         """Find a clip by fingerprint. Default uses repo if available."""
-        # The fake repository doesn't have this method; scan all clips.
-        for clip in self.repository._clips.values():
+        # ``_clips`` is an internal of the fake repository (used in tests); the
+        # real repository doesn't expose it, so fall back to an empty mapping.
+        clips: dict[int, Clip] = getattr(self.repository, "_clips", {})
+        for clip in clips.values():
             if clip.fingerprint == fp:
                 return clip
-        # If it's the real no-op repo, there won't be _clips — return None
         return None
 
     def _mark_error(self, candidate: ClipCandidate, step: str, error_msg: str) -> None:
@@ -553,10 +561,10 @@ class _NoOpRepository(CatalogRepository):
             started_at=_dt.datetime.now(_dt.timezone.utc).isoformat(),
         )
 
-    def update_job(self, job_id: int, **fields) -> None:
+    def update_job(self, job_id: int, **fields: Any) -> None:
         pass
 
-    def get_job(self, job_id: int):
+    def get_job(self, job_id: int) -> Job | None:
         return None
 
 

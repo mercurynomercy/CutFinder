@@ -155,6 +155,29 @@ class TestPromptConstruction:
         # Prompt should mention Chinese summary and tags
         assert "简介" in user_content or "概述" in user_content
 
+    def test_prompt_uses_english_when_output_language_en(self, monkeypatch):
+        """output_language='en' selects the English prompt template."""
+        config = _make_config(monkeypatch)
+        config.prefs.output_language = "en"
+        summarizer = _mocked_summarizer(config, monkeypatch)
+
+        choice = MagicMock()
+        choice.message.content = json.dumps({"summary": "test", "tags": ["a"]})
+        choice.message.refusal = None  # type: ignore[attr-defined]
+        mock_response = MagicMock()
+        mock_response.choices = [choice]
+
+        client_cls = MagicMock(return_value=MagicMock(chat=MagicMock(completions=MagicMock(create=MagicMock(return_value=mock_response)))))
+        monkeypatch.setitem(__import__("sys").modules, "openai", MagicMock(OpenAI=client_cls))  # type: ignore[attr-defined]
+
+        summarizer.summarize("hello world")
+
+        call_args = client_cls.return_value.chat.completions.create.call_args
+        user_content = call_args.kwargs["messages"][0]["content"]
+
+        assert "Summary" in user_content
+        assert "简介" not in user_content
+
 
 # ── request parameter tests ─────────────────────────────────────
 

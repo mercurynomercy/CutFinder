@@ -90,8 +90,8 @@ class MlxWhisperTranscriber(Transcriber):
     Parameters
     ----------
     model:
-        Path to the Whisper MLX model or HuggingFace repo ID.
-        Defaults to ``"large-v3"`` (maps to the default mlx-community repo).
+        Path to the Whisper MLX model or HuggingFace repo ID. Must be an
+        MLX-format repo. Defaults to ``"mlx-community/whisper-large-v3-mlx"``.
     language:
         Language code for transcription. Defaults to ``"zh"`` (Chinese).
 
@@ -101,7 +101,9 @@ class MlxWhisperTranscriber(Transcriber):
     >>> transcript = transcriber.transcribe(Path("/path/to/video.mp4"))  # noqa: D100
     """
 
-    def __init__(self, model: str = "large-v3", language: str = "zh") -> None:
+    def __init__(
+        self, model: str = "mlx-community/whisper-large-v3-mlx", language: str = "zh"
+    ) -> None:
         self._model = model
         self._language = language
 
@@ -151,7 +153,7 @@ class MlxWhisperTranscriber(Transcriber):
             Segment(
                 start_s=float(seg["start"]),  # type: ignore[arg-type]
                 end_s=float(seg["end"]),      # type: ignore[arg-type]
-                text=str(seg.get("text", "")),  # type: ignore[arg-type]
+                text=str(seg.get("text", "")),
             )
             for seg in segments_data
         ]

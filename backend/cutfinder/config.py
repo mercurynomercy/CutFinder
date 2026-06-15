@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -43,6 +43,15 @@ class EnvSettings(BaseSettings):
         default="",
         description="API key for authenticating with the OMLX server.",
     )
+    WHISPER_MODEL_PATH: str = Field(
+        default="",
+        description=(
+            "Optional local directory holding the mlx-whisper model. When set "
+            "(and present on disk), it is loaded from here instead of being "
+            "downloaded into the HuggingFace cache. Overrides the whisper_model "
+            "preference."
+        ),
+    )
 
     def __init__(self, **data: Any) -> None:  # noqa: ANN401
         super().__init__(**data)
@@ -59,8 +68,8 @@ class EnvSettings(BaseSettings):
 
 _DEFAULT_EXTENSIONS: list[str] = [".mov", ".mp4", ".m4v"]
 _DEFAULT_TEXT_MODEL: str = "Qwen3.6-35B-A3B"
-_DEFAULT_VISION_MODEL: str = "Qwen3-VL-8B-Instruct"
-_DEFAULT_WHISPER_MODEL: str = "large-v3"
+_DEFAULT_VISION_MODEL: str = "Qwen3-VL-8B"
+_DEFAULT_WHISPER_MODEL: str = "mlx-community/whisper-large-v3-mlx"
 
 
 class Prefs(BaseModel, frozen=True):
@@ -78,6 +87,8 @@ class Prefs(BaseModel, frozen=True):
     extensions: list[str] = _DEFAULT_EXTENSIONS[:]
     broll_frame_count: int = Field(default=3, ge=1)
     vad_threshold: float = Field(default=0.15, gt=0, le=1)
+    # Language for AI-generated summaries / visual descriptions ("zh" or "en").
+    output_language: Literal["zh", "en"] = "zh"
 
 
 # ---------------------------------------------------------------------------

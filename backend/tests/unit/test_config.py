@@ -100,6 +100,26 @@ class TestEnvSettings:
         with pytest.raises(ValueError):
             EnvSettings()
 
+    def test_whisper_model_path_defaults_empty(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """WHISPER_MODEL_PATH is optional and defaults to empty."""
+        monkeypatch.setenv("OMLX_BASE_URL", "http://localhost:8000/v1")
+        monkeypatch.setenv("OMLX_API_KEY", "test-key-123")
+        monkeypatch.delenv("WHISPER_MODEL_PATH", raising=False)
+
+        assert EnvSettings().WHISPER_MODEL_PATH == ""
+
+    def test_whisper_model_path_from_env(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """WHISPER_MODEL_PATH is read from the environment when set."""
+        monkeypatch.setenv("OMLX_BASE_URL", "http://localhost:8000/v1")
+        monkeypatch.setenv("OMLX_API_KEY", "test-key-123")
+        monkeypatch.setenv("WHISPER_MODEL_PATH", "/models/whisper-large-v3-mlx")
+
+        assert EnvSettings().WHISPER_MODEL_PATH == "/models/whisper-large-v3-mlx"
+
 
 # ── Prefs tests ──────────────────────────────────────────────────────
 
@@ -113,8 +133,8 @@ class TestPrefs:
 
         assert prefs.source_folders == []
         assert prefs.text_model == "Qwen3.6-35B-A3B"
-        assert prefs.vision_model == "Qwen3-VL-8B-Instruct"
-        assert prefs.whisper_model == "large-v3"
+        assert prefs.vision_model == "Qwen3-VL-8B"
+        assert prefs.whisper_model == "mlx-community/whisper-large-v3-mlx"
         assert prefs.extensions == [".mov", ".mp4", ".m4v"]
         assert prefs.broll_frame_count == 3
         assert prefs.vad_threshold == 0.15
@@ -182,7 +202,7 @@ class TestLoadConfig:
         assert config.prefs.broll_frame_count == 5
 
         # Defaults preserved for fields not in JSON
-        assert config.prefs.vision_model == "Qwen3-VL-8B-Instruct"
+        assert config.prefs.vision_model == "Qwen3-VL-8B"
         assert config.prefs.extensions == [".mov", ".mp4", ".m4v"]
 
     def test_missing_library_path_raises(
@@ -269,7 +289,7 @@ class TestSavePrefs:
         config = load_config(tmp_library.parent)
         assert config.prefs.extensions == [".mov", ".mp4", ".m4v"]
         assert config.prefs.text_model == "Qwen3.6-35B-A3B"
-        assert config.prefs.vision_model == "Qwen3-VL-8B-Instruct"
+        assert config.prefs.vision_model == "Qwen3-VL-8B"
 
     def test_save_prefs_empty_library_path_raises(
         self, monkeypatch: pytest.MonkeyPatch  # noqa: ARG002 — name used by convention

@@ -145,7 +145,7 @@ class SileroSpeechDetector(SpeechDetector):
             return
 
         # silero_vad is installed per pyproject.toml (lazy-loaded)
-        import silero_vad  # noqa: E402, type: ignore[import-not-found]
+        import silero_vad  # noqa: E402
 
         self._model = silero_vad.load_silero_vad(onnx=True, opset_version=16)
 
@@ -184,7 +184,7 @@ class SileroSpeechDetector(SpeechDetector):
             return 0.0
 
         # Silero VAD returns list of {"start": ..., "end": ...} dicts
-        import silero_vad  # noqa: E402, type: ignore[import-not-found]
+        import silero_vad  # noqa: E402
 
         speech_timestamps = silero_vad.get_speech_timestamps(
             tensor,

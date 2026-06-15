@@ -141,7 +141,7 @@ class PrefsOut(BaseModel):
     library_path: Optional[str] = None
     text_model: str = "Qwen3.6-35B-A3B"
     vision_model: str = "Qwen3-VL-8B-Instruct"
-    whisper_model: str = "large-v3"
+    whisper_model: str = "mlx-community/whisper-large-v3-mlx"
     extensions: list[str] = [".mp4", ".mov"]
     broll_frame_count: int = 5
     vad_threshold: float = 0.4

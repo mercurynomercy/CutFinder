@@ -30,6 +30,17 @@ from fastapi.testclient import TestClient
 from tests.fakes import FakeCatalogRepository  # noqa: E402
 
 
+def _ctx(repository: Any = None, worker_queue: Any = None) -> Any:
+    """A minimal LibraryContext stand-in for the route handlers."""
+    from types import SimpleNamespace
+    return SimpleNamespace(
+        repository=repository,
+        orchestrator=None,
+        worker_queue=worker_queue,
+        thumbnail_root=None,
+    )
+
+
 def _build_app(
     repository: Any = None,          # CatalogRepository (or FakeCatalogRepository)
     orchestrator: Any = None,        # Orchestrator mock (or None)
@@ -41,7 +52,7 @@ def _build_app(
     )
 
     app = FastAPI()
-    app.include_router(main_router(repository, orchestrator, worker_queue))
+    app.include_router(main_router(_ctx(repository=repository, worker_queue=worker_queue)))
     return app
 
 
@@ -105,7 +116,7 @@ class TestScanEndpoint:
         )
 
         repo = FakeCatalogRepository()
-        router = main_router(repository=repo, orchestrator=None, worker_queue=FakeQueue())
+        router = main_router(_ctx(repository=repo, worker_queue=FakeQueue()))
         app = FastAPI()
         app.include_router(router)
 
@@ -128,7 +139,7 @@ class TestScanEndpoint:
         )
 
         repo = FakeCatalogRepository()
-        router = main_router(repository=repo, orchestrator=None, worker_queue=FakeQueue())
+        router = main_router(_ctx(repository=repo, worker_queue=FakeQueue()))
         app = FastAPI()
         app.include_router(router)
 
@@ -150,7 +161,7 @@ class TestScanEndpoint:
         )
 
         app = FastAPI()
-        app.include_router(main_router(repository=None, orchestrator=None, worker_queue=FakeQueue()))
+        app.include_router(main_router(_ctx(worker_queue=FakeQueue())))
 
         client = TestClient(app)  # type: ignore[arg-type]
         resp = client.post("/api/scan", json=[{"path": "/tmp/x.mp4"}])
@@ -168,7 +179,7 @@ class TestScanEndpoint:
         )
 
         app = FastAPI()
-        app.include_router(main_router(repository=None, orchestrator=None, worker_queue=FakeQueue()))
+        app.include_router(main_router(_ctx(worker_queue=FakeQueue())))
 
         client = TestClient(app)  # type: ignore[arg-type]
         resp = client.post("/api/scan", json=[{"path": "", "fingerprint": "abc"}])
@@ -186,7 +197,7 @@ class TestScanEndpoint:
         )
 
         app = FastAPI()
-        app.include_router(main_router(repository=None, orchestrator=None, worker_queue=FakeQueue()))
+        app.include_router(main_router(_ctx(worker_queue=FakeQueue())))
 
         client = TestClient(app)  # type: ignore[arg-type]
         resp = client.post("/api/scan", json=[{"path": "/tmp/x.mp4", "fingerprint": "XYZ!@#"}])
@@ -226,7 +237,7 @@ class TestJobStatusEndpoint:
         # Create a job so get_job returns something non-None
         repo.create_job(total=5)
 
-        router = main_router(repository=repo, orchestrator=None, worker_queue=None)
+        router = main_router(_ctx(repository=repo))
         from fastapi import FastAPI  # noqa: E402
 
         app = FastAPI()
@@ -267,7 +278,7 @@ class TestSSEEvents:
 
         queue = FakeQueue()
         repo = FakeCatalogRepository()
-        router = main_router(repository=repo, orchestrator=None, worker_queue=queue)
+        router = main_router(_ctx(repository=repo, worker_queue=queue))
 
         # Verify the route exists and has correct path/method/content-type.
         routes = {r.path: r for r in router.routes}
@@ -296,7 +307,7 @@ class TestClipListEndpoint:
             _build_router as main_router,
         )
 
-        router = main_router(repository=repo, orchestrator=None, worker_queue=None)
+        router = main_router(_ctx(repository=repo))
         from fastapi import FastAPI  # noqa: E402
 
         app = FastAPI()
@@ -318,7 +329,7 @@ class TestClipListEndpoint:
         repo = FakeCatalogRepository()
         repo.upsert_clip(_make_clip(id=1, source_path="/tmp/test.mp4", duration_s=10.5))
 
-        router = main_router(repository=repo, orchestrator=None, worker_queue=None)
+        router = main_router(_ctx(repository=repo))
         from fastapi import FastAPI  # noqa: E402
 
         app = FastAPI()
@@ -342,7 +353,7 @@ class TestClipListEndpoint:
         repo.upsert_clip(_make_clip(id=1, source_path="/tmp/a.mp4", duration_s=10.5))
         repo.upsert_clip(_make_clip(id=2, source_path="/tmp/b.mp4", roll_type="b", duration_s=20.0))
 
-        router = main_router(repository=repo, orchestrator=None, worker_queue=None)
+        router = main_router(_ctx(repository=repo))
         from fastapi import FastAPI  # noqa: E402
 
         app = FastAPI()
@@ -361,7 +372,7 @@ class TestClipListEndpoint:
             _build_router as main_router,
         )
 
-        router = main_router(repository=None, orchestrator=None, worker_queue=None)
+        router = main_router(_ctx())
         from fastapi import FastAPI  # noqa: E402
 
         app = FastAPI()
@@ -386,7 +397,7 @@ class TestClipDetailEndpoint:
             _build_router as main_router,
         )
 
-        router = main_router(repository=repo, orchestrator=None, worker_queue=None)
+        router = main_router(_ctx(repository=repo))
         from fastapi import FastAPI  # noqa: E402
 
         app = FastAPI()
@@ -408,7 +419,7 @@ class TestClipDetailEndpoint:
             _build_router as main_router,
         )
 
-        router = main_router(repository=repo, orchestrator=None, worker_queue=None)
+        router = main_router(_ctx(repository=repo))
         from fastapi import FastAPI  # noqa: E402
 
         app = FastAPI()
@@ -434,7 +445,7 @@ class TestRollCorrection:
             _build_router as main_router,
         )
 
-        router = main_router(repository=repo, orchestrator=None, worker_queue=None)
+        router = main_router(_ctx(repository=repo))
         from fastapi import FastAPI  # noqa: E402
 
         app = FastAPI()
@@ -458,7 +469,7 @@ class TestRollCorrection:
             _build_router as main_router,
         )
 
-        router = main_router(repository=repo, orchestrator=None, worker_queue=None)
+        router = main_router(_ctx(repository=repo))
         from fastapi import FastAPI  # noqa: E402
 
         app = FastAPI()
@@ -484,7 +495,7 @@ class TestEditClip:
             _build_router as main_router,
         )
 
-        router = main_router(repository=repo, orchestrator=None, worker_queue=None)
+        router = main_router(_ctx(repository=repo))
         from fastapi import FastAPI  # noqa: E402
 
         app = FastAPI()
@@ -511,7 +522,7 @@ class TestEditClip:
             _build_router as main_router,
         )
 
-        router = main_router(repository=repo, orchestrator=None, worker_queue=None)
+        router = main_router(_ctx(repository=repo))
         from fastapi import FastAPI  # noqa: E402
 
         app = FastAPI()
@@ -538,7 +549,7 @@ class TestSetTags:
             _build_router as main_router,
         )
 
-        router = main_router(repository=repo, orchestrator=None, worker_queue=None)
+        router = main_router(_ctx(repository=repo))
         from fastapi import FastAPI  # noqa: E402
 
         app = FastAPI()
@@ -566,7 +577,7 @@ class TestSetTags:
             _build_router as main_router,
         )
 
-        router = main_router(repository=repo, orchestrator=None, worker_queue=None)
+        router = main_router(_ctx(repository=repo))
         from fastapi import FastAPI  # noqa: E402
 
         app = FastAPI()
@@ -598,7 +609,7 @@ class TestReanalyzeEndpoint:
 
         repo.upsert_clip(_make_clip(id=1, source_path="/tmp/reanalyze.mp4", roll_type="a", duration_s=10.5))
 
-        router = main_router(repository=repo, orchestrator=None, worker_queue=queue)
+        router = main_router(_ctx(repository=repo, worker_queue=queue))
         from fastapi import FastAPI  # noqa: E402
 
         app = FastAPI()
@@ -618,7 +629,7 @@ class TestReanalyzeEndpoint:
         )
 
         FakeCatalogRepository()
-        router = main_router(repository=None, orchestrator=None, worker_queue=None)  # type: ignore[union-attr]
+        router = main_router(_ctx())  # type: ignore[union-attr]
         from fastapi import FastAPI  # noqa: E402
 
         app = FastAPI()
@@ -644,7 +655,7 @@ class TestSearchEndpoint:
             _build_router as main_router,
         )
 
-        router = main_router(repository=repo, orchestrator=None, worker_queue=None)
+        router = main_router(_ctx(repository=repo))
         from fastapi import FastAPI  # noqa: E402
 
         app = FastAPI()
@@ -663,7 +674,7 @@ class TestSearchEndpoint:
             _build_router as main_router,
         )
 
-        router = main_router(repository=None, orchestrator=None, worker_queue=None)
+        router = main_router(_ctx())
         from fastapi import FastAPI  # noqa: E402
 
         app = FastAPI()
@@ -722,7 +733,7 @@ class TestEdgeCases:
             _build_router as main_router,
         )
 
-        router = main_router(repository=repo, orchestrator=None, worker_queue=None)
+        router = main_router(_ctx(repository=repo))
         from fastapi import FastAPI  # noqa: E402
 
         app = FastAPI()

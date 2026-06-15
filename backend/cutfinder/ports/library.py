@@ -9,7 +9,7 @@ from typing import Protocol
 class LibraryWriter(Protocol):
     """Copy an original video file into the library's date/type directory."""
 
-    def copy_into(self, src: Path, date: str, roll_type: str) -> Path:
+    def copy_into(self, src: Path, date: str, roll_type: str) -> str:
         """Copy *src* to ``<library>/<date>/roll_type/`` preserving times.
 
         - Original file is never modified (read-only).

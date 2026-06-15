@@ -82,11 +82,16 @@ export interface SettingsPrefs {
   extensions: string[]
   broll_frame_count: number
   vad_threshold: number
+  output_language: 'zh' | 'en'
 }
 
 export interface SettingsResponse {
   env: Record<string, string>
   prefs: SettingsPrefs
+}
+
+export interface LibraryStatus {
+  library_path: string | null
 }
 
 export interface UpdateSettingsBody {
@@ -98,6 +103,7 @@ export interface UpdateSettingsBody {
   extensions?: string[]
   broll_frame_count?: number
   vad_threshold?: number
+  output_language?: 'zh' | 'en'
 }
 
 export interface ClipFilter {
@@ -209,5 +215,15 @@ export const api = {
   /** PUT /api/settings — update prefs. */
   putSettings(body: UpdateSettingsBody): Promise<{ status: string }> {
     return _fetch('/api/settings', { method: 'PUT', body: JSON.stringify(body) })
+  },
+
+  /** GET /api/library — the active library path (or null). */
+  getLibrary(): Promise<LibraryStatus> {
+    return _fetch('/api/library')
+  },
+
+  /** POST /api/library — bind a library path at runtime. */
+  setLibrary(path: string): Promise<{ status: string; library_path: string }> {
+    return _fetch('/api/library', { method: 'POST', body: JSON.stringify({ path }) })
   },
 } as const
