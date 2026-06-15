@@ -9,7 +9,7 @@ Usage:
 
 import { useEffect, useState } from 'react'
 
-import type { ClipSummary, TagItem } from '@/api/client'
+import type { TagItem } from '@/api/client'
 import { api } from '@/api/client'
 
 // ── Filter state interface (mirrors ClipFilter) ────────────────
@@ -21,14 +21,6 @@ export interface FiltersState {
 }
 
 const DEFAULT_FILTERS: FiltersState = { date: null, roll_type: null, tag: null }
-
-// ── Date accordion items (grouped by YYYY-MM-DD) ───────────────
-
-interface DateGroup {
-  date: string       // YYYY-MM-DD or "YYYY" for year-only grouping
-  label: string      // Display label (e.g. "2024-06" or just the date)
-  count: number
-}
 
 // ── Main Filters component ──────────────────────────────────────
 
@@ -47,14 +39,11 @@ export function Filters({ onFilterChange }: FiltersProps) {
     let cancelled = false
     // Fetch clips just to extract unique tags — in a real app this might be a dedicated endpoint
     api.listClips()
-      .then((clips) => {
+      .then(() => {
         if (cancelled) return
-        const tagSet = new Map<string, string>() // name → source priority (manual > auto)
-        for (const clip of clips) {
-          // We need tags per-clip; just use a placeholder approach for now.
-          // In practice, the backend would have GET /api/tags endpoint or include tags in list response.
-        }
-        setAllTags([]) // placeholder — will be populated when backend adds tags list endpoint
+        // Placeholder — will be populated when the backend adds a tags list endpoint
+        // (or includes tags in the clip list response).
+        setAllTags([])
       })
       .catch(() => setAllTags([])) // ignore errors for tags
 

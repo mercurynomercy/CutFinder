@@ -50,7 +50,7 @@ describe('Badge', () => {
 
   it('is a <span> element with correct base classes', () => {
     const container = render(<Badge type="a">A</Badge>)
-    expect(container.container.firstChild?.tagName).toBe('SPAN')
+    expect((container.container.firstChild as HTMLElement | null)?.tagName).toBe('SPAN')
   })
 
   it('has correct base classes on the span', () => {
@@ -105,7 +105,7 @@ describe('Chip', () => {
 
   it('is a <span> element with correct base classes', () => {
     const container = render(<Chip>Tag</Chip>)
-    expect(container.container.firstChild?.tagName).toBe('SPAN')
+    expect((container.container.firstChild as HTMLElement | null)?.tagName).toBe('SPAN')
   })
 
   it('has correct base classes on the span', () => {

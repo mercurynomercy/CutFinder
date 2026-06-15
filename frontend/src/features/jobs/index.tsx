@@ -11,9 +11,9 @@ Usage:
 
 import { useCallback, useEffect, useState } from 'react'
 
-import type { JobEvent, JobStatus } from '@/api/client'
-import { api, ApiError } from '@/api/client'
-import { useJobEvents } from '@/api/sse'
+import type { JobStatus } from '@/api/client'
+import { api } from '@/api/client'
+import { useJobEvents, type JobEvent } from '@/api/sse'
 
 // ── Toast notification types ───────────────────────────────────────
 
@@ -89,7 +89,7 @@ function ProgressBar({ jobId }: ProgressBarProps) {
         break
       }
     }
-    return last?.path ?? null
+    return (last?.path as string | undefined) ?? null
   })()
 
   const progress = job && job.total > 0 ? Math.round((job.done / job.total) * 100) : undefined

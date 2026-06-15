@@ -30,7 +30,6 @@ interface ClipSummary {
 }
 
 interface TagItem { name: string; source: 'auto' | 'manual' }
-type AnyTag = { name: string; source: string }
 
 const ALL_CLIPS: ClipSummary[] = [
   { id: 1, source_path: '/media/vlog/2024-06/MVI_5298.MP4', library_path: null, roll_type: 'a', summary: 'A-roll narration about a trip to the mountains.', description: null, duration_s: 120, thumbnail_path: '/thumbnails/1.jpg', status: 'done' },
@@ -173,23 +172,6 @@ async function navigateToClip(page: Page, clipId: number): Promise<void> {
   await page.evaluate((id) => {
     window.dispatchEvent(new CustomEvent('cutfinder:navigate', { detail: { clipId: id } }))
   }, clipId)
-}
-
-// Also hide the backdrop for any subsequent visual interactions with gallery cards.
-async function clickBehindOverlay(page: Page, locator: ReturnType<Page['locator']>): Promise<void> {
-  await page.evaluate(() => {
-    const dialog = document.querySelector('[role="dialog"]') as HTMLElement | null
-    if (!dialog) return
-    const backdrop = dialog.querySelector('[class*="bg-black"]') as HTMLElement | null
-    if (backdrop) backdrop.style.display = 'none'
-  })
-  await locator.click({ force: true })
-  await page.evaluate(() => {
-    const dialog = document.querySelector('[role="dialog"]') as HTMLElement | null
-    if (!dialog) return
-    const backdrop = dialog.querySelector('[class*="bg-black"]') as HTMLElement | null
-    if (backdrop) backdrop.style.display = ''
-  })
 }
 
 //  Test suites
@@ -496,7 +478,6 @@ test.describe('Detail panel', () => {
     await expect(summaryTextarea).toBeVisible()
 
     // Clear existing text and type new summary
-    const currentText = await summaryTextarea.inputValue()
     await summaryTextarea.fill('')
     await summaryTextarea.type('New custom narration about mountains.')
 

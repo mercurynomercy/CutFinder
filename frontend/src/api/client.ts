@@ -42,13 +42,16 @@ export interface JobsQueueResponse {
 export interface ClipSummary {
   id: number
   source_path: string
-  library_path: string | null
   roll_type: 'a' | 'b' // or string if not yet classified
-  summary: string | null
-  description: string | null
   duration_s: number | null
   thumbnail_path: string | null
-  status: string          // 'pending' | 'processing' | 'done' | 'failed'
+  // Optional: always sent by the list endpoint, but omitted in some views/fixtures.
+  library_path?: string | null
+  summary?: string | null
+  description?: string | null
+  status?: string          // 'pending' | 'processing' | 'done' | 'failed'
+  created_at?: string      // used for client-side date filtering
+  tags?: TagItem[]         // present on detail / mock data; absent from the list endpoint
 }
 
 export interface ClipDetail extends ClipSummary {

@@ -14,19 +14,6 @@ Usage:
 import type { ClipSummary } from '@/api/client'
 import { ThumbnailCard } from '@/components/ThumbnailCard'
 
-// ── Skeleton placeholder (shimmer effect) ───────────────────────
-
-function SkeletonCard() {
-  return (
-    <div className="flex flex-col overflow-hidden rounded-lg border border-[--border] bg-[--surface-1]">
-      <div className="w-full pb-[56.25%] bg-[--surface-2] animate-pulse" />
-      <div className="px-3 py-2">
-        <div className="h-3 w-3/4 rounded bg-[--surface-2] animate-pulse" />
-      </div>
-    </div>
-  )
-}
-
 // ── Empty state component ───────────────────────────────────────
 
 function EmptyState() {

@@ -10,8 +10,8 @@ Usage:
 
 import { useCallback, useEffect, useState } from 'react'
 
-import type { SettingsPrefs, UpdateSettingsBody } from '@/api/client'
-import { api, ApiError } from '@/api/client'
+import type { UpdateSettingsBody } from '@/api/client'
+import { api } from '@/api/client'
 import { Button } from '@/components/Button'
 
 // ── Validation helpers ────────────────────────────────────────────
@@ -171,7 +171,7 @@ export function SettingsPage({ onSave }: SettingsPageProps) {
 
   const handleRemoveExtension = (ext: string) => {
     if (!prefs) return
-    updateField('extensions', prefs.extensions.filter((e: string) => e !== ext))
+    updateField('extensions', (prefs.extensions ?? []).filter((e: string) => e !== ext))
   }
 
   const handleRemoveSourceFolder = (folder: string) => {
@@ -282,7 +282,7 @@ export function SettingsPage({ onSave }: SettingsPageProps) {
               </svg>
             }
             onChange={(folder) => {
-              if (!prefs || prefs.source_folders.includes(folder)) return
+              if (!prefs || (prefs.source_folders ?? []).includes(folder)) return
               updateField('source_folders', [...(prefs.source_folders || []), folder])
             }}
           />

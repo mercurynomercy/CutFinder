@@ -18,21 +18,20 @@ export interface SearchProps {
 
 /** Debounce helper — returns a function that only calls `fn` after `ms` ms
  *  of inactivity. */
-export function useDebounce<T extends (...args: unknown[]) => void>(fn: T, ms: number): T {
+export function useDebounce<A extends unknown[]>(
+  fn: (...args: A) => void,
+  ms: number,
+): (...args: A) => void {
   const [timer, setTimer] = useState<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
-    const cb = fn as (...args: unknown[]) => void // type widening for setTimeout compatibility
     return () => { if (timer) clearTimeout(timer) }
   }, [])
 
-  // eslint-disable-next-line func-names
-  const debounced = function (...args: Parameters<T>) {
+  return (...args: A) => {
     if (timer) clearTimeout(timer)
     setTimer(setTimeout(() => fn(...args), ms))
-  } as T
-
-  return debounced
+  }
 }
 
 export function Search({ onSearch }: SearchProps) {

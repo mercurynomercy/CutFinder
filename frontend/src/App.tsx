@@ -6,12 +6,11 @@ Usage: <App /> — no props needed; state is managed internally.
 
 import { useEffect, useRef, useState } from 'react'
 
-import type { ClipSummary, JobEvent } from '@/api/client'
+import type { ClipSummary } from '@/api/client'
 import { api } from '@/api/client'
-import { useJobEvents, useSSE } from '@/api/sse'
 import { Search } from '@/features/search'
 import { Filters, type FiltersState as FilterState } from '@/features/filters'
-import { Gallery, type GalleryProps } from '@/features/gallery'
+import { Gallery } from '@/features/gallery'
 import { DetailPanel, type DetailPanelProps as DetailPanelPropsType } from '@/features/detail'
 import { JobsPanel, type JobsPanelProps } from '@/features/jobs'
 import { JobsQueuePage } from '@/features/jobs-queue'

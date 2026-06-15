@@ -11,24 +11,9 @@ Usage:
 import React, { useEffect, useState } from 'react'
 
 import type { ClipDetail, TagItem, TranscriptData } from '@/api/client'
-import { api, ApiError } from '@/api/client'
+import { api } from '@/api/client'
 import { Badge, Chip } from '@/components/ChipBadge'
 import { Button } from '@/components/Button'
-
-// ── Optimistic update helper — updates local state immediately,
-//    reverts on error after API call. ────────────────────────────
-
-function useOptimistic<T>(
-  initialState: T,
-): [T, (next: T) => Promise<void>] {
-  const [state, setState] = useState<T>(initialState)
-
-  const optimisticUpdate = async (next: T) => {
-    setState(next) // optimistically apply
-  }
-
-  return [state, optimisticUpdate]
-}
 
 // ── Tag editor component (add/delete) ────────────────────────────
 
@@ -45,14 +30,14 @@ function TagEditor({ tags, onUpdate }: TagEditorProps) {
     if (!name) return
 
     try {
-      await onUpdate([...tags.map((t) => ({ name: t.name })), { name, source: 'manual' as const }])
+      await onUpdate([...tags.map((t) => ({ name: t.name, source: t.source })), { name, source: 'manual' as const }])
       setNewTag('')
     } catch (err) {
       console.error('Failed to add tag:', err)
     }
   }
 
-  const handleDelete = async (index: number, name: string) => {
+  const handleDelete = async (index: number, _name: string) => {
     try {
       await onUpdate(tags.filter((_, i) => i !== index))
     } catch (err) {
@@ -114,8 +99,6 @@ function TranscriptSection({ data }: TranscriptSectionProps) {
   const [expanded, setExpanded] = useState(false)
 
   if (!data || !data.full_text.trim()) return null
-
-  const preview = data.full_text.slice(0, 120) + (data.full_text.length > 120 ? '…' : '')
 
   return (
     <div className="rounded-lg border border-[--border] bg-[--surface-2]">

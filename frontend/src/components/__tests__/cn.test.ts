@@ -27,7 +27,7 @@ describe('cn', () => {
   })
 
   it('merges multiple conditional classes correctly', () => {
-    const variant = 'danger'
+    const variant: string = 'danger'
     expect(cn('btn base', variant === 'primary' && 'bg-blue', variant === 'danger' && 'bg-red')).toBe('btn base bg-red')
   })
 })

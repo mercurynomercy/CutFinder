@@ -140,20 +140,19 @@ export const handlers = [
   }),
 
   // PATCH /api/clips/:id — update clip (summary/description)
-  http.patch('http://localhost:5080/api/clips/:id', async ({ request, params }) => {
-    const body = await request.json() as Record<string, unknown>
+  http.patch('http://localhost:5080/api/clips/:id', ({ params }) => {
     return HttpResponse.json({ status: 'ok', clip_id: Number(params.id) })
   }),
 
   // PUT /api/clips/:id/tags — replace all tags on a clip
   http.put('http://localhost:5080/api/clips/:id/tags', async ({ request, params }) => {
-    const body = await request.json() as Record<string, unknown>
-    const tags: Array<{ name: string }> = body.tags ?? []
+    const body = await request.json() as { tags?: Array<{ name: string }> }
+    const tags = body.tags ?? []
     return HttpResponse.json({ status: 'ok', clip_id: Number(params.id), tags_count: tags.length })
   }),
 
   // POST /api/clips/:id/reanalyze — trigger re-analysis (returns job id)
-  http.post('http://localhost:5080/api/clips/:id/reanalyze', ({ params }) => {
+  http.post('http://localhost:5080/api/clips/:id/reanalyze', () => {
     return HttpResponse.json({ job_id: Math.floor(Math.random() * 100) })
   }),
 

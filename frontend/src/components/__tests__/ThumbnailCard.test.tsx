@@ -1,6 +1,6 @@
 /** Tests for the ThumbnailCard component — 16:9 card with hover effects and selection. */
 
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import * as React from 'react'
@@ -23,12 +23,12 @@ describe('ThumbnailCard', () => {
   })
 
   it('shows truncated file name from sourcePath in the info row', () => {
-    const container = render(<ThumbnailCard {...baseProps} />)
+    render(<ThumbnailCard {...baseProps} />)
     expect(screen.getByText('vlog.mp4')).toBeInTheDocument()
   })
 
   it('shows full path when sourcePath has no slashes', () => {
-    const container = render(<ThumbnailCard {...baseProps} sourcePath="clip.mp4" />)
+    render(<ThumbnailCard {...baseProps} sourcePath="clip.mp4" />)
     expect(screen.getByText('clip.mp4')).toBeInTheDocument()
   })
 
@@ -141,32 +141,32 @@ describe('ThumbnailCard', () => {
   // ── Duration label ────────────────────────────────────────
 
   it('renders duration when provided as a number', () => {
-    const container = render(<ThumbnailCard {...baseProps} duration={125} />)
+    render(<ThumbnailCard {...baseProps} duration={125} />)
     expect(screen.getByText('2:05')).toBeInTheDocument()
   })
 
   it('renders duration "0:00" when duration is 0', () => {
-    const container = render(<ThumbnailCard {...baseProps} duration={0} />)
+    render(<ThumbnailCard {...baseProps} duration={0} />)
     expect(screen.getByText('0:00')).toBeInTheDocument()
   })
 
   it('renders duration "1:30" for 90 seconds', () => {
-    const container = render(<ThumbnailCard {...baseProps} duration={90} />)
+    render(<ThumbnailCard {...baseProps} duration={90} />)
     expect(screen.getByText('1:30')).toBeInTheDocument()
   })
 
   it('renders duration "59:59" for max seconds', () => {
-    const container = render(<ThumbnailCard {...baseProps} duration={3599} />)
+    render(<ThumbnailCard {...baseProps} duration={3599} />)
     expect(screen.getByText('59:59')).toBeInTheDocument()
   })
 
   it('does not render duration label when duration is null', () => {
-    const container = render(<ThumbnailCard {...baseProps} duration={null as unknown as number} />)
+    render(<ThumbnailCard {...baseProps} duration={null as unknown as number} />)
     expect(screen.queryByText(/:\d{2}/)).not.toBeInTheDocument()
   })
 
   it('does not render duration label when duration is undefined', () => {
-    const container = render(<ThumbnailCard {...baseProps} />)
+    render(<ThumbnailCard {...baseProps} />)
     expect(screen.queryByText(/:\d{2}/)).not.toBeInTheDocument()
   })
 

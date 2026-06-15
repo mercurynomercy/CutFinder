@@ -10,8 +10,8 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 
 // Sync-debounce: calls fn immediately instead of scheduling.
-function syncDebounce<T extends (q: string) => void>(fn: T): T {
-  return ((...args: Parameters<T>) => fn(...args)) as unknown as T
+function syncDebounce<A extends unknown[]>(fn: (...args: A) => void) {
+  return (...args: A) => fn(...args)
 }
 
 // Test-specific Search that calls the debounced callback immediately (no timer).
