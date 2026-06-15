@@ -198,6 +198,7 @@ def create_app(
     # ── Startup / shutdown — start/stop the worker queue ────────────
     @app.on_event("startup")
     async def _startup() -> None:
+        logger.info("_startup event fired, worker_queue=%s", ctx.worker_queue is not None)
         if ctx.worker_queue is not None:
             await ctx.worker_queue.start()
 

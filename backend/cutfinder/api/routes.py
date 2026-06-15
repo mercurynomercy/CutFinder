@@ -76,7 +76,9 @@ def _build_router(ctx: Any) -> Any:
             scanner = Scanner(repository=ctx.repository)
             candidates_obj = scanner.scan(source_folders, extensions)
 
+        logger.info("Scan returned %d candidates, enqueueing...", len(candidates_obj))
         job_id = await ctx.worker_queue.enqueue_scan(candidates_obj)
+        logger.info("Scan enqueued, job_id=%s", job_id)
         return {"job_id": job_id}
 
     # ── Job status (GET /jobs/{id}) ─────────────────────────────

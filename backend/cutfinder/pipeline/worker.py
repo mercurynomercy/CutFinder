@@ -151,12 +151,16 @@ class WorkerQueue:
         Safe to call multiple times — subsequent calls are no-ops
         if the worker is already running.
         """
+        logger.info("WorkerQueue.start() called")
         if self._worker_task and not self._worker_task.done():
             # Already running — idempotent no-op.
+            logger.info("WorkerQueue: worker task already running")
             return
         if self._worker_task and self._worker_task.done():
             # Re-raise any exception from a finished task.
+            logger.warning("WorkerQueue: previous worker task is done, re-raising exception")
             self._worker_task.result()
+        logger.info("WorkerQueue: spawning worker task for job %s", self._current_job_id)
         self._worker_task = asyncio.create_task(self._worker_loop())
 
     async def stop(self) -> None:
@@ -178,6 +182,7 @@ class WorkerQueue:
         candidates: list[ClipCandidate],
         job_id: int | None = None,
     ) -> int:
+        logger.info("enqueue_scan: %d candidates", len(candidates))
         """Enqueue a batch of clips for sequential processing.
 
         Creates (or reuses) a job record, emits a ``job_started``
@@ -328,6 +333,7 @@ class WorkerQueue:
 
         Exits when the stop sentinel is received or the queue is closed.
         """
+        logger.info("Worker loop started")
         try:
             while True:
                 item = await self._queue.get()

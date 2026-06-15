@@ -59,10 +59,13 @@ interface ProgressBarProps {
 function ProgressBar({ jobId }: ProgressBarProps) {
   const [job, setJob] = useState<JobStatus | null>(null)
 
+  // Use SSE events to show real-time progress (clip being processed, step info)
+  const { events } = useJobEvents(jobId)
+
+  // Poll job status every 2 seconds (fallback for total/done/failed counters)
   useEffect(() => {
     if (!jobId) return
 
-    // Poll job status every 2 seconds (SSE provides real-time events too, but this is a fallback)
     let cancelled = false
 
     const fetchStatus = () => {
@@ -75,10 +78,35 @@ function ProgressBar({ jobId }: ProgressBarProps) {
     return () => { cancelled = true; clearInterval(interval) }
   }, [jobId])
 
-  if (!job || !['pending', 'running'].includes(job.status)) return null
+  // Derive "currently processing" text from SSE events (last clip_started event)
+  const currentClip = (() => {
+    if (!events.length) return null
+    // Find the latest clip_started event (not overridden by a later one)
+    let last: JobEvent | null = null
+    for (let i = events.length - 1; i >= 0; i--) {
+      if (events[i].type === 'clip_started' && events[i].path) {
+        last = events[i]
+        break
+      }
+    }
+    return last?.path ?? null
+  })()
 
-  const progress = job.total > 0 ? Math.round((job.done / job.total) * 100) : undefined
+  const progress = job && job.total > 0 ? Math.round((job.done / job.total) * 100) : undefined
   const isIndeterminate = progress === undefined
+
+  // Determine display text priority: SSE step > polling counter > status
+  const lastClipDone = [...events].reverse().find((e: JobEvent) => e.type === 'clip_done')
+  const lastJobCompleted = events.find((e: JobEvent) => e.type === 'job_completed')
+
+  if (lastJobCompleted || !events.length && (!job || !['pending', 'running'].includes(job.status))) return null
+  if (events.length === 0 && (!job || !['pending', 'running'].includes(job.status))) return null
+
+  const displayText = lastClipDone
+    ? `Done: ${lastClipDone.path}`
+    : currentClip
+      ? currentClip.length > 50 ? `Processing: ${currentClip.slice(-48)}…` : `Processing: ${currentClip}`
+      : job?.status ?? ''
 
   return (
     <div className="h-0.5 w-full bg-[--surface-2]">
@@ -104,8 +132,8 @@ function ProgressBar({ jobId }: ProgressBarProps) {
 
       {/* Status text */}
       <div className="absolute right-4 top-0 flex items-center gap-2 pt-[6px] text-xs tabular-numbers">
-        <span className="text-[--text-muted]">{job.status}</span>
-        {job.done > 0 && <span className="text-[--primary]">{job.done}/{job.total}</span>}
+        <span className="max-w-48 truncate text-[--text-muted]">{displayText}</span>
+        {job && job.done > 0 && <span className="text-[--primary]">{job.done}/{job.total}</span>}
       </div>
     </div>
   )
@@ -156,7 +184,7 @@ export function JobsPanel({ activeJobId }: JobsPanelProps) {
   const [taskList, setTaskList] = useState<JobEvent[]>([])
   const { toasts, addToast } = useToast()
 
-  // Subscribe to SSE events for the active job
+  // Subscribe to SSE events for the active job (task list + toast notifications)
   const { events } = useJobEvents(activeJobId)
 
   // Update task list and show toasts for notable events
@@ -201,25 +229,11 @@ export function JobsPanel({ activeJobId }: JobsPanelProps) {
   // If active job but no events yet, show just the progress bar
   if (events.length === 0) return <ProgressBar jobId={activeJobId} />
 
-  // Show both progress bar (via SSE) and task list
+  // Show progress bar (via SSE + polling) and task list
   return (
     <div className="relative">
-      {/* Progress bar from SSE */}
-      {events.some((e: JobEvent) => e.done !== undefined || e.total !== undefined) && (
-        <div className="h-0.5 w-full bg-[--surface-2]">
-          {(() => {
-            const lastProgress = [...events].reverse().find((e: JobEvent) => e.done !== undefined && e.total !== undefined) as
-              | (JobEvent & { done: number; total: number })
-              | undefined
-            const progress = lastProgress ? Math.round((lastProgress.done / lastProgress.total) * 100) : undefined
-            return (
-              <div className="h-full transition-all duration-500" style={{ width: `${progress}%` }}>
-                <div className="h-full w-full bg-[--primary]" />
-              </div>
-            )
-          })()}
-        </div>
-      )}
+      {/* Progress bar from SSE + polling */}
+      {activeJobId && <ProgressBar jobId={activeJobId} />}
 
       {/* Task list (collapsible) */}
       {taskList.length > 0 && (

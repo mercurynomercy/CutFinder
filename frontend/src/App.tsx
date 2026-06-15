@@ -62,11 +62,14 @@ export default function App() {
   })
 
   const handleScan = async () => {
+    console.log('[App] Scan button clicked')
     try {
       // Trigger scan — SSE will stream progress events; poll for job id
+      console.log('[App] Calling POST /api/scan...')
       const response = await fetch('/api/scan', { method: 'POST' })
       if (response.ok) {
         const data = await response.json()
+        console.log('[App] POST /api/scan returned:', data)
         setActiveJobId(data.job_id as number)
       }
     } catch (err) {
