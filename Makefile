@@ -6,7 +6,7 @@ UV      := uv
 VITE    := npx vite
 NODE    ?= node
 
-.PHONY: setup dev models check-omlx test test-integration e2e clean
+.PHONY: setup dev models check-omlx test test-integration e2e clean frontend backend
 
 # ── 1. setup — install everything needed to develop and run ───────
 setup: \
@@ -70,6 +70,14 @@ test-integration: uv-sync
 # ── 7. e2e — Playwright (requires backend with fake adapters) ───
 e2e: frontend-deps
 	cd frontend && npx playwright test
+
+# ── 8. frontend — start Vite dev server only ───────────────────
+frontend: frontend-deps env-boilerplate
+	$(VITE) --port 5082
+
+# ── 9. backend — start uvicorn dev server only (with --reload) ─
+backend: env-boilerplate
+	cd backend && $(UV) run uvicorn cutfinder.api.app:app --reload --port 5081
 
 # ── Cleanup (local venv, node_modules) ───────────────────────────
 clean:
