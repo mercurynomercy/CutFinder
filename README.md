@@ -4,18 +4,20 @@
 
 把一堆 A-roll（有中文解说）和 B-roll（纯空镜）自动**分类、打标签、生成简介与缩略图**，让你之后能按日期 / 类型 / 标签 / 台词快速找回任意一段素材。面向 macOS（Apple Silicon）+ Final Cut Pro 工作流，**全程离线、AI 全本地**。
 
-> **状态：核心功能已打通并可端到端运行。** 后端适配器、编排层、API 装配层（`create_app`）、前端均已实现并接通；`make test`（289 单元测试）、`make check-omlx`、`make dev` 均可跑通。模型推理链路通过真实 OMLX 集成测试验证（见[测试](#测试)）。
+> **状态：核心功能已打通并可端到端运行。** 后端适配器、编排层、API 装配层（`create_app`）、前端均已实现并接通；`make test`（293 单元测试）、前端 `vitest`（167 项）、`make check-omlx`、`make dev` 均可跑通。模型推理链路（文本/视觉/转写/VAD）通过真实 OMLX + 本地集成测试验证（见[测试](#测试)）。
 
 ---
 
 ## 它能做什么
 
 - **自动区分 A-roll / B-roll**：检测有无人声解说（Silero VAD），可手动纠正且会被记住。
-- **A-roll 中文简介 + 标签**：`mlx-whisper` 转写中文解说 → Qwen 文本模型总结，转写全文一并保存可搜索。
+- **A-roll 简介 + 标签**：`mlx-whisper` 转写中文解说 → Qwen 文本模型总结，转写全文一并保存可搜索。
 - **B-roll 画面标签 + 描述**：抽帧交给视觉模型识别画面内容。
+- **AI 输出语言可选**：简介/画面描述可在「设置」页切换**中文 / 英文**（默认中文）。
 - **按拍摄日期 + 类型自动归档**：复制到 `库/YYYY-MM-DD/A-roll(或 B-roll)/`。
 - **缩略图墙 + 多维检索**：按日期 / 类型 / 标签筛选，按台词全文搜索。
 - **重新分析单个片段**：换模型或结果不佳时一键重跑 AI，保留你的手动纠正与标签。
+- **设置页绑定素材库**：首次使用填一个绝对路径即可绑定库，**运行时热生效、无需重启**（也支持 `CUTFINDER_LIBRARY` 环境变量）。
 - **深色专业界面**：近黑面板让缩略图突出，A-roll/B-roll 以颜色+图标区分，贴近 FCP 调性（见 [`doc/ui-design.md`](./doc/ui-design.md)）。
 
 ### 不破坏原素材（核心约束）
@@ -33,7 +35,7 @@
 前端 (Vite + React + Tailwind，深色优先)  :5080
    │ HTTP (REST + SSE)，经 Vite dev proxy → :5081
 API 层 (FastAPI，薄)                       :5081
-   │  create_app() 在此装配所有真实适配器
+   │  create_app() 把真实适配器装配到可变 LibraryContext（库可运行时热绑定）
 编排层 (Pipeline Orchestrator + 后台队列/SSE 进度)
    │  只依赖接口(Protocol)
 适配器层 ── ffmpeg/ffprobe · Silero VAD · mlx-whisper · OMLX(文本+视觉) · SQLite
@@ -47,7 +49,7 @@ API 层 (FastAPI，薄)                       :5081
 |---|---|---|
 | A-roll 简介/标签（文本） | `Qwen3.6-35B-A3B` | OMLX（OpenAI 兼容接口） |
 | B-roll 画面识别（视觉） | `Qwen3-VL-8B` | OMLX（同接口，base64 传帧） |
-| A-roll 语音转写 | `mlx-whisper` (large-v3) | 独立进程（OMLX 不托管音频） |
+| A-roll 语音转写 | `mlx-whisper`（默认 `mlx-community/whisper-large-v3-mlx`） | 独立进程（OMLX 不托管音频） |
 | A/B 人声检测 | Silero VAD | 本地 |
 
 文本与视觉模型都由 [OMLX](https://github.com/jundot/omlx)（Apple Silicon 本地推理服务器，菜单栏 App）托管。
@@ -123,9 +125,14 @@ make dev
 
 打开 **http://localhost:5080**，按 `Ctrl+C` 同时停止两个服务。
 
-> **指定素材库**：后端通过 `CUTFINDER_LIBRARY` 环境变量绑定一个库目录（缩略图/SQLite 存于 `<库>/.cutfinder/`）。
-> 可在根 `.env` 里加一行 `CUTFINDER_LIBRARY=/path/to/library`，或导出后再 `make dev`。
-> 未设置时后端正常启动，但目录类接口返回 503，直到在「设置」页或通过环境变量绑定一个库。
+### 5. 绑定素材库（首次使用）
+
+素材库目录用于存放整理后的副本、缩略图与 SQLite 目录（都在 `<库>/.cutfinder/`）。两种方式：
+
+- **设置页（推荐）**：打开 http://localhost:5080 → 「设置」→ **Set up your library** → 填一个绝对路径 → **运行时热生效、无需重启**，且选择会被记住（持久化到 `~/.cutfinder`）。
+- **环境变量**：在根 `.env` 里加 `CUTFINDER_LIBRARY=/path/to/library`，再 `make dev`。
+
+> 未绑定库时后端正常启动，但目录类接口返回 503、「设置」页显示绑定向导，直到你绑定一个库。
 
 ### 手动分起（调试用）
 
@@ -162,9 +169,9 @@ WHISPER_MODEL_PATH=/Users/you/AI/Models/ASRs/mlx-community/whisper-large-v3-mlx
 ```bash
 cd backend
 
-uv run pytest -m "not integration"   # 仅单元测试（289 项，无需外部服务，秒级）
+uv run pytest -m "not integration"   # 仅单元测试（293 项，无需外部服务，秒级）
 uv run pytest -m integration         # 集成测试（需真实 OMLX / ffmpeg / 样片）
-uv run mypy cutfinder/               # 类型检查（strict；仍有遗留告警，见下）
+uv run mypy cutfinder/               # 类型检查（strict，clean）
 uv run ruff check cutfinder/         # linting（clean）
 ```
 
@@ -197,8 +204,8 @@ make e2e               # Playwright e2e
 
 ### 已知遗留项（不影响运行）
 
-- **mypy（strict）尚未完全 clean**：`orchestrator.py` / `sqlite_repo.py` / `ports` 等存在历史遗留的缺注解与 `openai` stub 重载告警。运行不受影响，属后续清理项。
-- **前端 4 个测试套件为历史遗留失败**：`jobs` 的 `vi.mock` 提升问题，以及 `filters/detail/settings` 误引入仅用于 e2e 的 `msw/browser`（这些用例本身被 skip）。属后续清理项。
+- **前端 `npm run build` 的 `tsc -b` 仍有历史遗留类型错误**（与本次改动无关，应用代码早先就未做到 type-clean）。Vitest 不做类型检查，故 `vitest` 全绿、`make dev` 正常；要让 `tsc` 干净需单独清理。
+- 真实集成测试中**视觉打标的输出文本可能中英混杂**（Qwen3-VL-8B 的模型/prompt 表现，非适配器 bug）；结构化结果（description + tags）始终有效。
 
 ---
 
