@@ -92,7 +92,7 @@ class Prefs(BaseModel, frozen=True):
     whisper_model: str = _DEFAULT_WHISPER_MODEL
     extensions: list[str] = _DEFAULT_EXTENSIONS[:]
     broll_frame_count: int = Field(default=5, ge=1)
-    vad_threshold: float = Field(default=0.15, gt=0, le=1)
+    vad_threshold: float = Field(default=0.35, gt=0, le=1)
     # Language for AI-generated summaries / visual descriptions ("zh" or "en").
     output_language: Literal["zh", "en"] = "zh"
 

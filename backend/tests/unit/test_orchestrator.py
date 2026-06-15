@@ -368,6 +368,35 @@ class TestErrorInjectionContinuation:
         orch.progress_callback(lambda e: events.append(e))  # type: ignore[union-attr]
         orch.process_clip(candidate)
 
+    def test_analysis_failure_still_copies_and_marks_partial(
+        self, fake_probe, fake_thumbnail, fake_frame_extractor,
+        fake_speech_b, fake_repo, fake_library,
+    ):
+        """AI analysis failure is non-fatal: the original is still organized into
+        the library and the clip is marked 'partial' (not 'error')."""
+        failing_vision = MagicMock()
+        failing_vision.describe.side_effect = RuntimeError(
+            "OMLX vision tagger returned no valid result after retries"
+        )
+
+        orch = Orchestrator(
+            probe=fake_probe, thumbnail_maker=fake_thumbnail,
+            frame_extractor=fake_frame_extractor, speech_detector=fake_speech_b,
+            transcriber=None, summarizer=None, vision_tagger=failing_vision,
+            repository=fake_repo, library_writer=fake_library,
+        )
+
+        clip_id = orch.process_clip(_make_candidate())
+
+        assert clip_id is not None  # clip still created (not aborted)
+        clip = fake_repo.get_clip(clip_id)
+        assert clip.status == "partial"
+        assert clip.roll_type == "b"
+        assert clip.error and "no valid result" in clip.error
+        # the original was still copied/organized into the library as B-roll
+        assert len(fake_library.calls) == 1
+        assert fake_library.calls[0][2] == "b"
+
     def test_batch_continues_after_single_error(self, fake_probe, fake_thumbnail,
                                                  fake_speech_a, fake_transcriber,
                                                  fake_summarizer, fake_repo):
@@ -418,22 +447,26 @@ class TestErrorInjectionContinuation:
         orch.progress_callback(lambda e: events.append(e))  # type: ignore[union-attr]
         orch.process_clip(candidate)
 
-    def test_analysis_failure_marks_error(self, fake_probe, fake_thumbnail,
+    def test_analysis_failure_marks_partial_not_aborted(self, fake_probe, fake_thumbnail,
                                           fake_speech_a, fake_repo):
-        """When summarizer raises during A-roll analysis, clip gets status='error'."""
+        """When the summarizer raises during A-roll analysis, AI tagging is skipped
+        but the clip is still created and marked 'partial' (non-fatal)."""
         bad_summarizer = MagicMock()
         bad_summarizer.summarize.side_effect = RuntimeError("summarization failed")
 
         orch = Orchestrator(
             probe=fake_probe, thumbnail_maker=fake_thumbnail, speech_detector=fake_speech_a,
-            transcriber=MagicMock(),  # still returns transcript but summarizer fails
+            transcriber=MagicMock(),  # returns a transcript, but summarizer fails
             summarizer=bad_summarizer, repository=fake_repo,
         )
 
-        candidate = _make_candidate()
-        result = orch.process_clip(candidate)
+        clip_id = orch.process_clip(_make_candidate())
 
-        assert result is None  # processing aborted when summarizer fails
+        assert clip_id is not None  # not aborted — clip still organized
+        clip = fake_repo.get_clip(clip_id)
+        assert clip.status == "partial"
+        assert clip.roll_type == "a"
+        assert clip.error and "summarization failed" in clip.error
 
 
 # ═════════════════════════════════════════════════════════════════════

@@ -139,7 +139,7 @@ class TestPrefs:
         assert prefs.whisper_model == "mlx-community/whisper-large-v3-mlx"
         assert prefs.extensions == [".mov", ".mp4", ".m4v"]
         assert prefs.broll_frame_count == 5
-        assert prefs.vad_threshold == 0.15
+        assert prefs.vad_threshold == 0.35
 
     def test_custom_values(self) -> None:
         """Prefs accepts custom values and overrides defaults."""

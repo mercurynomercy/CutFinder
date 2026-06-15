@@ -249,6 +249,9 @@ class Orchestrator:
             return None
 
         # ── 4. Branch-specific analysis + tags ────────────────
+        # AI analysis is best-effort: if it fails we still organize the original
+        # into the library (date + A/B from VAD), just without summary/tags.
+        analysis_error: str | None = None
         try:
             if roll_type == "a":
                 analysis = self._do_a_roll(candidate.path)
@@ -258,8 +261,12 @@ class Orchestrator:
             step_name = f"{roll_type}-analysis"
             emit(ProgressEvent(step=step_name, ok=True))
         except Exception as exc:  # noqa: BLE001
-            self._mark_error(candidate, "analysis", str(exc))
-            return None
+            logger.warning(
+                "Analysis failed for %s (organizing anyway): %s", candidate.path, exc,
+            )
+            analysis_error = str(exc)
+            analysis = AnalysisResult(roll_type=roll_type)
+            emit(ProgressEvent(step="analysis", ok=False, detail=analysis_error))
 
         # ── 5. Upsert clip to repository ───────────────────────
         now = _dt.datetime.now(_dt.timezone.utc)
@@ -282,8 +289,11 @@ class Orchestrator:
 
         clip_id = self.repository.upsert_clip(self._build_clip(
             candidate=candidate, meta=meta, thumbnail_path=thumbnail_path,
-            roll_type=roll_type, status="done", processed_at=now.isoformat(),
+            roll_type=roll_type,
+            status="partial" if analysis_error else "done",
+            processed_at=now.isoformat(),
             summary_text=summary_text, description_text=description_text,
+            error=analysis_error,
         ))
 
         # Set auto-generated tags (preserves any existing manual ones)
@@ -467,6 +477,7 @@ class Orchestrator:
         processed_at: str | None = None,
         summary_text: str | None = None,
         description_text: str | None = None,
+        error: str | None = None,
     ) -> Clip:
         """Construct a :class:`Clip` from probe + analysis results."""
         return Clip(
@@ -477,6 +488,7 @@ class Orchestrator:
             roll_type=roll_type,
             summary=summary_text,
             description=description_text,
+            error=error,
             duration_s=meta.duration_s,
             width=meta.width,
             height=meta.height,

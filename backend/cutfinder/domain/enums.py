@@ -40,4 +40,5 @@ class ClipStatus(str, Enum):
     PENDING = "pending"
     PROCESSING = "processing"
     DONE = "done"
+    PARTIAL = "partial"  # organized/copied, but AI summary/tags failed
     ERROR = "error"
