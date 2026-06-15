@@ -42,6 +42,7 @@ from cutfinder.domain.models import (
     ClipFilter,
     ClipSummary,
     Job,
+    JobFailedItem,
     SummaryResult,
     Tag,
     Transcript,
@@ -555,9 +556,9 @@ class _NoOpRepository(CatalogRepository):
     def get_transcript(self, clip_id: int) -> Transcript | None:
         return None
 
-    def create_job(self, total: int = 0) -> Job:
+    def create_job(self, total: int = 0, kind: str = "scan") -> Job:
         return Job(  # — minimal stub
-            id=0, status="running", total=total, done=0, failed=0,
+            id=0, status="queued", total=total, done=0, failed=0, kind=kind,
             started_at=_dt.datetime.now(_dt.timezone.utc).isoformat(),
         )
 
@@ -566,6 +567,21 @@ class _NoOpRepository(CatalogRepository):
 
     def get_job(self, job_id: int) -> Job | None:
         return None
+
+    def list_jobs(self, limit: int | None = None) -> list[Job]:
+        return []
+
+    def delete_job(self, job_id: int) -> None:
+        pass
+
+    def record_failed_item(self, item: JobFailedItem) -> None:
+        pass
+
+    def get_failed_items(self, job_id: int) -> list[JobFailedItem]:
+        return []
+
+    def clear_failed_items(self, job_id: int) -> None:
+        pass
 
 
 # ── Re-export for convenience ─────────────────────────────────────

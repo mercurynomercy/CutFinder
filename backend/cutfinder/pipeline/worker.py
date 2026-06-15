@@ -336,7 +336,7 @@ class WorkerQueue:
         for item in items:
             if item.kind == "reanalyze":
                 await self._queue.put(("reanalyze", item.clip_id, job_id))
-            else:
+            elif item.path is not None and item.fingerprint is not None:
                 await self._queue.put((
                     "clip",
                     ClipCandidate(path=item.path, fingerprint=item.fingerprint),

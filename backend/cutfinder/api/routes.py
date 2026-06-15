@@ -53,11 +53,11 @@ def _build_router(ctx: Any) -> Any:
             import json as _json  # noqa: E402
 
             try:
-                candidates_list = _json.loads(body)  # type: ignore[assignment]
+                candidates_list = _json.loads(body)
             except _json.JSONDecodeError as exc:
                 raise HTTPException(status_code=422, detail="Body must be valid JSON") from exc
             try:
-                candidates_obj = [ClipCandidate(**c) for c in candidates_list]  # type: ignore[arg-type]
+                candidates_obj = [ClipCandidate(**c) for c in candidates_list]
             except ValidationError as exc:
                 raise HTTPException(status_code=422, detail=str(exc)) from exc
         else:
