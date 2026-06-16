@@ -279,17 +279,6 @@ export function DetailPanel({ clipId, onClose }: DetailPanelProps) {
         className="relative flex h-full w-[480px] max-w-full bg-[--surface-1] shadow-xl"
         onClick={stopPropagation}
       >
-        {/* Close button */}
-        <button
-          onClick={onClose}
-          className="absolute right-4 top-4 z-10 rounded p-1 text-[--text-muted] hover:text-[--text-primary]"
-          aria-label="Close panel"
-        >
-          <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24">
-            <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-          </svg>
-        </button>
-
         <div className="flex h-full w-full flex-col overflow-y-auto">
           {loading ? (
             <div className="flex items-center justify-center p-8">
@@ -301,33 +290,44 @@ export function DetailPanel({ clipId, onClose }: DetailPanelProps) {
             </div>
           ) : clip ? (
             <>
-              {/* ── Video preview area ─────────────────────── */}
-              <div className="relative aspect-video w-full bg-[--surface-2]">
-                {clip.thumbnail_path ? (
-                  <img src={`/api/clips/${clip.id}/thumbnail`} alt="Thumbnail" className="h-full w-full object-cover" />
-                ) : (
-                  <div className="flex h-full items-center justify-center">
-                    <svg className="h-10 w-10 text-[--text-muted]" fill="none" viewBox="0 0 24 24">
-                      <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 002.25-2.25v-9A2.25 2.25 0 0013.5 5.25h-9A2.25 2.25 0 002.25 7.5v9A2.25 2.25 0 004.5 18.75z" />
-                    </svg>
-                  </div>
-                )}
-
-                {/* Roll type badge */}
-                <div className="absolute left-3 top-3">
-                  <Badge type={clip.roll_type === 'a' ? 'a' : clip.roll_type === 'b' ? 'b' : 'a'} />
-                </div>
+              {/* ── Header: A/B roll label (left) + close (right) ── */}
+              <div className="flex items-center justify-between border-b border-[--border] px-5 py-3">
+                <Badge type={clip.roll_type === 'b' ? 'b' : 'a'}>
+                  {clip.roll_type === 'b' ? 'B-roll' : 'A-roll'}
+                </Badge>
+                <button
+                  onClick={onClose}
+                  className="rounded p-1 text-[--text-muted] hover:text-[--text-primary]"
+                  aria-label="Close panel"
+                >
+                  <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24">
+                    <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
               </div>
 
               {/* ── Content area ─────────────────────────── */}
               <div className="flex flex-1 flex-col gap-4 p-5">
 
-                {/* ── Source path (info row) ─────────────── */}
+                {/* ── Source file (top) ──────────────────── */}
                 <div>
-                  <p className="truncate text-xs font-medium uppercase tracking-wider text-[--text-muted]">
+                  <p className="text-xs font-medium uppercase tracking-wider text-[--text-muted]">
                     Source file
                   </p>
-                  <p className="mt-0.5 truncate text-sm text-[--text-primary]">{clip.source_path}</p>
+                  <p className="mt-0.5 break-all text-sm text-[--text-primary]">{clip.source_path}</p>
+                </div>
+
+                {/* ── Thumbnail preview (compact) ────────── */}
+                <div className="relative h-40 w-full overflow-hidden rounded-lg bg-[--surface-2]">
+                  {clip.thumbnail_path ? (
+                    <img src={`/api/clips/${clip.id}/thumbnail`} alt="Thumbnail" className="h-full w-full object-cover" />
+                  ) : (
+                    <div className="flex h-full items-center justify-center">
+                      <svg className="h-10 w-10 text-[--text-muted]" fill="none" viewBox="0 0 24 24">
+                        <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 002.25-2.25v-9A2.25 2.25 0 0013.5 5.25h-9A2.25 2.25 0 002.25 7.5v9A2.25 2.25 0 004.5 18.75z" />
+                      </svg>
+                    </div>
+                  )}
                 </div>
 
                 {/* ── Summary (editable, A-roll) ─────────── */}
