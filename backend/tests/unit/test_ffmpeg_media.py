@@ -17,7 +17,19 @@ import pytest
 from cutfinder.adapters.ffmpeg_media import (
     FfmpegFrameExtractor,
     FfmpegThumbnailMaker,
+    purge_stale_frame_dirs,
 )
+
+
+@pytest.fixture(autouse=True)
+def _cleanup_frame_dirs():
+    """Remove any cutfinder_frames_* temp dirs an extractor test leaves behind.
+
+    ``extract()`` mkdtemp's a real temp dir; cleanup is the orchestrator's job in
+    production, so these unit tests would otherwise pollute the temp directory.
+    """
+    yield
+    purge_stale_frame_dirs()
 
 
 # ── helpers ───────────────────────────────────────────────────────
@@ -445,6 +457,42 @@ class TestFfmpegFrameExtractor:
 
         # Only 2 frames succeed (index 0 and index 2); middle one is skipped
         assert len(result) == 2
+
+    def test_empty_result_removes_temp_dir(self, tmp_path: Path) -> None:
+        """When every frame fails, extract() returns [] and deletes its temp dir
+        (otherwise the orphaned mkdtemp dir would leak — the caller's cleanup only
+        runs when at least one frame path is returned)."""
+        import tempfile
+
+        extractor = FfmpegFrameExtractor()
+        video_path = tmp_path / "sample.mp4"
+        video_path.write_bytes(b"\x00")
+
+        before = set(Path(tempfile.gettempdir()).glob("cutfinder_frames_*"))
+
+        def mock_run(cmd, **kwargs):
+            if "ffprobe" in cmd:
+                return _make_ffprobe_proc(duration=10.0)
+            # ffmpeg "fails" for every frame — never write the output file.
+            return subprocess.CompletedProcess(args=cmd, returncode=1, stdout="", stderr="boom")
+
+        with patch("subprocess.run", side_effect=mock_run):
+            result = extractor.extract(video_path, count=3)
+
+        assert result == []
+        after = set(Path(tempfile.gettempdir()).glob("cutfinder_frames_*"))
+        assert after == before  # no new temp dir left behind
+
+    def test_purge_stale_frame_dirs_removes_leftovers(self) -> None:
+        """The startup sweep removes orphaned cutfinder_frames_* dirs."""
+        import tempfile
+
+        d = Path(tempfile.mkdtemp(prefix="cutfinder_frames_"))
+        (d / "frame_0000.jpg").write_bytes(b"x")
+        assert d.is_dir()
+
+        purge_stale_frame_dirs()
+        assert not d.exists()
 
     def test_default_count_uses_constructor_value(
         self, tmp_path: Path
