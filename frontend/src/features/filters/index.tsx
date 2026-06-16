@@ -38,6 +38,7 @@ export interface FiltersProps {
 
 export function Filters({ onFilterChange }: FiltersProps) {
   const [filters, setFilters] = useState<FiltersState>(DEFAULT_FILTERS)
+  const [collapsed, setCollapsed] = useState(false)
 
   // Unique tag names and dates derived from the clip list (fetched on mount).
   const [allTags, setAllTags] = useState<string[]>([])
@@ -76,9 +77,42 @@ export function Filters({ onFilterChange }: FiltersProps) {
 
   const hasActiveFilters = filters.date !== null || filters.roll_type !== null || filters.tag !== null
 
+  // Collapsed: a thin rail with an expand button (keeps the gallery roomy).
+  if (collapsed) {
+    return (
+      <div className="flex h-full w-11 shrink-0 flex-col items-center border-r border-[--border] bg-[--surface-1] py-4">
+        <button
+          onClick={() => setCollapsed(false)}
+          title="展开筛选"
+          aria-label="展开筛选"
+          className="relative rounded p-2 text-[--text-secondary] hover:bg-[--surface-2] hover:text-[--text-primary]"
+        >
+          <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24">
+            <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3.75 6h16.5M6.75 12h10.5m-7.5 6h4.5" />
+          </svg>
+          {hasActiveFilters && (
+            <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-[--primary]" />
+          )}
+        </button>
+      </div>
+    )
+  }
+
   return (
     <div className="flex h-full w-64 shrink-0 flex-col gap-5 overflow-y-auto border-r border-[--border] bg-[--surface-1] p-4">
-      <h2 className="text-sm font-semibold tracking-tight text-[--text-primary]">Filters</h2>
+      <div className="flex items-center justify-between">
+        <h2 className="text-sm font-semibold tracking-tight text-[--text-primary]">Filters</h2>
+        <button
+          onClick={() => setCollapsed(true)}
+          title="收起筛选"
+          aria-label="收起筛选"
+          className="rounded p-1 text-[--text-muted] hover:bg-[--surface-2] hover:text-[--text-primary]"
+        >
+          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24">
+            <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M15.75 19.5L8.25 12l7.5-7.5" />
+          </svg>
+        </button>
+      </div>
 
       {/* ── Roll type filter ─────────────────────────────── */}
       <div>

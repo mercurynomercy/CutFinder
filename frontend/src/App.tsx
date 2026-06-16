@@ -27,6 +27,7 @@ export default function App() {
   const [activeJobId, setActiveJobId] = useState<JobsPanelProps['activeJobId']>(null)
   const [appliedFilters, setAppliedFilters] = useState<Partial<FilterState>>({})
   const [reanalyzingIds, setReanalyzingIds] = useState<Set<number>>(new Set())
+  const [sortBy, setSortBy] = useState<'date' | 'name' | 'duration'>('date')
 
   const clipsRef = useRef(clips)
   clipsRef.current = clips
@@ -66,18 +67,63 @@ export default function App() {
     return true
   })
 
+  // Sort the filtered clips (default: by shooting date, newest first).
+  const sortedClips = [...filteredClips].sort((a, b) => {
+    if (sortBy === 'name') {
+      const na = (a.source_path.split('/').pop() || '').toLowerCase()
+      const nb = (b.source_path.split('/').pop() || '').toLowerCase()
+      return na.localeCompare(nb)
+    }
+    if (sortBy === 'duration') {
+      return (b.duration_s ?? 0) - (a.duration_s ?? 0)
+    }
+    // 'date' — embedded capture time preferred, newest first
+    const da = a.capture_time || a.created_at || ''
+    const db = b.capture_time || b.created_at || ''
+    return db.localeCompare(da)
+  })
+
   const handleScan = async () => {
     console.log('[App] Scan button clicked')
     try {
+      // If the worker is globally paused, a queued scan won't start processing.
+      // Warn the user and offer to resume before scanning.
+      try {
+        const { paused } = await api.listJobs()
+        if (paused) {
+          const ok = window.confirm(
+            '任务队列已暂停，扫描出的新任务不会自动开始处理。\n\n点击「确定」恢复处理并开始扫描；点击「取消」放弃本次扫描。',
+          )
+          if (!ok) return
+          await api.resumeJobs()
+        }
+      } catch {
+        // Couldn't check pause state — proceed with the scan anyway.
+      }
       // Trigger scan — SSE will stream progress events; poll for job id
       console.log('[App] Calling POST /api/scan...')
       const response = await fetch('/api/scan', { method: 'POST' })
       if (response.ok) {
         const data = await response.json()
         console.log('[App] POST /api/scan returned:', data)
-        setActiveJobId(data.job_id as number)
+        const jobId = data.job_id as number
+        setActiveJobId(jobId)
         // Jump to the task queue so the user can see scan progress immediately.
         setShowJobs(true)
+
+        // Wait for the scan job to finish, then refresh clips so new ones
+        // appear immediately (no manual refresh needed).
+        const deadline = Date.now() + 30 * 60_000 // 30 min timeout
+        while (Date.now() < deadline) {
+          await new Promise((resolve) => setTimeout(resolve, 1500))
+          try {
+            const job = await api.getJob(jobId)
+            if (['done', 'failed', 'cancelled'].includes(job.status)) break
+          } catch {
+            // transient error — keep polling
+          }
+        }
+        await refreshClips()
       }
     } catch (err) {
       console.error('Scan failed:', err)
@@ -192,14 +238,31 @@ export default function App() {
           {/* Filters sidebar (fixed width) */}
           <Filters onFilterChange={handleFilterChange} />
 
-          {/* Gallery grid (flex-1, scrollable) */}
-          <Gallery
-            clips={filteredClips}
-            selectedClipId={selectedClipId}
-            onSelect={(clipId) => setSelectedClipId(clipId)}
-            onReanalyze={handleReanalyzeClip}
-            reanalyzingIds={reanalyzingIds}
-          />
+          {/* Gallery column: sort toolbar + scrollable grid */}
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+            <div className="flex h-11 shrink-0 items-center justify-between border-b border-[--border] px-4">
+              <span className="text-xs text-[--text-muted]">{sortedClips.length} clips</span>
+              <label className="flex items-center gap-2 text-xs text-[--text-muted]">
+                Sort
+                <select
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value as 'date' | 'name' | 'duration')}
+                  className="rounded-md border border-[--border] bg-[--surface-2] px-2 py-1 text-xs text-[--text-primary] outline-none transition-colors focus:border-[--primary]"
+                >
+                  <option value="date">Date (newest)</option>
+                  <option value="name">Name (A–Z)</option>
+                  <option value="duration">Duration (longest)</option>
+                </select>
+              </label>
+            </div>
+            <Gallery
+              clips={sortedClips}
+              selectedClipId={selectedClipId}
+              onSelect={(clipId) => setSelectedClipId(clipId)}
+              onReanalyze={handleReanalyzeClip}
+              reanalyzingIds={reanalyzingIds}
+            />
+          </div>
         </div>
 
         {/* Detail panel (slide-in drawer, right side) */}

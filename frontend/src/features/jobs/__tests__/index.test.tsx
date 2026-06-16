@@ -4,8 +4,10 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { http, HttpResponse } from 'msw'
 import { render, screen, waitFor } from '@testing-library/react'
 import { JobsPanel } from '../index'
+import { server } from '@/test/mocks/server'
 
 // Mock useJobEvents — control events per test via mock implementation.
 // vi.hoisted ensures the mock fn exists before the hoisted vi.mock factory runs.
@@ -23,7 +25,13 @@ describe('JobsPanel', () => {
     expect(container).toBeEmptyDOMElement()
   })
 
-  it('renders the clip path in the task list when a clip_done event arrives', async () => {
+  it('renders the clip path in the progress card when a clip_done event arrives', async () => {
+    // The card hides once the polled job status is terminal, so keep job 1 running.
+    server.use(
+      http.get('http://localhost:5080/api/jobs/1', () =>
+        HttpResponse.json({ id: 1, kind: 'scan', status: 'running', total: 10, done: 4, failed: 0, started_at: null }),
+      ),
+    )
     useJobEventsMock.mockReturnValue({
       loading: false,
       error: null,

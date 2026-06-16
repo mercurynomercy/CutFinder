@@ -200,6 +200,11 @@ def create_app(
     @app.on_event("startup")
     async def _startup() -> None:
         logger.info("_startup event fired, worker_queue=%s", ctx.worker_queue is not None)
+        # Sweep any B-roll frame temp dirs left behind by a previous crash/kill.
+        from cutfinder.adapters.ffmpeg_media import purge_stale_frame_dirs
+        n = purge_stale_frame_dirs()
+        if n:
+            logger.info("Purged %d stale frame temp dir(s) at startup", n)
         if ctx.worker_queue is not None:
             await ctx.worker_queue.start()
 

@@ -1,9 +1,9 @@
-/** Jobs feature — top progress bar + per-clip task list with status icons, plus toast notifications.
+/** Jobs feature — ambient scan progress (thin top bar + floating card) and toasts.
 
-Listens to SSE events via `useJobEvents` hook and displays:
-- A 2px progress bar at the top of the screen (indeterminate when unknown, determinate otherwise)
-- A collapsible task list showing each clip's processing status
-- Toast notifications for job start/completion/failure events
+Listens to SSE events via `useJobEvents` and polls job status. Shows:
+- A thin progress bar fixed to the very top of the viewport.
+- A compact floating progress card (bottom-right) with count + current clip.
+- Toast notifications for job start/completion/failure.
 
 Usage:
   <JobsPanel activeJobId={currentScanJobId} />
@@ -15,7 +15,7 @@ import type { JobStatus } from '@/api/client'
 import { api } from '@/api/client'
 import { useJobEvents, type JobEvent } from '@/api/sse'
 
-// ── Toast notification types ───────────────────────────────────────
+// ── Toast notifications ─────────────────────────────────────────────
 
 interface ToastItem {
   id: number
@@ -28,152 +28,110 @@ let toastIdCounter = 0
 function useToast() {
   const [toasts, setToasts] = useState<ToastItem[]>([])
 
-  // Memoized so consumers can safely list addToast in effect deps without
-  // triggering an infinite render loop.
   const addToast = useCallback((type: ToastItem['type'], message: string) => {
     const id = ++toastIdCounter
     setToasts((prev) => [...prev, { id, type, message }])
-
-    // Auto-dismiss after 5 seconds
     setTimeout(() => {
       setToasts((prev) => prev.filter((t) => t.id !== id))
     }, 5000)
-
     return id
   }, [])
 
-  const removeToast = useCallback((id: number) => {
-    setToasts((prev) => prev.filter((t) => t.id !== id))
-  }, [])
-
-  return { toasts, addToast, removeToast } as const
+  return { toasts, addToast } as const
 }
 
-// ── Progress bar (2px thin) ───────────────────────
+// ── Scan progress (thin top bar + floating card) ────────────────────
 
-interface ProgressBarProps {
-  /** Current job id, or null if no active job */
+interface ScanProgressProps {
   jobId: number | null
+  events: JobEvent[]
 }
 
-function ProgressBar({ jobId }: ProgressBarProps) {
+function ScanProgress({ jobId, events }: ScanProgressProps) {
   const [job, setJob] = useState<JobStatus | null>(null)
 
-  // Use SSE events to show real-time progress (clip being processed, step info)
-  const { events } = useJobEvents(jobId)
-
-  // Poll job status every 2 seconds (fallback for total/done/failed counters)
+  // Poll job status for the determinate counter (SSE drives the live filename).
   useEffect(() => {
-    if (!jobId) return
-
+    if (!jobId) { setJob(null); return }
+    setJob(null)  // drop the previous job's status so it can't leak across jobs
     let cancelled = false
-
-    const fetchStatus = () => {
+    const tick = () => {
       if (cancelled) return
-      api.getJob(jobId).then(setJob).catch(() => {}) // silently fail, SSE will catch real changes
+      api.getJob(jobId).then((j) => { if (!cancelled) setJob(j) }).catch(() => {})
     }
-
-    fetchStatus()
-    const interval = setInterval(fetchStatus, 2000)
+    tick()
+    const interval = setInterval(tick, 1500)
     return () => { cancelled = true; clearInterval(interval) }
   }, [jobId])
 
-  // Derive "currently processing" text from SSE events (last clip_started event)
-  const currentClip = (() => {
-    if (!events.length) return null
-    // Find the latest clip_started event (not overridden by a later one)
-    let last: JobEvent | null = null
-    for (let i = events.length - 1; i >= 0; i--) {
-      if (events[i].type === 'clip_started' && events[i].path) {
-        last = events[i]
-        break
-      }
+  // The scan is finished once a terminal SSE event arrives OR the polled job
+  // status is terminal. The status check is essential: SSE only delivers events
+  // emitted after we subscribe, so a job that completes before/around mount
+  // never yields a terminal SSE event — without the status fallback the card
+  // would linger forever.
+  const finishedBySse = events.some((e) => e.type === 'job_completed' || e.type === 'job_failed')
+  const finishedByStatus = job != null && ['done', 'failed', 'cancelled'].includes(job.status)
+  const finished = finishedBySse || finishedByStatus
+
+  if (!jobId || finished) return null
+
+  // Most recent clip path from SSE (clip_started / clip_done).
+  let currentPath: string | null = null
+  for (let i = events.length - 1; i >= 0; i--) {
+    const e = events[i]
+    if ((e.type === 'clip_started' || e.type === 'clip_done') && e.path) {
+      currentPath = e.path as string
+      break
     }
-    return (last?.path as string | undefined) ?? null
-  })()
+  }
 
-  const progress = job && job.total > 0 ? Math.round((job.done / job.total) * 100) : undefined
-  const isIndeterminate = progress === undefined
-
-  // Determine display text priority: SSE step > polling counter > status
-  const lastClipDone = [...events].reverse().find((e: JobEvent) => e.type === 'clip_done')
-  const lastJobCompleted = events.find((e: JobEvent) => e.type === 'job_completed')
-
-  if (lastJobCompleted || !events.length && (!job || !['pending', 'running'].includes(job.status))) return null
-  if (events.length === 0 && (!job || !['pending', 'running'].includes(job.status))) return null
-
-  const displayText = lastClipDone
-    ? `Done: ${lastClipDone.path}`
-    : currentClip
-      ? currentClip.length > 50 ? `Processing: ${currentClip.slice(-48)}…` : `Processing: ${currentClip}`
-      : job?.status ?? ''
+  const total = job?.total ?? 0
+  const done = job?.done ?? 0
+  const pct = total > 0 ? Math.round((done / total) * 100) : null
 
   return (
-    <div className="h-0.5 w-full bg-[--surface-2]">
-      <div
-        className={`h-full transition-all duration-500 ease-out ${isIndeterminate ? 'animate-[shimmer_2s_infinite]' : ''}`}
-        style={{
-          width: isIndeterminate ? undefined : `${progress}%`,
-        }}
-      >
-        {!isIndeterminate && (
-          <div className="h-full w-full bg-[--primary] transition-all" />
+    <>
+      {/* Thin progress bar pinned to the very top of the viewport */}
+      <div className="fixed inset-x-0 top-0 z-[60] h-0.5 bg-[--surface-2]">
+        {pct === null ? (
+          <div className="h-full w-1/3 animate-[cf-slide_1.4s_ease-in-out_infinite] bg-[--primary]" />
+        ) : (
+          <div className="h-full bg-[--primary] transition-all duration-500 ease-out" style={{ width: `${pct}%` }} />
+        )}
+        <style>{`@keyframes cf-slide{0%{transform:translateX(-120%)}100%{transform:translateX(420%)}}`}</style>
+      </div>
+
+      {/* Floating progress card */}
+      <div className="fixed bottom-4 right-4 z-[90] w-72 rounded-xl border border-[--border] bg-[--surface-1] p-3 shadow-xl">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2 text-sm font-medium text-[--text-primary]">
+            <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-[1.5px] border-[--primary] border-t-transparent" />
+            扫描中…
+          </div>
+          {pct !== null && (
+            <span className="text-xs tabular-nums text-[--text-secondary]">{done}/{total}</span>
+          )}
+        </div>
+
+        {/* Inner determinate/indeterminate bar */}
+        <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-[--surface-3]">
+          {pct === null ? (
+            <div className="h-full w-1/3 animate-[cf-slide_1.4s_ease-in-out_infinite] rounded-full bg-[--primary]" />
+          ) : (
+            <div className="h-full rounded-full bg-[--primary] transition-all duration-500 ease-out" style={{ width: `${pct}%` }} />
+          )}
+        </div>
+
+        {/* Current clip */}
+        {currentPath && (
+          <p className="mt-2 truncate text-xs text-[--text-muted]" title={currentPath}>{currentPath}</p>
         )}
       </div>
-
-      {isIndeterminate && (
-        <style>{`
-          @keyframes shimmer {
-            0% { transform: translateX(-100%) }
-            50%, 100% { transform: translateX(100%) }
-          }
-        `}</style>
-      )}
-
-      {/* Status text */}
-      <div className="absolute right-4 top-0 flex items-center gap-2 pt-[6px] text-xs tabular-numbers">
-        <span className="max-w-48 truncate text-[--text-muted]">{displayText}</span>
-        {job && job.done > 0 && <span className="text-[--primary]">{job.done}/{job.total}</span>}
-      </div>
-    </div>
+    </>
   )
 }
 
-// ── Per-clip task list item with status icons ───────────────
-
-interface TaskItemProps {
-  event: JobEvent
-}
-
-function statusIcon(type?: string) {
-  switch (type) {
-    case 'clip_done':
-      return <svg className="h-3.5 w-3.5 text-[--success]" fill="none" viewBox="0 0 24 24">
-        <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M4.5 12.75l6 6 9-13.5" />
-      </svg>
-    case 'job_failed':
-    case 'clip_error':
-      return <svg className="h-3.5 w-3.5 text-[--error]" fill="none" viewBox="0 0 24 24">
-        <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
-      </svg>
-    default:
-      return <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-[1.5px] border-[--text-muted] border-t-transparent" />
-  }
-}
-
-function TaskItem({ event }: TaskItemProps) {
-  const clipId = (event.clip_id ?? '') as number | string // could be int or str
-  const path = (event.path ?? event.source_path ?? `Clip #${clipId}`) as string
-
-  return (
-    <div className="flex items-center gap-3 py-1 text-xs">
-      {statusIcon(event.type)}
-      <span className="flex-1 truncate text-[--text-secondary]">{path}</span>
-    </div>
-  )
-}
-
-// ── Main Jobs Panel component (progress bar + task list) ────────
+// ── Main Jobs Panel ─────────────────────────────────────────────────
 
 export interface JobsPanelProps {
   /** The active scan/reanalyze job id, or null if none running */
@@ -181,71 +139,30 @@ export interface JobsPanelProps {
 }
 
 export function JobsPanel({ activeJobId }: JobsPanelProps) {
-  const [taskList, setTaskList] = useState<JobEvent[]>([])
   const { toasts, addToast } = useToast()
-
-  // Subscribe to SSE events for the active job (task list + toast notifications)
   const { events } = useJobEvents(activeJobId)
 
-  // Update task list and show toasts for notable events
+  // Toast on notable events.
   useEffect(() => {
     if (events.length === 0) return
-
-    setTaskList((prev) => {
-      // Merge events — avoid duplicates by type + clip_id
-      const merged = [...prev]
-      for (const event of events) {
-        // Update progress on job_started / progress events
-        if (event.type === 'job_started' || event.type === 'progress') {
-          // progress events update the bar, not task list
-        } else if (event.type === 'clip_done' || event.type === 'job_completed') {
-          merged.push(event)
-        } else if (event.type?.includes('error') || event.type === 'job_failed') {
-          merged.push(event)
-        } else if (event.type !== undefined && !merged.some((e: JobEvent) => e.clip_id === event.clip_id && e.type === event.type)) {
-          merged.push(event)
-        } else if (event.type !== undefined && !merged.some((e: JobEvent) => e.clip_id === event.clip_id)) {
-          merged.push(event)
-        }
-      }
-
-      return merged.slice(-20) // keep last 20 events for the task list
-    })
-
-    // Show toast for the most recent significant event.
-    const lastEvent = events[events.length - 1] as JobEvent | undefined
-    if (lastEvent?.type === 'job_started') {
+    const last = events[events.length - 1] as JobEvent | undefined
+    if (last?.type === 'job_started') {
       addToast('info', `Scan started — processing clips`)
-    } else if (lastEvent?.type === 'job_completed') {
-      addToast('success', `Scan completed — ${lastEvent.done} clips processed`)
-    } else if (lastEvent?.type === 'job_failed') {
+    } else if (last?.type === 'job_completed') {
+      addToast('success', `Scan completed — ${last.done} clips processed`)
+    } else if (last?.type === 'job_failed') {
       addToast('error', `Scan failed — check logs for details`)
     }
   }, [events, addToast])
 
-  // If no active job and no events to show, render nothing
-  if (!activeJobId && taskList.length === 0) return null
+  if (!activeJobId && toasts.length === 0) return null
 
-  // If active job but no events yet, show just the progress bar
-  if (events.length === 0) return <ProgressBar jobId={activeJobId} />
-
-  // Show progress bar (via SSE + polling) and task list
   return (
-    <div className="relative">
-      {/* Progress bar from SSE + polling */}
-      {activeJobId && <ProgressBar jobId={activeJobId} />}
+    <>
+      <ScanProgress jobId={activeJobId} events={events} />
 
-      {/* Task list (collapsible) */}
-      {taskList.length > 0 && (
-        <div className="max-h-48 overflow-y-auto border-b border-[--border] bg-[--surface-1]/95 px-4 py-2">
-          {taskList.map((event, i) => (
-            <TaskItem key={`${(event.clip_id ?? '')}-${i}`} event={event} />
-          ))}
-        </div>
-      )}
-
-      {/* Toast notifications (absolute positioned, top-right) */}
-      <div className="fixed bottom-4 right-4 z-[100] flex flex-col gap-2">
+      {/* Toast notifications (bottom-right, above the progress card) */}
+      <div className="fixed bottom-24 right-4 z-[100] flex flex-col gap-2">
         {toasts.map((toast) => (
           <div
             key={toast.id}
@@ -269,6 +186,6 @@ export function JobsPanel({ activeJobId }: JobsPanelProps) {
           </div>
         ))}
       </div>
-    </div>
+    </>
   )
 }

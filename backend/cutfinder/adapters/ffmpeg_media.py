@@ -15,11 +15,31 @@ Edge cases handled:
 
 from __future__ import annotations
 
+import shutil
 import subprocess
 import tempfile
 from pathlib import Path
 
 from ..ports.media import FrameExtractor, ThumbnailMaker
+
+#: Prefix for the per-clip temp dirs that hold extracted B-roll frames.
+_FRAME_DIR_PREFIX = "cutfinder_frames_"
+
+
+def purge_stale_frame_dirs() -> int:
+    """Remove leftover B-roll frame temp dirs from previous/crashed runs.
+
+    Frame dirs are normally deleted right after vision analysis, but a crash or
+    hard kill can leave them behind. Safe to call at startup (no analysis is in
+    flight yet). Returns the number of directories removed.
+    """
+    removed = 0
+    tmp_root = Path(tempfile.gettempdir())
+    for d in tmp_root.glob(f"{_FRAME_DIR_PREFIX}*"):
+        if d.is_dir():
+            shutil.rmtree(d, ignore_errors=True)
+            removed += 1
+    return removed
 
 
 def _probe_duration(path: Path) -> float | None:
@@ -158,7 +178,7 @@ class FfmpegFrameExtractor(FrameExtractor):
 
         # Write frames into a dedicated temp dir — NEVER the source folder
         # (originals are read-only). The caller cleans up this dir after use.
-        tmp_dir = Path(tempfile.mkdtemp(prefix="cutfinder_frames_"))
+        tmp_dir = Path(tempfile.mkdtemp(prefix=_FRAME_DIR_PREFIX))
 
         output_paths: list[Path] = []
         for i, ts in enumerate(timestamps):
@@ -187,8 +207,11 @@ class FfmpegFrameExtractor(FrameExtractor):
 
             if out_path.is_file():
                 output_paths.append(out_path.resolve())
-            else:
-                # Clean up failed attempt
-                pass
+
+        # No frames produced (zero-duration or every extraction failed) — remove
+        # the now-empty temp dir here, since the orchestrator's cleanup only runs
+        # when at least one frame path is returned.
+        if not output_paths:
+            shutil.rmtree(tmp_dir, ignore_errors=True)
 
         return output_paths
