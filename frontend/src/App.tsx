@@ -106,9 +106,24 @@ export default function App() {
       if (response.ok) {
         const data = await response.json()
         console.log('[App] POST /api/scan returned:', data)
-        setActiveJobId(data.job_id as number)
+        const jobId = data.job_id as number
+        setActiveJobId(jobId)
         // Jump to the task queue so the user can see scan progress immediately.
         setShowJobs(true)
+
+        // Wait for the scan job to finish, then refresh clips so new ones
+        // appear immediately (no manual refresh needed).
+        const deadline = Date.now() + 30 * 60_000 // 30 min timeout
+        while (Date.now() < deadline) {
+          await new Promise((resolve) => setTimeout(resolve, 1500))
+          try {
+            const job = await api.getJob(jobId)
+            if (['done', 'failed', 'cancelled'].includes(job.status)) break
+          } catch {
+            // transient error — keep polling
+          }
+        }
+        await refreshClips()
       }
     } catch (err) {
       console.error('Scan failed:', err)
