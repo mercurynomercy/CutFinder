@@ -20,6 +20,8 @@ export interface ThumbnailCardProps extends React.HTMLAttributes<HTMLDivElement>
   rollType?: 'a' | 'b'
   /** Clip duration in seconds (displayed as label) */
   duration?: number | null
+  /** Capture time ISO string (e.g. "2026-01-15T…") — displayed as YYYY-MM-DD */
+  captureTime?: string | null
   /** Whether the card is selected (highlighted with ring) */
   isSelected?: boolean
   /** Processing status — 'partial' shows a "needs re-analyze" marker */
@@ -43,6 +45,10 @@ const ThumbnailCard = React.forwardRef<HTMLDivElement, ThumbnailCardProps>(
       const min = Math.floor(s / 60)
       const sec = s % 60
       return `${min}:${sec.toString().padStart(2, '0')}`
+    }
+
+    const formatCaptureDate = (iso: string) => {
+      return iso.slice(0, 10).replace(/-/g, '/') // "2026-01-15" → "2026/01/15"
     }
 
     return (
@@ -165,6 +171,12 @@ const ThumbnailCard = React.forwardRef<HTMLDivElement, ThumbnailCardProps>(
               ) : null}
             </div>
           ) : null}
+
+          {captureTime && (
+            <p className="text-right text-[10px] tabular-nums text-[--text-muted]">
+              {formatCaptureDate(captureTime)}
+            </p>
+          )}
         </div>
       </div>
     )

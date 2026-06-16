@@ -180,6 +180,10 @@ export function DetailPanel({ clipId, onClose }: DetailPanelProps) {
     return () => document.removeEventListener('keydown', handleKey)
   }, [clipId, onClose])
 
+  const captureDate = clip.capture_time ? (() => {
+    return new Date(clip.capture_time).toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' })
+  }) : null
+
   // Fetch clip detail when id changes
   useEffect(() => {
     if (clipId === null) return
@@ -297,6 +301,16 @@ export function DetailPanel({ clipId, onClose }: DetailPanelProps) {
                   </p>
                   <p className="mt-0.5 break-all text-sm text-[--text-primary]">{clip.source_path}</p>
                 </div>
+
+                {/* ── Capture date ─────────────────────── */}
+                {captureDate && (
+                  <div>
+                    <p className="text-xs font-medium uppercase tracking-wider text-[--text-muted]">
+                      Capture date{clip.date_source === 'file' ? ' (from file time)' : ''}
+                    </p>
+                    <p className="mt-0.5 text-sm tabular-nums text-[--text-primary]">{captureDate}</p>
+                  </div>
+                )}
 
                 {/* ── Thumbnail preview (compact) ────────── */}
                 <div className="relative h-40 w-full overflow-hidden rounded-lg bg-[--surface-2]">
