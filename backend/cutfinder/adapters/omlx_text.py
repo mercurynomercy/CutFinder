@@ -123,7 +123,10 @@ class OmlxSummarizer(Summarizer):
         prompt_template = _SUMMARIZE_PROMPTS.get(
             self._config.prefs.output_language, _SUMMARIZE_PROMPT_ZH
         )
-        prompt = prompt_template.format(transcript_text=transcript_text)
+        # `/no_think` is Qwen3's soft switch to skip the <think> reasoning block,
+        # so the (capped) token budget goes to the JSON answer instead of being
+        # exhausted mid-reasoning. Harmless trailing text for non-Qwen models.
+        prompt = prompt_template.format(transcript_text=transcript_text) + "\n\n/no_think"
         max_retries = 2
 
         for attempt in range(1 + max_retries):

@@ -61,6 +61,8 @@ export function Gallery({ clips, selectedClipId, onSelect }: GalleryProps) {
           duration={clip.duration_s ?? undefined}
           thumbnailUrl={(typeof clip.thumbnail_path === 'string' && clip.thumbnail_path) || undefined}
           status={clip.status}
+          summary={clip.summary || clip.description || undefined}
+          tags={clip.tags?.map((t) => t.name)}
           isSelected={selectedClipId === clip.id}
           onClick={() => onSelect(clip.id)}
         />

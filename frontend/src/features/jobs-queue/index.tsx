@@ -89,9 +89,15 @@ function JobRow({ job, onChanged }: { job: JobStatus; onChanged: () => void }) {
         </span>
       </td>
       <td className="px-4 py-3 text-sm tabular-nums text-[--text-secondary]">
-        {job.done}/{job.total}
-        {job.failed > 0 && (
-          <span className="ml-2 text-[--error]">失败 {job.failed}</span>
+        {job.total === 0 && job.status === 'done' ? (
+          <span className="text-[--text-muted]">无新文件</span>
+        ) : (
+          <>
+            {job.done}/{job.total}
+            {job.failed > 0 && (
+              <span className="ml-2 text-[--error]">失败 {job.failed}</span>
+            )}
+          </>
         )}
       </td>
       <td className="px-4 py-3 text-sm text-[--text-muted]">{formatTime(job.started_at)}</td>

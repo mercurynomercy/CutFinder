@@ -9,8 +9,15 @@ Usage:
 
 import { useEffect, useState } from 'react'
 
-import type { TagItem } from '@/api/client'
 import { api } from '@/api/client'
+
+/** Extract the YYYY-MM-DD date for a clip (embedded capture time preferred). */
+function clipDate(c: { capture_time?: string | null; created_at?: string }): string | null {
+  const raw = c.capture_time || c.created_at
+  if (!raw) return null
+  const d = new Date(raw)
+  return isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10)
+}
 
 // ── Filter state interface (mirrors ClipFilter) ────────────────
 
@@ -32,20 +39,26 @@ export interface FiltersProps {
 export function Filters({ onFilterChange }: FiltersProps) {
   const [filters, setFilters] = useState<FiltersState>(DEFAULT_FILTERS)
 
-  // Collect all unique tags from clips (fetched once on mount)
-  const [allTags, setAllTags] = useState<TagItem[]>([])
+  // Unique tag names and dates derived from the clip list (fetched on mount).
+  const [allTags, setAllTags] = useState<string[]>([])
+  const [allDates, setAllDates] = useState<string[]>([])
 
   useEffect(() => {
     let cancelled = false
-    // Fetch clips just to extract unique tags — in a real app this might be a dedicated endpoint
     api.listClips()
-      .then(() => {
+      .then((clips) => {
         if (cancelled) return
-        // Placeholder — will be populated when the backend adds a tags list endpoint
-        // (or includes tags in the clip list response).
-        setAllTags([])
+        const tagNames = new Set<string>()
+        const dates = new Set<string>()
+        for (const c of clips) {
+          c.tags?.forEach((t) => tagNames.add(t.name))
+          const d = clipDate(c)
+          if (d) dates.add(d)
+        }
+        setAllTags([...tagNames].sort())
+        setAllDates([...dates].sort().reverse()) // newest first
       })
-      .catch(() => setAllTags([])) // ignore errors for tags
+      .catch(() => { setAllTags([]); setAllDates([]) })
 
     return () => { cancelled = true }
   }, [])
@@ -103,7 +116,9 @@ export function Filters({ onFilterChange }: FiltersProps) {
           className="w-full rounded-md border border-[--border] bg-[--surface-2] px-3 py-1.5 text-xs text-[--text-primary] outline-none transition-colors focus:border-[--primary]"
         >
           <option value="">All dates</option>
-          {/* Date options would be populated from clip data — placeholder */}
+          {allDates.map((d) => (
+            <option key={d} value={d}>{d}</option>
+          ))}
         </select>
       </div>
 
@@ -116,15 +131,15 @@ export function Filters({ onFilterChange }: FiltersProps) {
           <div className="flex flex-wrap gap-1.5">
             {allTags.map((tag) => (
               <button
-                key={tag.name}
-                onClick={() => updateFilter('tag', filters.tag === tag.name ? null : tag.name)}
+                key={tag}
+                onClick={() => updateFilter('tag', filters.tag === tag ? null : tag)}
                 className={`rounded-full border px-2.5 py-0.5 text-xs font-medium transition-colors ${
-                  filters.tag === tag.name
+                  filters.tag === tag
                     ? 'border-[--primary] bg-[--primary-soft] text-[--primary]'
                     : 'border-[--border] bg-[--surface-2] text-[--text-secondary] hover:border-[--border-strong]'
                 }`}
               >
-                {tag.name}
+                {tag}
               </button>
             ))}
           </div>

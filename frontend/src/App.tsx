@@ -55,9 +55,12 @@ export default function App() {
   const filteredClips = clips.filter((clip) => {
     if (appliedFilters.roll_type && clip.roll_type !== appliedFilters.roll_type) return false
     if (appliedFilters.tag && !clip.tags?.some((t) => t.name === appliedFilters.tag)) return false
-    if (appliedFilters.date && clip.created_at) {
-      const clipDate = new Date(clip.created_at).toISOString().slice(0, 10)
-      if (appliedFilters.date! !== '' && !clipDate.startsWith(appliedFilters.date!) && appliedFilters.date!.length > 4) return false
+    if (appliedFilters.date) {
+      const raw = clip.capture_time || clip.created_at
+      if (!raw) return false
+      const d = new Date(raw)
+      const clipDate = isNaN(d.getTime()) ? '' : d.toISOString().slice(0, 10)
+      if (clipDate !== appliedFilters.date) return false
     }
     return true
   })

@@ -51,6 +51,8 @@ export interface ClipSummary {
   description?: string | null
   status?: string          // 'pending' | 'processing' | 'done' | 'failed'
   created_at?: string      // used for client-side date filtering
+  capture_time?: string | null  // embedded EXIF capture time (ISO); primary date source
+  date_source?: string     // 'embedded' | 'file'
   tags?: TagItem[]         // present on detail / mock data; absent from the list endpoint
 }
 

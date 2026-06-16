@@ -79,7 +79,7 @@ describe('ThumbnailCard', () => {
   it('falls back to API endpoint when thumbnailUrl is a server-side path starting with /', () => {
     const container = render(<ThumbnailCard {...baseProps} thumbnailUrl="/thumbnails/42.jpg" />)
     const img = container.container.querySelector('img') as HTMLImageElement | null
-    expect(img?.src).toContain('/api/thumbnails/42')
+    expect(img?.src).toContain('/api/clips/42/thumbnail')
   })
 
   it('uses absolute path directly when thumbnailUrl starts with http', () => {
@@ -88,11 +88,11 @@ describe('ThumbnailCard', () => {
     expect(img?.src).toContain('http://example.com/thumb.jpg')
   })
 
-  it('prepends /api/thumbnails/ when thumbnailUrl is a relative path not starting with /', () => {
+  it('falls back to the clip thumbnail endpoint when thumbnailUrl is a relative path not starting with /', () => {
     const container = render(<ThumbnailCard {...baseProps} thumbnailUrl="thumb.jpg" />)
     const img = container.container.querySelector('img') as HTMLImageElement | null
     // In jsdom, img.src is a full URL; check the path portion instead
-    expect(img?.src).toContain('/api/thumbnails/42') // clipId is 42
+    expect(img?.src).toContain('/api/clips/42/thumbnail') // clipId is 42
   })
 
   it('sets alt text from sourcePath on the image', () => {

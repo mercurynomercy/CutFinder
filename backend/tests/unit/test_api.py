@@ -108,7 +108,7 @@ class TestScanEndpoint:
         """Valid candidates → 200 with job_id."""
 
         class FakeQueue:
-            async def enqueue_scan(self, candidates):  # noqa: D102
+            async def enqueue_scan(self, candidates, job_id=None):  # noqa: D102
                 return 42
 
         from cutfinder.api.routes import (  # noqa: E402
@@ -131,7 +131,7 @@ class TestScanEndpoint:
         """Empty candidate list → 200 with job_id (job has total=0)."""
 
         class FakeQueue:
-            async def enqueue_scan(self, candidates):  # noqa: D102
+            async def enqueue_scan(self, candidates, job_id=None):  # noqa: D102
                 return 99
 
         from cutfinder.api.routes import (  # noqa: E402
@@ -153,7 +153,7 @@ class TestScanEndpoint:
         """Candidate without 'fingerprint' → 422 validation error."""
 
         class FakeQueue:
-            async def enqueue_scan(self, candidates):  # noqa: D102
+            async def enqueue_scan(self, candidates, job_id=None):  # noqa: D102
                 return 1
 
         from cutfinder.api.routes import (  # noqa: E402
@@ -171,7 +171,7 @@ class TestScanEndpoint:
         """Candidate with empty path → 422 (min_length=1)."""
 
         class FakeQueue:
-            async def enqueue_scan(self, candidates):  # noqa: D102
+            async def enqueue_scan(self, candidates, job_id=None):  # noqa: D102
                 return 1
 
         from cutfinder.api.routes import (  # noqa: E402
@@ -189,7 +189,7 @@ class TestScanEndpoint:
         """Candidate with non-hex fingerprint → 422."""
 
         class FakeQueue:
-            async def enqueue_scan(self, candidates):  # noqa: D102
+            async def enqueue_scan(self, candidates, job_id=None):  # noqa: D102
                 return 1
 
         from cutfinder.api.routes import (  # noqa: E402

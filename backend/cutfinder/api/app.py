@@ -129,6 +129,7 @@ def _build_into(ctx: LibraryContext, library_path: Union[str, Path]) -> None:
         repository=repository,
         library_writer=FsLibraryWriter(config),
         num_frames=prefs.broll_frame_count,
+        thumbnail_dir=cutfinder_dir / "thumbnails",
     )
 
     worker_queue = WorkerQueue(orchestrator=orchestrator, repository=repository)

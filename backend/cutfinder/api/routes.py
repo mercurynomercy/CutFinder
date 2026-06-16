@@ -47,6 +47,8 @@ def _build_router(ctx: Any) -> Any:
         from pydantic import ValidationError  # noqa: E402
         from cutfinder.domain.models import ClipCandidate  # noqa: E402
 
+        import asyncio as _asyncio  # noqa: E402
+
         body = await request.body()
         if body and len(body.strip()) > 0:
             # Explicit candidates provided — use them directly.
@@ -60,6 +62,8 @@ def _build_router(ctx: Any) -> Any:
                 candidates_obj = [ClipCandidate(**c) for c in candidates_list]
             except ValidationError as exc:
                 raise HTTPException(status_code=422, detail=str(exc)) from exc
+            # Create the job up front so the task list shows it immediately.
+            job_id = ctx.repository.create_job(total=len(candidates_obj), kind="scan").id if ctx.repository else None
         else:
             # No body — run a filesystem scan over configured source folders.
             from cutfinder.config import load_config  # noqa: E402
@@ -73,11 +77,19 @@ def _build_router(ctx: Any) -> Any:
 
             from cutfinder.pipeline.scanner import Scanner  # noqa: E402
 
+            # Create the job *before* walking the filesystem so the task list
+            # shows it immediately (the fingerprinting walk can take seconds).
+            job_id = ctx.repository.create_job(total=0, kind="scan").id if ctx.repository else None
+
             scanner = Scanner(repository=ctx.repository)
-            candidates_obj = scanner.scan(source_folders, extensions)
+            # Run the (blocking) filesystem walk off the event loop so /jobs polling
+            # stays responsive while a large folder is being scanned.
+            candidates_obj = await _asyncio.to_thread(scanner.scan, source_folders, extensions)
+            if job_id is not None and ctx.repository is not None:
+                ctx.repository.update_job(job_id, total=len(candidates_obj))
 
         logger.info("Scan returned %d candidates, enqueueing...", len(candidates_obj))
-        job_id = await ctx.worker_queue.enqueue_scan(candidates_obj)
+        job_id = await ctx.worker_queue.enqueue_scan(candidates_obj, job_id=job_id)
         logger.info("Scan enqueued, job_id=%s", job_id)
         return {"job_id": job_id}
 
@@ -226,6 +238,9 @@ def _build_router(ctx: Any) -> Any:
         filters = ClipFilter(date=date, roll_type=roll_type, tag=tag)
         clips = ctx.repository.query_clips(filters)
 
+        def _iso(value: Any) -> Any:
+            return value.isoformat() if value is not None and hasattr(value, 'isoformat') else value
+
         return [
             {
                 "id": c.id,
@@ -237,6 +252,12 @@ def _build_router(ctx: Any) -> Any:
                 "duration_s": c.duration_s,
                 "thumbnail_path": getattr(c, 'thumbnail_path', None),
                 "status": c.status,
+                "capture_time": _iso(getattr(c, 'capture_time', None)),
+                "date_source": getattr(c, 'date_source', 'file'),
+                "tags": [
+                    {"name": t.name, "source": getattr(t, 'source', 'auto')}
+                    for t in ctx.repository.get_tags(c.id)
+                ],
             }
             for c in clips
         ]

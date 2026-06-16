@@ -21,6 +21,12 @@ def parse_json_object(text: str | None) -> dict[str, Any] | None:
     if not text:
         return None
 
+    # Drop any <think>…</think> reasoning block (Qwen3 thinking models emit one
+    # before the answer; its prose/braces otherwise derail JSON extraction).
+    text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL)
+    # Also drop an unterminated leading <think> (output truncated mid-reasoning).
+    text = re.sub(r"^.*?</think>", "", text, flags=re.DOTALL)
+
     stripped = text.strip()
     if stripped.startswith("```"):
         stripped = stripped.strip("`")

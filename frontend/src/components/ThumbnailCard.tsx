@@ -24,11 +24,15 @@ export interface ThumbnailCardProps extends React.HTMLAttributes<HTMLDivElement>
   isSelected?: boolean
   /** Processing status — 'partial' shows a "needs re-analyze" marker */
   status?: string
+  /** AI summary (A-roll) or description (B-roll) — shown under the filename */
+  summary?: string | null
+  /** Tag names — shown as small chips under the summary */
+  tags?: string[]
 }
 
 const ThumbnailCard = React.forwardRef<HTMLDivElement, ThumbnailCardProps>(
   (
-    { thumbnailUrl, sourcePath, clipId, rollType, duration, isSelected = false, status, className, ...props },
+    { thumbnailUrl, sourcePath, clipId, rollType, duration, isSelected = false, status, summary, tags, className, ...props },
     ref,
   ) => {
     const formatDuration = (s: number) => {
@@ -55,7 +59,7 @@ const ThumbnailCard = React.forwardRef<HTMLDivElement, ThumbnailCardProps>(
         <div className="relative w-full pb-[56.25%]"> {/* 16:9 = 9/16 = 56.25% */}
           {thumbnailUrl ? (
             <img
-              src={/^(https?:)?\/\//.test(thumbnailUrl) ? thumbnailUrl : `/api/thumbnails/${clipId}`}
+              src={/^(https?:)?\/\//.test(thumbnailUrl) ? thumbnailUrl : `/api/clips/${clipId}/thumbnail`}
               alt={sourcePath}
               className="absolute inset-0 h-full w-full object-cover transition-transform duration-200 group-hover:scale-[1.02]"
               loading="lazy"
@@ -112,11 +116,40 @@ const ThumbnailCard = React.forwardRef<HTMLDivElement, ThumbnailCardProps>(
           )}
         </div>
 
-        {/* Info row (source path truncated, roll type) */}
-        <div className="flex items-center justify-between px-3 py-2">
-          <p className="max-w-[70%] truncate text-xs text-[--text-secondary]" title={sourcePath}>
-            {sourcePath.split('/').pop() || sourcePath}
-          </p>
+        {/* Info row (filename, summary, tags) */}
+        <div className="flex flex-col gap-1.5 px-3 py-2">
+          <div className="flex items-center gap-1.5">
+            {rollType && (
+              <Badge type={rollType} className="shrink-0 px-1.5">
+                {rollType === 'a' ? 'A-roll' : 'B-roll'}
+              </Badge>
+            )}
+            <p className="truncate text-xs text-[--text-secondary]" title={sourcePath}>
+              {sourcePath.split('/').pop() || sourcePath}
+            </p>
+          </div>
+
+          {summary ? (
+            <p className="line-clamp-2 text-[11px] leading-snug text-[--text-muted]" title={summary}>
+              {summary}
+            </p>
+          ) : null}
+
+          {tags && tags.length > 0 ? (
+            <div className="flex flex-wrap gap-1">
+              {tags.slice(0, 3).map((t) => (
+                <span
+                  key={t}
+                  className="truncate rounded bg-[--surface-2] px-1.5 py-0.5 text-[10px] text-[--text-secondary]"
+                >
+                  {t}
+                </span>
+              ))}
+              {tags.length > 3 ? (
+                <span className="px-1 py-0.5 text-[10px] text-[--text-muted]">+{tags.length - 3}</span>
+              ) : null}
+            </div>
+          ) : null}
         </div>
       </div>
     )

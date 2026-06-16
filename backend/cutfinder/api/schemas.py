@@ -93,6 +93,7 @@ class ClipListItem(BaseModel):
     thumbnail_path: Optional[str] = None
     status: str  # ClipStatus string
     capture_time: Optional[Any] = None
+    tags: list[TagOut] = Field(default_factory=list)
 
 
 # ── Edit requests (PATCH /clips/{id}) ───────────────────────────

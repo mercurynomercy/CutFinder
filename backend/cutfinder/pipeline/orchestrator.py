@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import datetime as _dt
 import logging
+import tempfile
 from collections.abc import Callable
 from dataclasses import dataclass, field  # noqa: F401 — field imported for future use
 from pathlib import Path
@@ -151,6 +152,7 @@ class Orchestrator:
         repository: CatalogRepository | None = None,
         library_writer: LibraryWriter | None = None,
         num_frames: int = 3,
+        thumbnail_dir: Path | None = None,
     ) -> None:
         self.probe = probe
         self.thumbnail_maker = thumbnail_maker
@@ -177,6 +179,10 @@ class Orchestrator:
 
         #: Number of frames to extract for B-roll vision tagging.
         self.num_frames = num_frames
+
+        #: Directory thumbnails are written to. When None, a system temp dir is
+        #: used. We must NEVER write next to the source file (read-only source).
+        self.thumbnail_dir = thumbnail_dir
 
     # ── Public API ────────────────────────────────────────────────
 
@@ -233,7 +239,7 @@ class Orchestrator:
 
         # ── 2. Thumbnail ────────────────────────────────────────
         try:
-            thumbnail_path = self._do_thumbnail(candidate.path)
+            thumbnail_path = self._do_thumbnail(candidate.path, candidate.fingerprint)
             emit(ProgressEvent(step="thumbnail", ok=True, detail=thumbnail_path))
         except Exception as exc:  # noqa: BLE001
             self._mark_error(candidate, "thumbnail", str(exc))
@@ -408,11 +414,18 @@ class Orchestrator:
         probe_path: Path = Path(path) if isinstance(path, str) else path
         return self.probe.probe(probe_path)
 
-    def _do_thumbnail(self, path: str) -> str:
-        """Generate thumbnail. Returns the output file path as string."""
+    def _do_thumbnail(self, path: str, fingerprint: str) -> str:
+        """Generate thumbnail in the thumbnail dir (never next to the source).
+
+        The source library is read-only, so thumbnails go to ``thumbnail_dir``
+        (``<library>/.cutfinder/thumbnails/``) or a system temp dir, named by the
+        clip fingerprint to stay stable and collision-free across rescans.
+        """
         if self.thumbnail_maker is None:
             return ""  # no thumbnail generated
-        out_path = Path(path).with_suffix(".jpg") if isinstance(path, str) else path.with_suffix(".jpg")
+        out_dir = self.thumbnail_dir if self.thumbnail_dir is not None else Path(tempfile.gettempdir())
+        out_dir.mkdir(parents=True, exist_ok=True)
+        out_path = out_dir / f"{fingerprint}.jpg"
         self.thumbnail_maker.make(Path(path), out_path)
         return str(out_path)
 
