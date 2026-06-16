@@ -32,6 +32,7 @@ def _build_router(
     save_prefs_fn: Any,   # config.save_prefs(prefs, library_path) -> None
     get_library_fn: Any,  # callable that returns current library path or None
     save_global_fn: Any,  # config.save_global_settings(dict) -> None
+    reload_fn: Any = None,  # async () -> None: rebuild adapters for current lib
 ) -> APIRouter:
     """Construct and return the settings ``APIRouter``."""
 
@@ -109,6 +110,17 @@ def _build_router(
             save_prefs_fn(updated, library_path)
         except Exception as exc:  # noqa: BLE001
             raise HTTPException(status_code=503, detail=f"Save error: {exc}") from exc
+
+        # Rebuild the live pipeline so the new settings (models, language, VAD,
+        # OMLX endpoint/key, …) take effect without a restart. The values are
+        # snapshotted into the adapters at build time, so a save alone is inert.
+        # Best-effort: the settings are already persisted; a failed reload only
+        # means a restart is needed for them to apply.
+        if reload_fn is not None:
+            try:
+                await reload_fn()
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("Settings saved but live reload failed: %s", exc)
 
         return {"status": "ok", "message": "Settings updated"}
 

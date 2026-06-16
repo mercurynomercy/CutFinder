@@ -898,6 +898,40 @@ class TestSettingsEndpoints:
 
         assert resp.status_code == 404
 
+    def test_put_settings_triggers_live_reload(self) -> None:
+        """A successful PUT rebuilds the live pipeline via reload_fn."""
+        from cutfinder.config import AppConfig, EnvSettings, Prefs
+
+        reloaded: list[bool] = []
+
+        async def reload_fn() -> None:
+            reloaded.append(True)
+
+        config = AppConfig(env=EnvSettings(), prefs=Prefs(library_path="/lib"))
+
+        from cutfinder.api.settings_routes import (  # noqa: E402
+            _build_router as settings_router,
+        )
+
+        router = settings_router(  # type: ignore[call-arg]
+            load_config_fn=lambda _p: config,
+            save_prefs_fn=lambda _prefs, _label: None,
+            get_library_fn=lambda: "/lib",
+            save_global_fn=lambda _updates: None,
+            reload_fn=reload_fn,
+        )
+
+        from fastapi import FastAPI  # noqa: E402
+
+        app = FastAPI()
+        app.include_router(router)
+
+        client = TestClient(app, raise_server_exceptions=False)  # type: ignore[arg-type]
+        resp = client.put("/api/settings", json={"text_model": "custom-model"})
+
+        assert resp.status_code == 200
+        assert reloaded == [True]
+
 
 # ── Edge cases and integration-like tests ─────────────────────
 

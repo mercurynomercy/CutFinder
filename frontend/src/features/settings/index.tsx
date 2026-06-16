@@ -398,17 +398,21 @@ export function SettingsPage({ onSave }: SettingsPageProps) {
               />
 
               <label className="mt-3 block text-sm text-[--text-secondary]">Text model</label>
-              <p className="mb-1 text-xs text-[--text-muted]">用于 A-roll 的中文摘要 + 标签生成（通过 OMLX，纯文本模型）</p>
+              <p className="mb-1 text-xs text-[--text-muted]">用于 A-roll 的中文摘要 + 标签生成（通过 OMLX，纯文本模型）。留空则用默认 Qwen3.6-35B-A3B。</p>
               <input
-                type="text" value={prefs.text_model} readOnly
-                className="w-full rounded-md border border-[--border] bg-[--surface-2] px-3 py-1.5 text-sm"
+                type="text" value={prefs.text_model}
+                onChange={(e) => updateField('text_model', e.target.value)}
+                placeholder="Qwen3.6-35B-A3B"
+                className="w-full rounded-md border border-[--border] bg-[--surface-2] px-3 py-1.5 text-sm font-mono outline-none focus:border-[--primary]"
               />
 
               <label className="mt-3 block text-sm text-[--text-secondary]">Vision model</label>
-              <p className="mb-1 text-xs text-[--text-muted]">用于 B-roll 的视觉标签 + 描述生成（通过 OMLX，多模态模型）</p>
+              <p className="mb-1 text-xs text-[--text-muted]">用于 B-roll 的视觉标签 + 描述生成（通过 OMLX，多模态模型）。留空则用默认 Qwen3-VL-8B。</p>
               <input
-                type="text" value={prefs.vision_model} readOnly
-                className="w-full rounded-md border border-[--border] bg-[--surface-2] px-3 py-1.5 text-sm"
+                type="text" value={prefs.vision_model}
+                onChange={(e) => updateField('vision_model', e.target.value)}
+                placeholder="Qwen3-VL-8B"
+                className="w-full rounded-md border border-[--border] bg-[--surface-2] px-3 py-1.5 text-sm font-mono outline-none focus:border-[--primary]"
               />
             </fieldset>
 

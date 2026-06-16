@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 from dotenv import dotenv_values
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationInfo, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # ---------------------------------------------------------------------------
@@ -165,6 +165,21 @@ class Prefs(BaseModel, frozen=True):
     vad_threshold: float = Field(default=0.35, gt=0, le=1)
     # Language for AI-generated summaries / visual descriptions ("zh" or "en").
     output_language: Literal["zh", "en"] = "zh"
+
+    @field_validator("text_model", "vision_model", "whisper_model", mode="before")
+    @classmethod
+    def _blank_falls_back_to_default(
+        cls, value: object, info: ValidationInfo
+    ) -> object:
+        """Treat an empty/whitespace model name as "use the default".
+
+        The Settings UI lets the user clear these fields; rather than persist an
+        empty string (which would break inference), fall back to the field's
+        default so behaviour matches "leave blank for the default".
+        """
+        if value is None or (isinstance(value, str) and not value.strip()):
+            return cls.model_fields[info.field_name].default
+        return value
 
 
 # ---------------------------------------------------------------------------

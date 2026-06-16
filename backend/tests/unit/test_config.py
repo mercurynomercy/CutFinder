@@ -229,6 +229,19 @@ class TestPrefs:
         assert prefs.broll_frame_count == 5
         assert prefs.vad_threshold == 0.2
 
+    def test_blank_model_falls_back_to_default(self) -> None:
+        """Empty/whitespace model names fall back to their defaults."""
+        prefs = Prefs(
+            library_path="/tmp/lib",
+            text_model="",
+            vision_model="   ",
+            whisper_model="custom-whisper",
+        )
+
+        assert prefs.text_model == "Qwen3.6-35B-A3B"
+        assert prefs.vision_model == "Qwen3-VL-8B"
+        assert prefs.whisper_model == "custom-whisper"
+
     def test_serialisation_round_trip(self) -> None:
         """Prefs serialises to dict and back without loss."""
         prefs = Prefs(

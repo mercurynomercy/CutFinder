@@ -43,7 +43,7 @@ const ThumbnailCard = React.forwardRef<HTMLDivElement, ThumbnailCardProps>(
   ) => {
     const formatDuration = (s: number) => {
       const min = Math.floor(s / 60)
-      const sec = s % 60
+      const sec = Math.floor(s % 60)
       return `${min}:${sec.toString().padStart(2, '0')}`
     }
 
