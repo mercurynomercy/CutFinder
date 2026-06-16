@@ -511,7 +511,12 @@ class WorkerQueue:
         self._emit({"type": "clip_started", "path": candidate.path})
 
         try:
-            clip_id = self._orchestrator.process_clip(candidate) if self._orchestrator else None
+            # process_clip is blocking (ffmpeg/whisper/OMLX); run it off the event
+            # loop so the API (SSE, /jobs, /clips) stays responsive during a scan.
+            clip_id = (
+                await asyncio.to_thread(self._orchestrator.process_clip, candidate)
+                if self._orchestrator else None
+            )
             self._emit({
                 "type": "clip_done",
                 "path": candidate.path,
@@ -535,8 +540,10 @@ class WorkerQueue:
         self._emit({"type": "reanalyze_started", "clip_id": clip_id})
 
         try:
+            # reanalyze is blocking (whisper/OMLX); run it off the event loop.
             success = (
-                self._orchestrator.reanalyze(clip_id) if self._orchestrator else True
+                await asyncio.to_thread(self._orchestrator.reanalyze, clip_id)
+                if self._orchestrator else True
             )
             if success:
                 self._emit({"type": "reanalyze_done", "clip_id": clip_id})

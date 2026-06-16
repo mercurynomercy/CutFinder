@@ -80,6 +80,9 @@ class CatalogRepository(Protocol):
         (see detailed-design §3.11 re-analyze semantics).
         """
 
+    def set_status(self, clip_id: int, status: str) -> None:
+        """Set a clip's processing status (e.g. 'partial' → 'done')."""
+
     # ── Transcript (A-roll) ───────────────────────────────────────
 
     def save_transcript(self, clip_id: int, t: Transcript) -> None:

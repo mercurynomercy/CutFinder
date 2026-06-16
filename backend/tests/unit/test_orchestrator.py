@@ -784,6 +784,39 @@ class TestReanalyze:
         assert updated_clip is not None
         assert updated_clip.summary == "全新的中文摘要"  # old summary replaced
 
+    def test_clears_partial_status_on_success(self):
+        """A 'partial' clip (scan-time analysis failed) becomes 'done' after a
+        successful reanalyze — otherwise the UI keeps showing the warning marker."""
+        repo = FakeCatalogRepository()
+
+        partial_clip = _make_clip(
+            id=50, fingerprint="3333333333333339", source_path="/tmp/partial.mp4",
+            roll_type="a", status="partial", summary=None, description=None,
+        )
+        repo._clips[50] = partial_clip
+        repo._clip_by_fp["partial_fp"] = 50
+
+        probe = MagicMock()
+        probe.probe.return_value = _make_metadata()
+
+        transcriber = MagicMock()
+        transcriber.transcribe.return_value = _make_transcript()
+
+        summarizer = MagicMock()
+        summarizer.summarize.return_value = _make_summary()
+
+        orch = Orchestrator(
+            probe=probe, thumbnail_maker=None, frame_extractor=None,
+            speech_detector=MagicMock(speech_ratio=MagicMock(return_value=0.9)),
+            transcriber=transcriber, summarizer=summarizer,
+            vision_tagger=None, repository=repo, library_writer=None,
+        )
+
+        assert orch.reanalyze(50) is True
+        updated = repo.get_clip(50)
+        assert updated is not None
+        assert updated.status == "done"  # partial marker cleared
+
     def test_no_library_writer_call(self):
         """reanalyze does NOT call LibraryWriter.copy_into — no file copying."""
         repo = FakeCatalogRepository()

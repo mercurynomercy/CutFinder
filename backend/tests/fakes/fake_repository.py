@@ -247,6 +247,12 @@ class FakeCatalogRepository:
             })
         self.correct_roll_calls.append((clip_id, roll))
 
+    def set_status(self, clip_id: int, status: str) -> None:
+        """Set a clip's processing status."""
+        clip = self._clips.get(clip_id)
+        if clip:
+            self._clips[clip_id] = clip.model_copy(update={"status": status})
+
     # ── Analysis updates (preserve manual tags + roll) ─────────────
 
     def update_analysis(self, clip_id: int, r: AnalysisResult) -> None:

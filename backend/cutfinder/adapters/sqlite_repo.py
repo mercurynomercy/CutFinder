@@ -403,6 +403,11 @@ class SqliteRepository:
         )
         self._conn.commit()
 
+    def set_status(self, clip_id: int, status: str) -> None:
+        c = self._conn.cursor()
+        c.execute("UPDATE clips SET status = ? WHERE id = ?", (status, clip_id))
+        self._conn.commit()
+
     # ── Re-analyze: update only AI-generated fields ───────────
 
     def update_analysis(self, clip_id: int, r: AnalysisResult) -> None:

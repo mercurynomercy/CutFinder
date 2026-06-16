@@ -402,6 +402,9 @@ class Orchestrator:
                 t = analysis.transcript
                 if getattr(t, 'full_text', ''):
                     self.repository.save_transcript(clip_id, t)
+            # Re-analysis succeeded (the AI step above didn't raise), so clear any
+            # prior 'partial' marker left by a failed scan-time analysis.
+            self.repository.set_status(clip_id, "done")
 
         return True
 
