@@ -123,10 +123,7 @@ class OmlxSummarizer(Summarizer):
         prompt_template = _SUMMARIZE_PROMPTS.get(
             self._config.prefs.output_language, _SUMMARIZE_PROMPT_ZH
         )
-        # `/no_think` is Qwen3's soft switch to skip the <think> reasoning block,
-        # so the (capped) token budget goes to the JSON answer instead of being
-        # exhausted mid-reasoning. Harmless trailing text for non-Qwen models.
-        prompt = prompt_template.format(transcript_text=transcript_text) + "\n\n/no_think"
+        prompt = prompt_template.format(transcript_text=transcript_text)
         max_retries = 2
 
         for attempt in range(1 + max_retries):
@@ -139,6 +136,10 @@ class OmlxSummarizer(Summarizer):
                     messages=[{"role": "user", "content": prompt}],
                     max_tokens=512,
                     temperature=0.7,
+                    # Disable Qwen3 thinking so the token budget goes to the JSON
+                    # answer instead of being spent on a <think> block. Passed via
+                    # the chat template (same knob OpenWebUI exposes).
+                    extra_body={"chat_template_kwargs": {"enable_thinking": False}},
                 )
             except APIConnectionError as e:
                 if attempt == max_retries:

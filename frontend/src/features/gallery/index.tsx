@@ -51,7 +51,7 @@ export function Gallery({ clips, selectedClipId, onSelect }: GalleryProps) {
   if (clips.length === 0) return <EmptyState />
 
   return (
-    <div className="grid flex-1 grid-cols-2 gap-3 overflow-y-auto p-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+    <div className="grid min-h-0 flex-1 auto-rows-min grid-cols-2 gap-3 overflow-y-auto p-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
       {clips.map((clip) => (
         <ThumbnailCard
           key={clip.id}

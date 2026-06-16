@@ -79,13 +79,6 @@ const ThumbnailCard = React.forwardRef<HTMLDivElement, ThumbnailCardProps>(
             </div>
           )}
 
-          {/* A/B roll badge overlay (top-left) */}
-          {rollType && (
-            <div className="absolute left-2 top-2">
-              <Badge type={rollType} />
-            </div>
-          )}
-
           {/* "Partial" marker (bottom-left) — AI analysis failed, can re-analyze */}
           {status === 'partial' && (
             <div

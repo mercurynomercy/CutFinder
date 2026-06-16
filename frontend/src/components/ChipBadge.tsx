@@ -26,8 +26,7 @@ export function Badge({ className, type, children, ...props }: BadgeProps) {
       )}
       {...props}
     >
-      {isA ? 'A' : 'B'}
-      {children && <span className="ml-1">{children}</span>}
+      {children ?? (isA ? 'A' : 'B')}
     </span>
   )
 }

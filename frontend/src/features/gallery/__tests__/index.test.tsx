@@ -71,7 +71,7 @@ describe('Gallery', () => {
     const badgeSpans = document.querySelectorAll('span[class*="rounded-full"]')
     let foundABadge = false
     for (const span of badgeSpans) {
-      if ((span.textContent?.trim() || '') === 'A') foundABadge = true
+      if ((span.textContent?.trim() || '') === 'A-roll') foundABadge = true
     }
     expect(foundABadge).toBe(true)
   })
@@ -82,7 +82,7 @@ describe('Gallery', () => {
     const badgeSpans = document.querySelectorAll('span[class*="rounded-full"]')
     let foundBBadge = false
     for (const span of badgeSpans) {
-      if ((span.textContent?.trim() || '') === 'B') foundBBadge = true
+      if ((span.textContent?.trim() || '') === 'B-roll') foundBBadge = true
     }
     expect(foundBBadge).toBe(true)
   })

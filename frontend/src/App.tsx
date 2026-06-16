@@ -154,9 +154,9 @@ export default function App() {
       </header>
 
       {/* Main layout: sidebar + gallery */}
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex min-h-0 flex-1 overflow-hidden">
         {/* Sidebar: filters + gallery */}
-        <div className="flex w-full overflow-hidden">
+        <div className="flex min-h-0 w-full overflow-hidden">
           {/* Filters sidebar (fixed width) */}
           <Filters onFilterChange={handleFilterChange} />
 

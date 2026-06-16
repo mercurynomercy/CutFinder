@@ -109,44 +109,20 @@ describe('ThumbnailCard', () => {
 
   // ── Roll type badge overlay ───────────────────────────────
 
-  it('renders Badge when rollType="a"', () => {
-    const container = render(<ThumbnailCard {...baseProps} rollType="a" />)
-    // The Badge renders a span with text "A" inside the top-left overlay div
-    const badgeSpans = container.container.querySelectorAll('span[class*="rounded-full"]')
-    expect(badgeSpans.length).toBeGreaterThanOrEqual(1)
+  it('renders an "A-roll" label next to the title when rollType="a"', () => {
+    render(<ThumbnailCard {...baseProps} rollType="a" />)
+    expect(screen.getByText('A-roll')).toBeInTheDocument()
   })
 
-  it('renders Badge with "B" text when rollType="b"', () => {
-    const container = render(<ThumbnailCard {...baseProps} rollType="b" />)
-    // Check for the badge span containing "B" in an absolutely positioned div
-    const absoluteDivs = container.container.querySelectorAll('div[class*="absolute"]')
-    let foundBTextInBadge = false
-    for (const absDiv of absoluteDivs) {
-      const badgeSpans = absDiv.querySelectorAll('span')
-      for (const span of badgeSpans) {
-        if ((span.textContent?.trim() || '') === 'B') {
-          foundBTextInBadge = true
-        }
-      }
-    }
-    expect(foundBTextInBadge).toBe(true)
+  it('renders a "B-roll" label next to the title when rollType="b"', () => {
+    render(<ThumbnailCard {...baseProps} rollType="b" />)
+    expect(screen.getByText('B-roll')).toBeInTheDocument()
   })
 
-  it('does not render roll type badge when rollType is undefined', () => {
-    const container = render(<ThumbnailCard {...baseProps} />)
-    // No Badge span should be present (the badge overlay div is conditionally rendered via rollType)
-    const absoluteDivs = container.container.querySelectorAll('div[class*="absolute"]')
-    let foundABBadgeInAbsoluteDiv = false
-    for (const absDiv of absoluteDivs) {
-      const badgeSpans = absDiv.querySelectorAll('span')
-      for (const span of badgeSpans) {
-        const text = (span.textContent?.trim() || '')
-        if ((text === 'A' || text === 'B')) {
-          foundABBadgeInAbsoluteDiv = true
-        }
-      }
-    }
-    expect(foundABBadgeInAbsoluteDiv).toBe(false)
+  it('does not render a roll type label when rollType is undefined', () => {
+    render(<ThumbnailCard {...baseProps} />)
+    expect(screen.queryByText('A-roll')).toBeNull()
+    expect(screen.queryByText('B-roll')).toBeNull()
   })
 
   // ── Duration label ────────────────────────────────────────

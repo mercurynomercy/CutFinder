@@ -7,20 +7,20 @@ import { Badge, Chip } from '../ChipBadge'
 // ── Badge (A/B roll type) ────────────────────────────────────────
 
 describe('Badge', () => {
-  it('renders A roll badge with correct text and classes when type="a"', () => {
-    const container = render(<Badge type="a">Extra</Badge>)
+  it('renders A roll badge with correct classes and label when type="a"', () => {
+    const container = render(<Badge type="a">A-roll</Badge>)
     const badge = container.container.firstChild as HTMLElement
     expect(badge).toHaveClass('bg-[--roll-a-soft]')
     expect(badge).toHaveClass('text-[--roll-a]')
-    expect(badge.textContent?.trim().startsWith('A')).toBe(true)
+    expect(badge.textContent?.trim()).toBe('A-roll')
   })
 
-  it('renders B roll badge with correct text and classes when type="b"', () => {
-    const container = render(<Badge type="b">Extra</Badge>)
+  it('renders B roll badge with correct classes and label when type="b"', () => {
+    const container = render(<Badge type="b">B-roll</Badge>)
     const badge = container.container.firstChild as HTMLElement
     expect(badge).toHaveClass('bg-[--roll-b-soft]')
     expect(badge).toHaveClass('text-[--roll-b]')
-    expect(badge.textContent?.trim().startsWith('B')).toBe(true)
+    expect(badge.textContent?.trim()).toBe('B-roll')
   })
 
   it('renders A badge without children', () => {
@@ -33,9 +33,10 @@ describe('Badge', () => {
     expect(container.container.firstChild).toHaveTextContent('B')
   })
 
-  it('renders children as secondary text after the A/B letter', () => {
+  it('renders children in place of the A/B letter', () => {
     const container = render(<Badge type="a">Clip 12</Badge>)
-    expect(container.container.firstChild).toHaveTextContent('AClip 12')
+    expect(container.container.firstChild).toHaveTextContent('Clip 12')
+    expect(container.container.firstChild?.textContent?.trim()).toBe('Clip 12')
   })
 
   it('passes through custom className', () => {
@@ -64,13 +65,12 @@ describe('Badge', () => {
     expect(span).toHaveClass('font-medium')
   })
 
-  it('wraps children in a <span> with ml-1 class', () => {
+  it('renders the label directly without an extra wrapper span', () => {
     const container = render(<Badge type="b">Label</Badge>)
-    // The children are wrapped in a <span> with ml-1
+    // Children render directly inside the single badge span (no inner wrapper).
     const spans = container.container.querySelectorAll('span')
-    expect(spans.length).toBeGreaterThanOrEqual(2) // outer span + inner wrapper for children
-    const childSpan = spans[1] as HTMLElement | null
-    expect(childSpan).toHaveClass('ml-1')
+    expect(spans.length).toBe(1)
+    expect(spans[0]).toHaveTextContent('Label')
   })
 })
 
