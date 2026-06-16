@@ -116,6 +116,11 @@ export interface UpdateSettingsBody {
   broll_frame_count?: number
   vad_threshold?: number
   output_language?: 'zh' | 'en'
+  // Machine-global keys (persisted to ~/.cutfinder/config.json, shared across
+  // libraries). Omit OMLX_API_KEY to leave the stored secret unchanged.
+  OMLX_BASE_URL?: string
+  OMLX_API_KEY?: string
+  WHISPER_MODEL_PATH?: string
 }
 
 export interface ClipFilter {

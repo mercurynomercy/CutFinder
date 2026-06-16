@@ -113,6 +113,14 @@ export function SettingsPage({ onSave }: SettingsPageProps) {
   // Form inputs
   const [extensions, setExtensions] = useState('')
 
+  // Machine-global env settings (OMLX endpoint/key, whisper path). These live
+  // in ~/.cutfinder/config.json — no .env needed. The API key is write-only:
+  // GET returns a mask, and we only send it when the user types a new value.
+  const [omlxBaseUrl, setOmlxBaseUrl] = useState('')
+  const [whisperPath, setWhisperPath] = useState('')
+  const [apiKeyInput, setApiKeyInput] = useState('')
+  const [apiKeyConfigured, setApiKeyConfigured] = useState(false)
+
   // Library binding (when no library is bound, the user sets one here first).
   const [libraryPath, setLibraryPath] = useState<string | null | undefined>(undefined)
   const [newLibraryPath, setNewLibraryPath] = useState('')
@@ -126,6 +134,10 @@ export function SettingsPage({ onSave }: SettingsPageProps) {
       if (lib.library_path) {
         const data = await api.getSettings()
         setPrefs(data.prefs)
+        setOmlxBaseUrl(data.env.OMLX_BASE_URL || '')
+        setWhisperPath(data.env.WHISPER_MODEL_PATH || '')
+        setApiKeyConfigured(Boolean(data.env.OMLX_API_KEY))
+        setApiKeyInput('')
       }
     } catch (err: unknown) {
       setError(err instanceof Error ? err : new Error(String(err)))
@@ -214,9 +226,19 @@ export function SettingsPage({ onSave }: SettingsPageProps) {
       // library_path is the active-library binding, not a normal pref — it's
       // changed via setLibrary (POST /api/library). Stripping it here keeps the
       // saved pref from diverging from the real binding.
-      const body = { ...prefs }
+      const body: UpdateSettingsBody = { ...prefs }
       delete body.library_path
+      // Machine-global keys: always send the (non-secret) endpoint + whisper
+      // path; only send the API key when the user typed a new one, so the
+      // stored secret is never overwritten by the mask.
+      body.OMLX_BASE_URL = omlxBaseUrl.trim()
+      body.WHISPER_MODEL_PATH = whisperPath.trim()
+      if (apiKeyInput.trim()) body.OMLX_API_KEY = apiKeyInput.trim()
       await api.putSettings(body)
+      if (apiKeyInput.trim()) {
+        setApiKeyConfigured(true)
+        setApiKeyInput('')
+      }
       onSave?.()
     } catch (err: unknown) {
       setError(err instanceof Error ? err : new Error(String(err)))
@@ -348,34 +370,78 @@ export function SettingsPage({ onSave }: SettingsPageProps) {
               </div>
             </fieldset>
 
+            {/* ── OMLX connection (machine-global) ─────── */}
+            <fieldset className="rounded-lg border border-[--border] bg-[--surface-1] p-4">
+              <legend className="text-sm font-medium text-[--text-primary]">OMLX connection</legend>
+              <p className="mt-1 text-xs leading-relaxed text-[--text-secondary]">
+                本地 OMLX 推理服务的地址和密钥（全机共用，存储在 ~/.cutfinder/config.json，无需 .env 文件）。这里保存的值优先生效，会覆盖 .env / 环境变量。
+              </p>
+
+              <label className="mt-3 block text-sm text-[--text-secondary]">Base URL</label>
+              <input
+                type="text" value={omlxBaseUrl}
+                onChange={(e) => setOmlxBaseUrl(e.target.value)}
+                placeholder="http://localhost:8000/v1"
+                className="mt-1 w-full rounded-md border border-[--border] bg-[--surface-2] px-3 py-1.5 text-sm font-mono outline-none focus:border-[--primary]"
+              />
+
+              <label className="mt-3 block text-sm text-[--text-secondary]">API key</label>
+              <p className="mb-1 text-xs text-[--text-muted]">
+                {apiKeyConfigured ? '已配置 — 留空则保持不变，输入新值则覆盖' : '尚未配置'}
+              </p>
+              <input
+                type="password" value={apiKeyInput}
+                onChange={(e) => setApiKeyInput(e.target.value)}
+                placeholder={apiKeyConfigured ? '••••••••（留空不修改）' : 'omlx-…'}
+                autoComplete="new-password"
+                className="w-full rounded-md border border-[--border] bg-[--surface-2] px-3 py-1.5 text-sm font-mono outline-none focus:border-[--primary]"
+              />
+
+              <label className="mt-3 block text-sm text-[--text-secondary]">Text model</label>
+              <p className="mb-1 text-xs text-[--text-muted]">用于 A-roll 的中文摘要 + 标签生成（通过 OMLX，纯文本模型）。留空则用默认 Qwen3.6-35B-A3B。</p>
+              <input
+                type="text" value={prefs.text_model}
+                onChange={(e) => updateField('text_model', e.target.value)}
+                placeholder="Qwen3.6-35B-A3B"
+                className="w-full rounded-md border border-[--border] bg-[--surface-2] px-3 py-1.5 text-sm font-mono outline-none focus:border-[--primary]"
+              />
+
+              <label className="mt-3 block text-sm text-[--text-secondary]">Vision model</label>
+              <p className="mb-1 text-xs text-[--text-muted]">用于 B-roll 的视觉标签 + 描述生成（通过 OMLX，多模态模型）。留空则用默认 Qwen3-VL-8B。</p>
+              <input
+                type="text" value={prefs.vision_model}
+                onChange={(e) => updateField('vision_model', e.target.value)}
+                placeholder="Qwen3-VL-8B"
+                className="w-full rounded-md border border-[--border] bg-[--surface-2] px-3 py-1.5 text-sm font-mono outline-none focus:border-[--primary]"
+              />
+            </fieldset>
+
           </div>
 
           {/* ── Column 2 ───────────────────────────────────── */}
           <div className="space-y-6">
 
-            {/* ── Model selectors ─────────────────────── */}
+            {/* ── Whisper (speech-to-text) ─────────────── */}
             <fieldset className="rounded-lg border border-[--border] bg-[--surface-1] p-4">
-              <legend className="text-sm font-medium text-[--text-primary]">Models</legend>
+              <legend className="text-sm font-medium text-[--text-primary]">Whisper（语音转写）</legend>
+              <p className="mt-1 text-xs leading-relaxed text-[--text-secondary]">
+                A-roll 中文语音转文字（独立本地进程，不经过 OMLX）。
+              </p>
               <div className="mt-3 space-y-4">
-                <label className="block text-sm text-[--text-secondary]">Text model</label>
-                <p className="mb-1 text-xs text-[--text-muted]">用于 A-roll 的中文摘要 + 标签生成（通过 OMLX，纯文本模型）</p>
-                <input
-                  type="text" value={prefs.text_model} readOnly
-                  className="w-full rounded-md border border-[--border] bg-[--surface-2] px-3 py-1.5 text-sm"
-                />
-
-                <label className="mt-2 block text-sm text-[--text-secondary]">Vision model</label>
-                <p className="mb-1 text-xs text-[--text-muted]">用于 B-roll 的视觉标签 + 描述生成（通过 OMLX，多模态模型）</p>
-                <input
-                  type="text" value={prefs.vision_model} readOnly
-                  className="w-full rounded-md border border-[--border] bg-[--surface-2] px-3 py-1.5 text-sm"
-                />
-
-                <label className="mt-2 block text-sm text-[--text-secondary]">Whisper model</label>
-                <p className="mb-1 text-xs text-[--text-muted]">用于 A-roll 中文语音转文字（独立本地进程，不经过 OMLX）</p>
+                <label className="block text-sm text-[--text-secondary]">Whisper model</label>
+                <p className="mb-1 text-xs text-[--text-muted]">HuggingFace 模型 id；若下方填了本地路径则以本地路径为准</p>
                 <input
                   type="text" value={prefs.whisper_model} readOnly
                   className="w-full rounded-md border border-[--border] bg-[--surface-2] px-3 py-1.5 text-sm"
+                />
+
+                <label className="mt-2 block text-sm text-[--text-secondary]">Whisper model path（本地覆盖，可选）</label>
+                <p className="mb-1 text-xs text-[--text-muted]">本地 mlx-whisper 模型目录；填了则离线加载并覆盖上面的模型 id，留空则用 HuggingFace 缓存</p>
+                <input
+                  type="text" value={whisperPath}
+                  onChange={(e) => setWhisperPath(e.target.value)}
+                  placeholder="（可选）/path/to/whisper-large-v3-mlx"
+                  className="w-full rounded-md border border-[--border] bg-[--surface-2] px-3 py-1.5 text-sm font-mono outline-none focus:border-[--primary]"
                 />
               </div>
             </fieldset>

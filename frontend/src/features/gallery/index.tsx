@@ -51,28 +51,70 @@ export interface GalleryProps {
   reanalyzingIds?: Set<number>
 }
 
+// ── Date grouping ───────────────────────────────────────────────
+// Group key = the clip's capture date (falling back to created_at), matching
+// the date shown on each card. Clips arrive pre-sorted by date, so iterating in
+// order yields contiguous, correctly-ordered groups.
+
+const UNKNOWN_DATE = '未知日期'
+
+function dateKey(clip: ClipSummary): string {
+  const iso = clip.capture_time || clip.created_at
+  return iso ? iso.slice(0, 10) : UNKNOWN_DATE
+}
+
+function groupByDate(clips: ClipSummary[]): { key: string; label: string; items: ClipSummary[] }[] {
+  const groups: { key: string; label: string; items: ClipSummary[] }[] = []
+  const byKey = new Map<string, ClipSummary[]>()
+
+  for (const clip of clips) {
+    const key = dateKey(clip)
+    let items = byKey.get(key)
+    if (!items) {
+      items = []
+      byKey.set(key, items)
+      groups.push({ key, label: key === UNKNOWN_DATE ? UNKNOWN_DATE : key.replace(/-/g, '/'), items })
+    }
+    items.push(clip)
+  }
+
+  return groups
+}
+
 export function Gallery({ clips, selectedClipId, onSelect, onReanalyze, reanalyzingIds }: GalleryProps) {
   if (clips.length === 0) return <EmptyState />
 
+  const groups = groupByDate(clips)
+
   return (
-    <div className="grid min-h-0 flex-1 auto-rows-min grid-cols-2 gap-3 overflow-y-auto p-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-      {clips.map((clip) => (
-        <ThumbnailCard
-          key={clip.id}
-          clipId={clip.id}
-          sourcePath={clip.source_path}
-          rollType={(clip.roll_type === 'a' ? 'a' : clip.roll_type === 'b' ? 'b' : undefined)}
-          duration={clip.duration_s ?? undefined}
-          thumbnailUrl={(typeof clip.thumbnail_path === 'string' && clip.thumbnail_path) || undefined}
-          status={clip.status}
-          summary={clip.summary || clip.description || undefined}
-          tags={clip.tags?.map((t) => t.name)}
-          captureTime={clip.capture_time}
-          isSelected={selectedClipId === clip.id}
-          onClick={() => onSelect(clip.id)}
-          onReanalyze={onReanalyze ? () => onReanalyze(clip.id) : undefined}
-          reanalyzing={reanalyzingIds?.has(clip.id)}
-        />
+    <div className="min-h-0 flex-1 space-y-6 overflow-y-auto p-4">
+      {groups.map(({ key, label, items }) => (
+        <section key={key}>
+          <h2 className="sticky top-0 z-10 mb-3 flex items-baseline gap-2 bg-[--bg-canvas]/95 py-1 backdrop-blur-sm">
+            <span className="text-sm font-semibold text-[--text-primary]">{label}</span>
+            <span className="text-xs text-[--text-muted]">{items.length}</span>
+          </h2>
+          <div className="grid auto-rows-min grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+            {items.map((clip) => (
+              <ThumbnailCard
+                key={clip.id}
+                clipId={clip.id}
+                sourcePath={clip.source_path}
+                rollType={(clip.roll_type === 'a' ? 'a' : clip.roll_type === 'b' ? 'b' : undefined)}
+                duration={clip.duration_s ?? undefined}
+                thumbnailUrl={(typeof clip.thumbnail_path === 'string' && clip.thumbnail_path) || undefined}
+                status={clip.status}
+                summary={clip.summary || clip.description || undefined}
+                tags={clip.tags?.map((t) => t.name)}
+                captureTime={clip.capture_time}
+                isSelected={selectedClipId === clip.id}
+                onClick={() => onSelect(clip.id)}
+                onReanalyze={onReanalyze ? () => onReanalyze(clip.id) : undefined}
+                reanalyzing={reanalyzingIds?.has(clip.id)}
+              />
+            ))}
+          </div>
+        </section>
       ))}
     </div>
   )

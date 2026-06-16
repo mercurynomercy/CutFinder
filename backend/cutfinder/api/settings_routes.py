@@ -18,15 +18,21 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException
 
-from cutfinder.config import Prefs
+from cutfinder.config import _GLOBAL_KEYS, Prefs
 
 logger = logging.getLogger(__name__)
+
+# Sentinel returned by GET for a configured secret; PUT ignores it so the
+# real key is never overwritten by the masked value the UI received.
+_MASKED = "***MASKED***"
 
 
 def _build_router(
     load_config_fn: Any,  # config.load_config(library_path) -> AppConfig | None
     save_prefs_fn: Any,   # config.save_prefs(prefs, library_path) -> None
     get_library_fn: Any,  # callable that returns current library path or None
+    save_global_fn: Any,  # config.save_global_settings(dict) -> None
+    reload_fn: Any = None,  # async () -> None: rebuild adapters for current lib
 ) -> APIRouter:
     """Construct and return the settings ``APIRouter``."""
 
@@ -44,10 +50,11 @@ def _build_router(
         except Exception as exc:  # noqa: BLE001 — return best-effort if config unreadable
             raise HTTPException(status_code=503, detail=f"Config error: {exc}") from exc
 
-        # Expose the OMLX endpoint but mask the secret key.
+        # Expose the OMLX endpoint + whisper path; mask the secret key.
         env = {
             "OMLX_BASE_URL": config.env.OMLX_BASE_URL,
-            "OMLX_API_KEY": "***MASKED***" if config.env.OMLX_API_KEY else "",
+            "OMLX_API_KEY": _MASKED if config.env.OMLX_API_KEY else "",
+            "WHISPER_MODEL_PATH": config.env.WHISPER_MODEL_PATH,
         }
 
         return {"env": env, "prefs": config.prefs.model_dump()}
@@ -56,15 +63,30 @@ def _build_router(
     async def update_settings(
         body: dict[str, Any],
     ) -> dict[str, str]:
-        """Apply partial prefs update.
+        """Apply a partial settings update.
 
-        Only fields present in the request body are updated; others
-        retain their current values.  The update is persisted to disk
-        via :func:`cutfinder.config.save_prefs`.
+        Per-library prefs are persisted via :func:`cutfinder.config.save_prefs`;
+        machine-global keys (OMLX endpoint/key, whisper path) are persisted via
+        :func:`cutfinder.config.save_global_settings` so they apply across all
+        libraries without a ``.env`` file. Only fields present in the request
+        body are touched. A masked ``OMLX_API_KEY`` is ignored so the stored
+        secret is never clobbered.
         """
         library_path = get_library_fn()
         if not library_path:
             raise HTTPException(status_code=404, detail="No library configured")
+
+        # Persist machine-global env keys first (independent of prefs).
+        global_updates = {
+            k: v
+            for k, v in body.items()
+            if k in _GLOBAL_KEYS and not (k == "OMLX_API_KEY" and v == _MASKED)
+        }
+        if global_updates:
+            try:
+                save_global_fn(global_updates)
+            except Exception as exc:  # noqa: BLE001
+                raise HTTPException(status_code=503, detail=f"Save error: {exc}") from exc
 
         # Load current prefs first
         try:
@@ -88,6 +110,17 @@ def _build_router(
             save_prefs_fn(updated, library_path)
         except Exception as exc:  # noqa: BLE001
             raise HTTPException(status_code=503, detail=f"Save error: {exc}") from exc
+
+        # Rebuild the live pipeline so the new settings (models, language, VAD,
+        # OMLX endpoint/key, …) take effect without a restart. The values are
+        # snapshotted into the adapters at build time, so a save alone is inert.
+        # Best-effort: the settings are already persisted; a failed reload only
+        # means a restart is needed for them to apply.
+        if reload_fn is not None:
+            try:
+                await reload_fn()
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("Settings saved but live reload failed: %s", exc)
 
         return {"status": "ok", "message": "Settings updated"}
 

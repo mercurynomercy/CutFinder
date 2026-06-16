@@ -43,7 +43,7 @@ const ThumbnailCard = React.forwardRef<HTMLDivElement, ThumbnailCardProps>(
   ) => {
     const formatDuration = (s: number) => {
       const min = Math.floor(s / 60)
-      const sec = s % 60
+      const sec = Math.floor(s % 60)
       return `${min}:${sec.toString().padStart(2, '0')}`
     }
 
@@ -137,8 +137,9 @@ const ThumbnailCard = React.forwardRef<HTMLDivElement, ThumbnailCardProps>(
           )}
         </div>
 
-        {/* Info row (filename, summary, tags) */}
-        <div className="flex flex-col gap-1.5 px-3 py-2">
+        {/* Info row (filename, summary, tags) — flex-1 so the date pins to the
+            card bottom and aligns across cards of differing tag/summary heights */}
+        <div className="flex flex-1 flex-col gap-1.5 px-3 py-2">
           <div className="flex items-center gap-1.5">
             {rollType && (
               <Badge type={rollType} className="shrink-0 px-1.5">
@@ -173,7 +174,7 @@ const ThumbnailCard = React.forwardRef<HTMLDivElement, ThumbnailCardProps>(
           ) : null}
 
           {captureTime && (
-            <p className="text-right text-[10px] tabular-nums text-[--text-muted]">
+            <p className="mt-auto pt-1 text-right text-[10px] tabular-nums text-[--text-muted]">
               {formatCaptureDate(captureTime)}
             </p>
           )}

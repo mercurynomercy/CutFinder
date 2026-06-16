@@ -15,7 +15,7 @@
 - **B-roll 画面标签 + 描述**：抽帧交给视觉模型识别画面内容。
 - **AI 输出语言可选**：简介/画面描述可在「设置」页切换**中文 / 英文**（默认中文）。
 - **按拍摄日期 + 类型自动归档**：复制到 `库/YYYY-MM-DD/A-roll(或 B-roll)/`。即使 AI 分析失败，原文件仍按日期+类型归档（状态标为 `partial`），AI 简介/标签为尽力而为。
-- **缩略图墙 + 多维检索**：按日期 / 类型 / 标签筛选（可折叠过滤面板），支持按拍摄日期的新/旧排序；分析未完成的片段（`partial`）在缩略图上有「部分」标记，一眼可辨。
+- **缩略图墙 + 多维检索**：按拍摄日期**分组展示**（每个日期一个区块，带粘性日期标题），并支持按日期 / 类型 / 标签筛选（可折叠过滤面板）与按拍摄日期的新/旧排序；分析未完成的片段（`partial`）在缩略图上有「部分」标记，一眼可辨。
 - **重新分析单个片段**：换模型或结果不佳时一键重跑 AI，保留你的手动纠正与标签。分类判错时，可用「→ B-roll & re-analyze」一键纠正 A/B 类型并走对的管道重跑。
 - **片段拍摄日期显示**：缩略图卡片和详情面板均展示片段的拍摄时间（优先使用嵌入 capture time，回退到文件创建时间）。
 - **任务队列管理**：单独的「任务队列」页可查看所有扫描/重分析任务，支持删除、重试失败项、全局暂停/恢复；队列暂停时扫描会自动提示并可选恢复。
@@ -90,9 +90,10 @@ API 层 (FastAPI，薄)                       :5081
 
 ```bash
 git clone <repo> && cd CutFinder
-cp .env.example .env            # 填入 OMLX_BASE_URL 与 OMLX_API_KEY（见下）
 make setup                      # mise install + brew bundle + uv sync + npm install
 ```
+
+> OMLX 配置可在**设置页**里填（见步骤 2），无需 `.env`。若你偏好用 `.env`，再 `cp .env.example .env` 并填值。
 
 > 没有 mise？先 `brew install mise`，或手动执行：
 > ```bash
@@ -100,24 +101,33 @@ make setup                      # mise install + brew bundle + uv sync + npm ins
 > cd ../frontend && npm install   # Vite + React + Tailwind
 > ```
 
-### 2. 配置 `.env`
+### 2. 配置 OMLX 连接
 
-```ini
-# OMLX 本地推理服务器（OpenAI 兼容）。默认假设 :8000；按你的实际端口改。
-OMLX_BASE_URL=http://localhost:8000/v1
-OMLX_API_KEY=your-omlx-key
-```
+需要配置三项：OMLX 地址、API key、（可选）Whisper 模型路径。两种方式，任选其一：
 
-`.env` 位于**仓库根目录**。`make dev` / `make check-omlx` / `make test-integration` 都会自动加载它。
-若你手动用 `uvicorn` 起后端，请先 `set -a; source .env; set +a` 导出这些变量。
+- **设置页（推荐，无需 `.env`）**：启动后打开 http://localhost:5080 → 「设置」→ **OMLX connection** 填写 Base URL / API key / Whisper 路径 → 保存。这些值存到 `~/.cutfinder/config.json`（**全机共用**，换素材库不用重填），保存即生效。
+
+- **`.env`（可选，用于临时覆盖）**：在**仓库根目录**放一个 `.env`：
+
+  ```ini
+  # OMLX 本地推理服务器（OpenAI 兼容）。默认假设 :8000；按你的实际端口改。
+  OMLX_BASE_URL=http://localhost:8000/v1
+  OMLX_API_KEY=your-omlx-key
+  ```
+
+  `make dev` / `make check-omlx` / `make test-integration` 会自动加载它；手动用 `uvicorn` 起后端则先 `set -a; source .env; set +a` 导出。
+
+> **优先级**（高→低）：**设置页全局配置**（`~/.cutfinder/config.json`）> **环境变量 / `.env`**。设置页是权威来源——存进去的值始终生效，即使 `.env` 设了同一个键也不会被它盖掉（注意 `make dev` 会把 `.env` 导出成环境变量，所以两者属于同一层「兜底」）。`.env` / 环境变量只用于填设置页尚未配置的键。
 
 ### 3. 验证 OMLX 就绪
 
 ```bash
-make check-omlx                 # 校验文本/视觉模型是否已加载（读取根 .env）
+make check-omlx                 # 校验文本/视觉模型是否已加载
 # → OMLX OK — models: [...]
 #   All required text/vision models are present.
 ```
+
+> `make check-omlx` 只读 `.env` / 环境变量，**不读**设置页存的全局配置。若你走 UI 配置（无 `.env`），可跳过这步，直接在应用里扫描时验证；或临时 `OMLX_BASE_URL=... OMLX_API_KEY=... make check-omlx`。
 
 ### 4. 启动开发服务器（推荐：一条命令同时起前后端）
 
@@ -156,7 +166,7 @@ cd frontend && npx vite        # http://localhost:5080
 make models                     # 预下载 mlx-whisper large-v3-mlx
 ```
 
-默认下载到 HuggingFace 缓存（`~/.cache/huggingface`）。若想把模型放到自定义目录，在根 `.env` 里设置：
+默认下载到 HuggingFace 缓存（`~/.cache/huggingface`）。若想把模型放到自定义目录，在**设置页 → OMLX connection → Whisper model path** 填该目录，或在根 `.env` 里设置：
 
 ```ini
 WHISPER_MODEL_PATH=/Users/you/AI/Models/ASRs/mlx-community/whisper-large-v3-mlx
@@ -229,14 +239,20 @@ make e2e               # Playwright e2e
 ### 2026-06-16（今日）
 
 **UI / UX：**
+- 缩略图墙按拍摄日期**分组展示**（每组一个区块 + 粘性日期标题）
+- 缩略图卡片日期对齐到卡片底部（不受标签行数影响）；时长标签去掉小数（`0:06`）
 - 缩略图卡片与详情面板新增拍摄日期显示（`capture_time` / `created_at`）
 - 排序控件精简为按日期新/旧两种选项；过滤面板支持折叠收起
+- 设置页可在 UI 内编辑 OMLX 地址/密钥、Text/Vision/Whisper 模型，无需 `.env`
 - 扫描进度条更精细（含浮动卡片 + 顶部细条），显示当前处理文件
 - 详情面板头部重设计（A/B label + 关闭按钮置顶，缩略图更紧凑）
 - clip 卡片新增底部重新分析按钮（图标 + loading spinner）
 - 设置页改为响应式双列布局，每项选项附中文说明文字
 
 **功能：**
+- OMLX 配置改为 UI 管理（存 `~/.cutfinder/config.json`，全机共用），优先级高于 `.env`/环境变量；`.env` 现为可选兜底，`make dev` 不再强制生成它
+- 保存设置后即时重建 pipeline，模型 / 语言 / VAD / OMLX 改动**无需重启**即可生效
+- Text / Vision 模型可在设置页修改（留空回退默认 `Qwen3.6-35B-A3B` / `Qwen3-VL-8B`）
 - 扫描队列暂停时点击 Scan 会提示用户并可选恢复后继续
 - Scan 完成后自动轮询任务状态，结束后即时刷新缩略图墙（无需手动操作）
 - 重新分析后清除 `partial` 状态；扫描期间不再阻塞事件循环
