@@ -1014,6 +1014,78 @@ class TestPickFolder:
         assert resp.status_code == 501
 
 
+class TestOpenPath:
+    """The macOS `open` endpoint — reveal a folder / play a file."""
+
+    def _client(self, library_path: str) -> TestClient:
+        from types import SimpleNamespace
+
+        from cutfinder.api.routes import _build_router as main_router
+
+        ctx = SimpleNamespace(
+            repository=None, orchestrator=None, worker_queue=None,
+            thumbnail_root=None, library_path=library_path,
+        )
+        app = FastAPI()
+        app.include_router(main_router(ctx))
+        return TestClient(app, raise_server_exceptions=False)
+
+    def _patch_open(self, monkeypatch: Any) -> list[tuple[Any, ...]]:
+        """Stub asyncio so `open` is never actually launched; record calls."""
+        calls: list[tuple[Any, ...]] = []
+
+        class _FakeProc:
+            returncode = 0
+
+            async def communicate(self) -> tuple[bytes, bytes]:
+                return (b"", b"")
+
+        async def _fake_exec(*args: Any, **_k: Any) -> Any:
+            calls.append(args)
+            return _FakeProc()
+
+        monkeypatch.setattr(asyncio, "create_subprocess_exec", _fake_exec)
+        return calls
+
+    def test_opens_file_inside_library(self, tmp_path: Any, monkeypatch: Any) -> None:
+        roll_dir = tmp_path / "2026-05-13" / "A-roll"
+        roll_dir.mkdir(parents=True)
+        video = roll_dir / "A-0001.mp4"
+        video.write_bytes(b"x")
+
+        calls = self._patch_open(monkeypatch)
+        resp = self._client(str(tmp_path)).post("/api/open", json={"path": str(video)})
+
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "ok"
+        assert calls and calls[0][0] == "open"
+        assert calls[0][1] == str(video.resolve())
+
+    def test_rejects_path_outside_library(self, tmp_path: Any, monkeypatch: Any) -> None:
+        outside = tmp_path / "outside.mp4"
+        outside.write_bytes(b"x")
+        lib = tmp_path / "lib"
+        lib.mkdir()
+
+        calls = self._patch_open(monkeypatch)
+        resp = self._client(str(lib)).post("/api/open", json={"path": str(outside)})
+
+        assert resp.status_code == 403
+        assert calls == []  # never launched
+
+    def test_missing_path_returns_422(self, tmp_path: Any, monkeypatch: Any) -> None:
+        self._patch_open(monkeypatch)
+        resp = self._client(str(tmp_path)).post("/api/open", json={})
+        assert resp.status_code == 422
+
+    def test_nonexistent_path_returns_404(self, tmp_path: Any, monkeypatch: Any) -> None:
+        self._patch_open(monkeypatch)
+        resp = self._client(str(tmp_path)).post(
+            "/api/open", json={"path": str(tmp_path / "nope.mp4")},
+        )
+        assert resp.status_code == 404
+
+
 # ── Public exports (module-level marker) ─────────────────────
 
 __all__: list[str] = []  # noqa: PLE0611 — module-level helper, no direct exports

@@ -2,8 +2,8 @@
 
 Tests verify:
   - Original files are never modified (mtime, content).
-  - Destination path follows ``<library>/<date>/A-roll|B-roll/`` format.
-  - Filename conflicts are resolved by appending ``(1)``, ``(2)`` etc. — never overwrites.
+  - Copies are renamed sequentially: ``<library>/<date>/A-roll/A-0001.<ext>`` etc.
+  - Numbering increments per date/type folder and never overwrites.
   - mtime/atime are preserved after copy (shutil.copy2).
   - File size is verified after copy; mismatch raises ``OSError``.
 
@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import os
 import shutil
+import sys
 from pathlib import Path
 from unittest.mock import patch
 
@@ -64,25 +65,25 @@ class TestCopyInto:
     """Verify basic copy behavior."""
 
     def test_copy_to_new_path(self, tmp_path):
-        """A new file is copied to the correct date/type directory."""
+        """A new A-roll file is renamed to A-0001 in the date/type directory."""
         src = _make_src_file(tmp_path, "clip.mp4")
         writer = FsLibraryWriter(_make_config(tmp_path))
 
         dest_str = writer.copy_into(src, "2024-01-15", "a")
         dest = Path(dest_str)
 
-        assert dest == tmp_path / "2024-01-15" / "A-roll" / "clip.mp4"
+        assert dest == tmp_path / "2024-01-15" / "A-roll" / "A-0001.mp4"
         assert dest.exists()
 
     def test_copy_b_roll(self, tmp_path):
-        """B-roll copies into B-roll subdirectory."""
+        """B-roll is renamed to B-0001 in the B-roll subdirectory."""
         src = _make_src_file(tmp_path, "broll.mov")
         writer = FsLibraryWriter(_make_config(tmp_path))
 
         dest_str = writer.copy_into(src, "2024-03-20", "b")
         dest = Path(dest_str)
 
-        assert dest == tmp_path / "2024-03-20" / "B-roll" / "broll.mov"
+        assert dest == tmp_path / "2024-03-20" / "B-roll" / "B-0001.mov"
         assert dest.exists()
 
     def test_directories_created_auto(self, tmp_path):
@@ -129,59 +130,74 @@ class TestCopyInto:
 
         assert os.path.getmtime(dest) == known_ts
 
+    @pytest.mark.skipif(
+        sys.platform != "darwin", reason="birth time is only settable on macOS",
+    )
+    def test_copy_preserves_creation_time(self, tmp_path):
+        """The copy's creation (birth) time matches the source on macOS."""
+        from cutfinder.adapters.fs_library import _set_birthtime
 
-# ─── Conflict resolution tests ─────────────────────────────────────
+        src = _make_src_file(tmp_path, "birth.mp4")
+        # Backdate the source's creation time to 90 days ago so it differs
+        # from "now" (the copy moment) — otherwise the test can't distinguish.
+        old_birth = 1705312200.0  # Jan 15, 2024
+        _set_birthtime(src, old_birth)
+        assert abs(src.stat().st_birthtime - old_birth) < 1
 
-class TestConflictResolution:
-    """Verify that same-name conflicts are handled without overwriting."""
+        writer = FsLibraryWriter(_make_config(tmp_path))
+        dest = Path(writer.copy_into(src, "2024-01-15", "a"))
 
-    def test_first_conflict_appends_1(self, tmp_path):
-        """When the target already exists, (1) is appended."""
-        # Pre-create the destination file
-        lib_dir = tmp_path / "2024-01-15" / "A-roll"
-        lib_dir.mkdir(parents=True)
-        existing = lib_dir / "clip.mp4"
-        existing.write_bytes(b"existing-content")
+        assert abs(dest.stat().st_birthtime - old_birth) < 1
 
-        src = _make_src_file(tmp_path, "clip.mp4", content=b"new-content")
+
+# ─── Sequential naming tests ───────────────────────────────────────
+
+class TestSequentialNaming:
+    """Verify copies are renamed A-0001/B-0001… per date/type folder."""
+
+    def test_second_copy_increments(self, tmp_path):
+        """A second A-roll copy in the same folder becomes A-0002."""
         writer = FsLibraryWriter(_make_config(tmp_path))
 
-        dest_str = writer.copy_into(src, "2024-01-15", "a")
-        dest = Path(dest_str)
+        src1 = _make_src_file(tmp_path, "first.mp4", content=b"first")
+        src2 = _make_src_file(tmp_path, "second.mp4", content=b"second")
 
-        assert dest == tmp_path / "2024-01-15" / "A-roll" / "clip(1).mp4"
-        assert dest.exists()
+        dest1 = Path(writer.copy_into(src1, "2024-01-15", "a"))
+        dest2 = Path(writer.copy_into(src2, "2024-01-15", "a"))
 
-    def test_second_conflict_appends_2(self, tmp_path):
-        """(1) taken → (2) is used."""
+        assert dest1.name == "A-0001.mp4"
+        assert dest2.name == "A-0002.mp4"
+        assert dest1.read_bytes() == b"first"
+        assert dest2.read_bytes() == b"second"
+
+    def test_numbering_is_per_date_and_type(self, tmp_path):
+        """Each date/type folder gets its own independent A-0001/B-0001 sequence."""
+        writer = FsLibraryWriter(_make_config(tmp_path))
+        src = _make_src_file(tmp_path, "clip.mp4")
+
+        a_day1 = Path(writer.copy_into(src, "2024-01-15", "a"))
+        b_day1 = Path(writer.copy_into(src, "2024-01-15", "b"))
+        a_day2 = Path(writer.copy_into(src, "2024-01-16", "a"))
+
+        assert a_day1.name == "A-0001.mp4"
+        assert b_day1.name == "B-0001.mp4"   # B-roll counts separately
+        assert a_day2.name == "A-0001.mp4"   # new date resets
+
+    def test_resumes_after_existing_files(self, tmp_path):
+        """Numbering continues from the highest existing index (re-scan safe)."""
         lib_dir = tmp_path / "2024-01-15" / "A-roll"
         lib_dir.mkdir(parents=True)
-        (lib_dir / "clip.mp4").write_bytes(b"existing")
-        (lib_dir / "clip(1).mp4").write_bytes(b"conflict-1")
+        (lib_dir / "A-0001.mp4").write_bytes(b"existing-1")
+        (lib_dir / "A-0002.mp4").write_bytes(b"existing-2")
 
-        src = _make_src_file(tmp_path, "clip.mp4", content=b"newest")
+        src = _make_src_file(tmp_path, "new.mp4", content=b"new")
         writer = FsLibraryWriter(_make_config(tmp_path))
 
-        dest_str = writer.copy_into(src, "2024-01-15", "a")
-        dest = Path(dest_str)
+        dest = Path(writer.copy_into(src, "2024-01-15", "a"))
 
-        assert dest == tmp_path / "2024-01-15" / "A-roll" / "clip(2).mp4"
-
-    def test_existing_file_unchanged_after_conflict_copy(self, tmp_path):
-        """Pre-existing file is never overwritten even when conflict resolution happens."""
-        lib_dir = tmp_path / "2024-01-15" / "A-roll"
-        lib_dir.mkdir(parents=True)
-        existing = lib_dir / "original.mp4"
-        original_content = b"I was here first and I stay unchanged."
-        existing.write_bytes(original_content)
-
-        src = _make_src_file(tmp_path, "original.mp4", content=b"new data")
-        writer = FsLibraryWriter(_make_config(tmp_path))
-
-        _ = writer.copy_into(src, "2024-01-15", "a")
-
-        # Original must still have its original content
-        assert existing.read_bytes() == original_content
+        assert dest.name == "A-0003.mp4"
+        # Pre-existing files are untouched.
+        assert (lib_dir / "A-0001.mp4").read_bytes() == b"existing-1"
 
 
 # ─── Error handling tests ──────────────────────────────────────────

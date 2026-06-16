@@ -195,8 +195,8 @@ class Orchestrator:
             3. VAD speech detection (A/B classification)
                - A-roll: transcribe → summarise (auto-tags from summary_result.tags)
                - B-roll: extract frames → vision tagger (tags + description from result)
-            4. Upsert clip to repository with all outputs, tags, and status=done
-            5. Copy original file into the organised library
+            4. Copy original file into the organised library (renamed copy)
+            5. Upsert clip to repository with all outputs, tags, library_path, status=done
 
         Error isolation: each step is wrapped in try/except.  On failure
         the clip's ``status`` is set to ``"error"`` with the error message,
@@ -274,7 +274,30 @@ class Orchestrator:
             analysis = AnalysisResult(roll_type=roll_type)
             emit(ProgressEvent(step="analysis", ok=False, detail=analysis_error))
 
-        # ── 5. Upsert clip to repository ───────────────────────
+        # ── 5. Copy original into the organised library ─────────
+        # Done before the upsert so the renamed destination path is persisted
+        # as the clip's library_path.  Best-effort: a copy failure must not
+        # block cataloguing (the clip is still recorded, just without a copy).
+        library_path: str | None = None
+        date_str = meta.capture_time.strftime("%Y-%m-%d") if meta.capture_time else "unknown"
+        try:
+            src_str = candidate.path  # str from ClipCandidate
+            if self.library_writer is not None:
+                library_path = self.library_writer.copy_into(Path(src_str), date_str, roll_type)
+            emit(ProgressEvent(step="copy", ok=True, detail=library_path))
+
+            # Optionally record the copy on the repository.  ``record_copy`` is
+            # not part of the CatalogRepository contract — it's a test hook on
+            # the fake — so only call it when the repository provides it.
+            record_copy = getattr(self.repository, "record_copy", None)
+            if callable(record_copy):
+                record_copy(src_str, date_str, roll_type)
+
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Library copy failed for clip %s, continuing: %s", candidate.path, exc)
+            emit(ProgressEvent(step="copy", ok=False, detail=str(exc)))
+
+        # ── 6. Upsert clip to repository ───────────────────────
         now = _dt.datetime.now(_dt.timezone.utc)
 
         # Extract auto tags from AI result
@@ -299,7 +322,7 @@ class Orchestrator:
             status="partial" if analysis_error else "done",
             processed_at=now.isoformat(),
             summary_text=summary_text, description_text=description_text,
-            error=analysis_error,
+            error=analysis_error, library_path=library_path,
         ))
 
         # Set auto-generated tags (preserves any existing manual ones)
@@ -318,25 +341,6 @@ class Orchestrator:
 
         # Update progress with clip_id
         emit(ProgressEvent(clip_id=clip_id, step="persist", ok=True))
-
-        # ── 6. Copy into library ───────────────────────────────
-        try:
-            date_str = meta.capture_time.strftime("%Y-%m-%d") if meta.capture_time else "unknown"
-            src_str = candidate.path  # str from ClipCandidate
-            if self.library_writer is not None:
-                self.library_writer.copy_into(Path(src_str), date_str, roll_type)
-            emit(ProgressEvent(step="copy", ok=True))
-
-            # Optionally record the copy on the repository.  ``record_copy`` is
-            # not part of the CatalogRepository contract — it's a test hook on
-            # the fake — so only call it when the repository provides it.
-            record_copy = getattr(self.repository, "record_copy", None)
-            if callable(record_copy):
-                record_copy(src_str, date_str, roll_type)
-
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("Library copy failed for clip %s, continuing: %s", candidate.path, exc)
-            emit(ProgressEvent(step="copy", ok=False, detail=str(exc)))
 
         return clip_id
 
@@ -494,13 +498,14 @@ class Orchestrator:
         summary_text: str | None = None,
         description_text: str | None = None,
         error: str | None = None,
+        library_path: str | None = None,
     ) -> Clip:
         """Construct a :class:`Clip` from probe + analysis results."""
         return Clip(
             id=None,  # auto-assigned by repository.upsert_clip
             fingerprint=candidate.fingerprint,
             source_path=candidate.path,
-            library_path=None,  # set after copy_into (not in fake)
+            library_path=library_path,  # renamed destination from copy_into
             roll_type=roll_type,
             summary=summary_text,
             description=description_text,

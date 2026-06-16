@@ -273,4 +273,9 @@ export const api = {
   pickFolder(): Promise<{ path: string | null }> {
     return _fetch('/api/pick-folder', { method: 'POST' })
   },
+
+  /** POST /api/open — reveal a folder in Finder or open a file in its default app. */
+  openPath(path: string): Promise<{ status: string; path: string }> {
+    return _fetch('/api/open', { method: 'POST', body: JSON.stringify({ path }) })
+  },
 } as const

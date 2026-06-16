@@ -89,6 +89,27 @@ function TagEditor({ tags, onUpdate }: TagEditorProps) {
   )
 }
 
+// ── Shared accordion (one consistent style for all collapsible sections) ──
+
+interface AccordionProps {
+  title: string
+  children: React.ReactNode
+}
+
+function Accordion({ title, children }: AccordionProps) {
+  return (
+    <details className="group">
+      <summary className="flex cursor-pointer list-none items-center gap-1 text-xs font-medium uppercase tracking-wider text-[--text-muted] transition-colors hover:text-[--text-secondary]">
+        <svg className="h-3 w-3 shrink-0 transition-transform group-open:rotate-90" fill="none" viewBox="0 0 24 24">
+          <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+        </svg>
+        {title}
+      </summary>
+      <div className="mt-2">{children}</div>
+    </details>
+  )
+}
+
 // ── Collapsible transcript section ────────────────────────────────
 
 interface TranscriptSectionProps {
@@ -96,42 +117,27 @@ interface TranscriptSectionProps {
 }
 
 function TranscriptSection({ data }: TranscriptSectionProps) {
-  const [expanded, setExpanded] = useState(false)
-
   if (!data || !data.full_text.trim()) return null
 
   return (
-    <div className="rounded-lg border border-[--border] bg-[--surface-2]">
-      <button
-        onClick={() => setExpanded(!expanded)}
-        className="flex w-full items-center justify-between px-4 py-3 text-left"
-      >
-        <span className="text-sm font-medium">Transcript</span>
-        <svg className={`h-4 w-4 text-[--text-muted] transition-transform ${expanded ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24">
-          <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-        </svg>
-      </button>
+    <Accordion title="Transcript">
+      <div className="text-sm leading-relaxed text-[--text-secondary]">
+        {data.full_text}
 
-      {expanded && (
-        <div className="border-t border-[--border] px-4 pb-3 pt-2 text-sm leading-relaxed text-[--text-secondary]">
-          {data.full_text}
-
-          {/* Segments table (collapsed by default, shown when expanded) */}
-          {data.segments.length > 0 && (
-            <div className="mt-3 space-y-1">
-              {data.segments.slice(0, 20).map((seg, i) => (
-                <div key={i} className="flex gap-2 text-xs">
-                  <span className="tabular-numbers text-[--text-muted] shrink-0">
-                    {seg.start_s.toFixed(1)}s
-                  </span>
-                  <span>{seg.text}</span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-    </div>
+        {data.segments.length > 0 && (
+          <div className="mt-3 space-y-1">
+            {data.segments.slice(0, 20).map((seg, i) => (
+              <div key={i} className="flex gap-2 text-xs">
+                <span className="tabular-numbers text-[--text-muted] shrink-0">
+                  {seg.start_s.toFixed(1)}s
+                </span>
+                <span>{seg.text}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </Accordion>
   )
 }
 
@@ -141,9 +147,11 @@ export interface DetailPanelProps {
   /** Clip id to display. When null/undefined, the panel is hidden. */
   clipId: number | null
   onClose: () => void
+  /** Open the clip's video in its default app (macOS `open`). */
+  onOpenPath?: (path: string) => void
 }
 
-export function DetailPanel({ clipId, onClose }: DetailPanelProps) {
+export function DetailPanel({ clipId, onClose, onOpenPath }: DetailPanelProps) {
   const [clip, setClip] = useState<ClipDetail | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<Error | null>(null)
@@ -300,13 +308,15 @@ export function DetailPanel({ clipId, onClose }: DetailPanelProps) {
               {/* ── Content area ─────────────────────────── */}
               <div className="flex flex-1 flex-col gap-4 p-5">
 
-                {/* ── Source file (top) ──────────────────── */}
-                <div>
-                  <p className="text-xs font-medium uppercase tracking-wider text-[--text-muted]">
-                    Source file
-                  </p>
-                  <p className="mt-0.5 break-all text-sm text-[--text-primary]">{clip.source_path}</p>
-                </div>
+                {/* ── File destination (renamed library copy) ─ */}
+                {clip.library_path && (
+                  <div>
+                    <p className="text-xs font-medium uppercase tracking-wider text-[--text-muted]">
+                      File destination
+                    </p>
+                    <p className="mt-0.5 break-all text-sm text-[--text-primary]">{clip.library_path}</p>
+                  </div>
+                )}
 
                 {/* ── Capture date ─────────────────────── */}
                 {captureDate && (
@@ -318,8 +328,8 @@ export function DetailPanel({ clipId, onClose }: DetailPanelProps) {
                   </div>
                 )}
 
-                {/* ── Thumbnail preview (compact) ────────── */}
-                <div className="relative h-40 w-full overflow-hidden rounded-lg bg-[--surface-2]">
+                {/* ── Thumbnail preview (compact, click to play) ─ */}
+                <div className="group relative h-40 w-full overflow-hidden rounded-lg bg-[--surface-2]">
                   {clip.thumbnail_path ? (
                     <img src={`/api/clips/${clip.id}/thumbnail`} alt="Thumbnail" className="h-full w-full object-cover" />
                   ) : (
@@ -328,6 +338,18 @@ export function DetailPanel({ clipId, onClose }: DetailPanelProps) {
                         <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 002.25-2.25v-9A2.25 2.25 0 0013.5 5.25h-9A2.25 2.25 0 002.25 7.5v9A2.25 2.25 0 004.5 18.75z" />
                       </svg>
                     </div>
+                  )}
+                  {onOpenPath && (
+                    <button
+                      onClick={() => onOpenPath(clip.library_path || clip.source_path)}
+                      title="打开视频"
+                      aria-label="打开视频"
+                      className="absolute inset-0 m-auto flex h-12 w-12 items-center justify-center rounded-full bg-black/60 text-white opacity-0 backdrop-blur-sm transition-opacity hover:bg-black/80 group-hover:opacity-100"
+                    >
+                      <svg className="h-6 w-6 translate-x-px" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M8 5v14l11-7z" />
+                      </svg>
+                    </button>
                   )}
                 </div>
 
@@ -383,36 +405,39 @@ export function DetailPanel({ clipId, onClose }: DetailPanelProps) {
                   <TranscriptSection data={clip.transcript} />
                 )}
 
-                {/* ── Metadata section (collapsible) ─────── */}
-                <details className="rounded-lg border border-[--border] bg-[--surface-2]/50">
-                  <summary className="cursor-pointer px-4 py-3 text-sm font-medium text-[--text-secondary]">
-                    Metadata
-                  </summary>
-                  <div className="border-t border-[--border] px-4 pb-3 pt-2 text-xs space-y-1.5">
-                    <div className="flex justify-between gap-4">
-                      <span className="text-[--text-muted]">Duration</span>
-                      <span>{clip.duration_s !== null ? `${(clip.duration_s / 60).toFixed(1)} min` : '—'}</span>
+                {/* ── Source file + Metadata (grouped, same style) ─ */}
+                <div className="space-y-3 border-t border-[--border] pt-4">
+                  <Accordion title="Source file">
+                    <p className="break-all text-sm text-[--text-primary]">{clip.source_path}</p>
+                  </Accordion>
+
+                  <Accordion title="Metadata">
+                    <div className="space-y-1.5 text-xs">
+                      <div className="flex justify-between gap-4">
+                        <span className="text-[--text-muted]">Duration</span>
+                        <span>{clip.duration_s !== null ? `${(clip.duration_s / 60).toFixed(1)} min` : '—'}</span>
+                      </div>
+                      {clip.width && (
+                        <div className="flex justify-between gap-4">
+                          <span className="text-[--text-muted]">Resolution</span>
+                          <span>{clip.width}×{clip.height}</span>
+                        </div>
+                      )}
+                      {clip.fps && (
+                        <div className="flex justify-between gap-4">
+                          <span className="text-[--text-muted]">Frame rate</span>
+                          <span>{clip.fps} fps</span>
+                        </div>
+                      )}
+                      {clip.codec && (
+                        <div className="flex justify-between gap-4">
+                          <span className="text-[--text-muted]">Codec</span>
+                          <span>{clip.codec}</span>
+                        </div>
+                      )}
                     </div>
-                    {clip.width && (
-                      <div className="flex justify-between gap-4">
-                        <span className="text-[--text-muted]">Resolution</span>
-                        <span>{clip.width}×{clip.height}</span>
-                      </div>
-                    )}
-                    {clip.fps && (
-                      <div className="flex justify-between gap-4">
-                        <span className="text-[--text-muted]">Frame rate</span>
-                        <span>{clip.fps} fps</span>
-                      </div>
-                    )}
-                    {clip.codec && (
-                      <div className="flex justify-between gap-4">
-                        <span className="text-[--text-muted]">Codec</span>
-                        <span>{clip.codec}</span>
-                      </div>
-                    )}
-                  </div>
-                </details>
+                  </Accordion>
+                </div>
 
               </div>
 

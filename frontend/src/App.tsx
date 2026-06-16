@@ -159,6 +159,15 @@ export default function App() {
     }
   }
 
+  // Open a file in its default app, or reveal a folder in Finder (macOS `open`).
+  const handleOpenPath = async (path: string) => {
+    try {
+      await api.openPath(path)
+    } catch (err) {
+      console.error('Failed to open path:', err)
+    }
+  }
+
   const refreshClips = async () => {
     try {
       const data = await api.listClips()
@@ -252,12 +261,13 @@ export default function App() {
               onSelect={(clipId) => setSelectedClipId(clipId)}
               onReanalyze={handleReanalyzeClip}
               reanalyzingIds={reanalyzingIds}
+              onOpenPath={handleOpenPath}
             />
           </div>
         </div>
 
         {/* Detail panel (slide-in drawer, right side) */}
-        <DetailPanel clipId={selectedClipId} onClose={() => setSelectedClipId(null)} />
+        <DetailPanel clipId={selectedClipId} onClose={() => setSelectedClipId(null)} onOpenPath={handleOpenPath} />
       </div>
     </div>
   )

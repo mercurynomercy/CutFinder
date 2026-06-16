@@ -38,6 +38,17 @@ describe('ThumbnailCard', () => {
     expect(screen.getByText('vlog.mp4')).toBeInTheDocument()
   })
 
+  it('prefers the libraryPath basename over the source filename', () => {
+    render(
+      <ThumbnailCard
+        {...baseProps}
+        libraryPath="/Library/2025-06-14/A-roll/A-0001.mp4"
+      />,
+    )
+    expect(screen.getByText('A-0001.mp4')).toBeInTheDocument()
+    expect(screen.queryByText('vlog.mp4')).not.toBeInTheDocument()
+  })
+
   it('shows full path when sourcePath has no slashes', () => {
     render(<ThumbnailCard {...baseProps} sourcePath="clip.mp4" />)
     expect(screen.getByText('clip.mp4')).toBeInTheDocument()

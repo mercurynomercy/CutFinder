@@ -12,8 +12,10 @@ import { cn } from '@/lib/cn'
 export interface ThumbnailCardProps extends React.HTMLAttributes<HTMLDivElement> {
   /** Thumbnail image URL or path */
   thumbnailUrl?: string | null
-  /** Original clip source file path (for alt text) */
+  /** Original clip source file path (for alt text / fallback name) */
   sourcePath: string
+  /** Library destination path — its basename is shown as the filename when present. */
+  libraryPath?: string | null
   /** Clip id for click handler */
   clipId: number
   /** A/B roll type badge display */
@@ -34,13 +36,18 @@ export interface ThumbnailCardProps extends React.HTMLAttributes<HTMLDivElement>
   onReanalyze?: () => void
   /** Whether this card is currently re-analyzing (spins the icon). */
   reanalyzing?: boolean
+  /** When provided, shows a play/open button that opens the video (stops propagation). */
+  onOpen?: () => void
 }
 
 const ThumbnailCard = React.forwardRef<HTMLDivElement, ThumbnailCardProps>(
   (
-    { thumbnailUrl, sourcePath, clipId, rollType, duration, captureTime, isSelected = false, status, summary, tags, onReanalyze, reanalyzing = false, className, ...props },
+    { thumbnailUrl, sourcePath, libraryPath, clipId, rollType, duration, captureTime, isSelected = false, status, summary, tags, onReanalyze, reanalyzing = false, onOpen, className, ...props },
     ref,
   ) => {
+    // Prefer the renamed library copy's filename; fall back to the source name.
+    const displayName = (libraryPath || sourcePath).split('/').pop() || sourcePath
+
     const formatDuration = (s: number) => {
       const min = Math.floor(s / 60)
       const sec = Math.floor(s % 60)
@@ -107,6 +114,20 @@ const ThumbnailCard = React.forwardRef<HTMLDivElement, ThumbnailCardProps>(
             </button>
           )}
 
+          {/* Play / open button (centered) — shown on hover, opens the video */}
+          {onOpen && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onOpen() }}
+              title="打开视频"
+              aria-label="打开视频"
+              className="absolute inset-0 m-auto flex h-11 w-11 items-center justify-center rounded-full bg-black/60 text-white opacity-0 backdrop-blur-sm transition-opacity hover:bg-black/80 group-hover:opacity-100"
+            >
+              <svg className="h-5 w-5 translate-x-px" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M8 5v14l11-7z" />
+              </svg>
+            </button>
+          )}
+
           {/* "Partial" marker (bottom-left) — AI analysis failed, can re-analyze */}
           {status === 'partial' && (
             <div
@@ -146,8 +167,8 @@ const ThumbnailCard = React.forwardRef<HTMLDivElement, ThumbnailCardProps>(
                 {rollType === 'a' ? 'A-roll' : 'B-roll'}
               </Badge>
             )}
-            <p className="truncate text-xs text-[--text-secondary]" title={sourcePath}>
-              {sourcePath.split('/').pop() || sourcePath}
+            <p className="truncate text-xs text-[--text-secondary]" title={libraryPath || sourcePath}>
+              {displayName}
             </p>
           </div>
 

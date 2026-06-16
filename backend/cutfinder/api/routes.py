@@ -530,6 +530,65 @@ def _build_router(ctx: Any) -> Any:
         path = out.decode().strip().rstrip("/")
         return {"path": path or None}
 
+    # ── Open a file/folder in Finder or default app (POST /open) ──
+    @router.post("/open")
+    async def open_path(request: Request) -> dict[str, str]:
+        """Open a path via macOS ``open`` — a folder reveals in Finder, a file
+        launches its default app (e.g. play a clip).
+
+        Only paths inside the configured library or one of the source folders are
+        allowed, so the UI can't be tricked into opening arbitrary system files.
+        """
+        import asyncio as _asyncio
+
+        try:
+            body = _json.loads(await request.body() or b"{}")
+        except _json.JSONDecodeError as exc:
+            raise HTTPException(status_code=422, detail="Body must be valid JSON") from exc
+
+        raw = body.get("path") if isinstance(body, dict) else None
+        if not raw or not isinstance(raw, str):
+            raise HTTPException(status_code=422, detail="Missing 'path'")
+
+        target = Path(raw).expanduser()
+        try:
+            target = target.resolve()
+        except OSError as exc:
+            raise HTTPException(status_code=400, detail="Invalid path") from exc
+
+        if not target.exists():
+            raise HTTPException(status_code=404, detail="Path does not exist")
+
+        # Restrict to the library root or a configured source folder.
+        allowed_roots: list[Path] = []
+        if ctx.library_path:
+            allowed_roots.append(Path(ctx.library_path).resolve())
+            try:
+                from cutfinder.config import load_config  # noqa: E402
+
+                cfg = load_config(ctx.library_path)
+                allowed_roots.extend(Path(p).resolve() for p in (cfg.prefs.source_folders or []))
+            except Exception:  # noqa: BLE001 — best effort; library root alone is enough
+                pass
+
+        if not any(target == r or r in target.parents for r in allowed_roots):
+            raise HTTPException(status_code=403, detail="Path is outside the library or source folders")
+
+        try:
+            proc = await _asyncio.create_subprocess_exec(
+                "open", str(target),
+                stdout=_asyncio.subprocess.PIPE,
+                stderr=_asyncio.subprocess.PIPE,
+            )
+        except FileNotFoundError as exc:  # `open` absent (non-macOS host)
+            raise HTTPException(status_code=501, detail="Open is unavailable on this platform") from exc
+
+        _out, err = await proc.communicate()
+        if proc.returncode != 0:
+            raise HTTPException(status_code=500, detail=err.decode().strip() or "open failed")
+
+        return {"status": "ok", "path": str(target)}
+
     return router
 
 

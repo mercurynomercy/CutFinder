@@ -49,6 +49,20 @@ export interface GalleryProps {
   onReanalyze?: (clipId: number) => void
   /** Set of clip ids currently being re-analyzed (spins their icon). */
   reanalyzingIds?: Set<number>
+  /** Called to open a path: a clip's video file, or a date folder in Finder. */
+  onOpenPath?: (path: string) => void
+}
+
+/** Derive the date folder (`<library>/<date>`) from a group's clips, or null
+ *  if none have a library copy yet (e.g. clips scanned before renaming). */
+function groupFolder(items: ClipSummary[]): string | null {
+  for (const clip of items) {
+    if (clip.library_path) {
+      const folder = clip.library_path.split('/').slice(0, -2).join('/')
+      if (folder) return folder
+    }
+  }
+  return null
 }
 
 // ── Date grouping ───────────────────────────────────────────────
@@ -81,18 +95,32 @@ function groupByDate(clips: ClipSummary[]): { key: string; label: string; items:
   return groups
 }
 
-export function Gallery({ clips, selectedClipId, onSelect, onReanalyze, reanalyzingIds }: GalleryProps) {
+export function Gallery({ clips, selectedClipId, onSelect, onReanalyze, reanalyzingIds, onOpenPath }: GalleryProps) {
   if (clips.length === 0) return <EmptyState />
 
   const groups = groupByDate(clips)
 
   return (
     <div className="min-h-0 flex-1 space-y-6 overflow-y-auto p-4">
-      {groups.map(({ key, label, items }) => (
+      {groups.map(({ key, label, items }) => {
+        const folder = groupFolder(items)
+        return (
         <section key={key}>
           <h2 className="sticky top-0 z-10 mb-3 flex items-baseline gap-2 bg-[--bg-canvas]/95 py-1 backdrop-blur-sm">
             <span className="text-sm font-semibold text-[--text-primary]">{label}</span>
             <span className="text-xs text-[--text-muted]">{items.length}</span>
+            {onOpenPath && folder && (
+              <button
+                onClick={() => onOpenPath(folder)}
+                title="在 Finder 中打开"
+                aria-label="在 Finder 中打开"
+                className="ml-1 inline-flex items-center self-center rounded p-1 text-[--text-muted] transition-colors hover:bg-[--surface-2] hover:text-[--text-primary]"
+              >
+                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" aria-hidden="true">
+                  <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.25 12.75V12A2.25 2.25 0 014.5 9.75h15A2.25 2.25 0 0121.75 12v.75m-8.69-6.44l-2.12-2.12a1.5 1.5 0 00-1.061-.44H4.5A2.25 2.25 0 002.25 6v12a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9a2.25 2.25 0 00-2.25-2.25h-5.379a1.5 1.5 0 01-1.06-.44z" />
+                </svg>
+              </button>
+            )}
           </h2>
           <div className="grid auto-rows-min grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
             {items.map((clip) => (
@@ -100,6 +128,7 @@ export function Gallery({ clips, selectedClipId, onSelect, onReanalyze, reanalyz
                 key={clip.id}
                 clipId={clip.id}
                 sourcePath={clip.source_path}
+                libraryPath={clip.library_path}
                 rollType={(clip.roll_type === 'a' ? 'a' : clip.roll_type === 'b' ? 'b' : undefined)}
                 duration={clip.duration_s ?? undefined}
                 thumbnailUrl={(typeof clip.thumbnail_path === 'string' && clip.thumbnail_path) || undefined}
@@ -111,11 +140,13 @@ export function Gallery({ clips, selectedClipId, onSelect, onReanalyze, reanalyz
                 onClick={() => onSelect(clip.id)}
                 onReanalyze={onReanalyze ? () => onReanalyze(clip.id) : undefined}
                 reanalyzing={reanalyzingIds?.has(clip.id)}
+                onOpen={onOpenPath ? () => onOpenPath(clip.library_path || clip.source_path) : undefined}
               />
             ))}
           </div>
         </section>
-      ))}
+        )
+      })}
     </div>
   )
 }
