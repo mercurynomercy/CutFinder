@@ -8,7 +8,7 @@ Usage:
   <DetailPanel clipId={clipId} onClose={() => setSelectedClip(null)} />
 */
 
-import React, { useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useState } from 'react'
 
 import type { ClipDetail, TagItem, TranscriptData } from '@/api/client'
 import { api } from '@/api/client'
@@ -151,6 +151,22 @@ export function DetailPanel({ clipId, onClose }: DetailPanelProps) {
   // Editing state
   const [editSummary, setEditSummary] = useState('')
   const [saving, setSaving] = useState(false)
+  const [reanalyzing, setReanalyzing] = useState(false)
+
+  // (Re)fetch the clip detail — reused after re-analyze / roll correction.
+  const loadClip = useCallback((id: number) => {
+    setLoading(true)
+    setError(null)
+    return api.getClip(id)
+      .then((data) => {
+        setClip(data)
+        setEditSummary(data.summary || '')
+      })
+      .catch((err: unknown) => {
+        setError(err instanceof Error ? err : new Error(String(err)))
+      })
+      .finally(() => setLoading(false))
+  }, [])
 
   // Close on Escape key press
   useEffect(() => {
@@ -167,23 +183,9 @@ export function DetailPanel({ clipId, onClose }: DetailPanelProps) {
   // Fetch clip detail when id changes
   useEffect(() => {
     if (clipId === null) return
-
-    setLoading(true)
     setClip(null)
-    setError(null)
-
-    api.getClip(clipId)
-      .then((data) => {
-        setClip(data)
-        setEditSummary(data.summary || '')
-      })
-      .catch((err: unknown) => {
-        setError(err instanceof Error ? err : new Error(String(err)))
-      })
-      .finally(() => setLoading(false))
-
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [clipId])
+    loadClip(clipId)
+  }, [clipId, loadClip])
 
   // Optimistic save summary/description
   const handleSave = async () => {
@@ -199,14 +201,32 @@ export function DetailPanel({ clipId, onClose }: DetailPanelProps) {
     }
   }
 
-  // Re-analyze with loading state
+  // Re-analyze this single clip: trigger the job, wait for it to finish, then
+  // refresh the panel so the new summary/description/tags show up.
   const handleReanalyze = async () => {
-    if (!clip) return
-
+    if (!clip || reanalyzing) return
+    const clipId = clip.id
+    setReanalyzing(true)
     try {
-      await api.reanalyzeClip(clip.id)
+      const { job_id } = await api.reanalyzeClip(clipId)
+
+      // Poll the job until it reaches a terminal state (cap at ~5 min).
+      const deadline = Date.now() + 5 * 60_000
+      while (Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, 1500))
+        try {
+          const job = await api.getJob(job_id)
+          if (['done', 'failed', 'cancelled'].includes(job.status)) break
+        } catch {
+          // transient error — keep polling
+        }
+      }
+
+      await loadClip(clipId)
     } catch (err) {
-      console.error('Failed to trigger re-analyze:', err)
+      console.error('Failed to re-analyze:', err)
+    } finally {
+      setReanalyzing(false)
     }
   }
 
@@ -395,9 +415,9 @@ export function DetailPanel({ clipId, onClose }: DetailPanelProps) {
                   </Button>
                 </div>
 
-                {/* Re-analyze */}
-                <Button size="sm" variant="ghost" onClick={handleReanalyze}>
-                  Re-analyze
+                {/* Re-analyze just this clip (re-runs AI for its current A/B type) */}
+                <Button size="sm" variant="ghost" onClick={handleReanalyze} disabled={reanalyzing}>
+                  {reanalyzing ? 'Re-analyzing…' : 'Re-analyze'}
                 </Button>
               </div>
 
