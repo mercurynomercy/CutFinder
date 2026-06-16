@@ -23,7 +23,7 @@ describe('JobsPanel', () => {
     expect(container).toBeEmptyDOMElement()
   })
 
-  it('renders the clip path in the task list when a clip_done event arrives', async () => {
+  it('renders the clip path in the progress card when a clip_done event arrives', async () => {
     useJobEventsMock.mockReturnValue({
       loading: false,
       error: null,

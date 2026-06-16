@@ -27,6 +27,7 @@ export default function App() {
   const [activeJobId, setActiveJobId] = useState<JobsPanelProps['activeJobId']>(null)
   const [appliedFilters, setAppliedFilters] = useState<Partial<FilterState>>({})
   const [reanalyzingIds, setReanalyzingIds] = useState<Set<number>>(new Set())
+  const [sortBy, setSortBy] = useState<'date' | 'name' | 'duration'>('date')
 
   const clipsRef = useRef(clips)
   clipsRef.current = clips
@@ -64,6 +65,22 @@ export default function App() {
       if (clipDate !== appliedFilters.date) return false
     }
     return true
+  })
+
+  // Sort the filtered clips (default: by shooting date, newest first).
+  const sortedClips = [...filteredClips].sort((a, b) => {
+    if (sortBy === 'name') {
+      const na = (a.source_path.split('/').pop() || '').toLowerCase()
+      const nb = (b.source_path.split('/').pop() || '').toLowerCase()
+      return na.localeCompare(nb)
+    }
+    if (sortBy === 'duration') {
+      return (b.duration_s ?? 0) - (a.duration_s ?? 0)
+    }
+    // 'date' — embedded capture time preferred, newest first
+    const da = a.capture_time || a.created_at || ''
+    const db = b.capture_time || b.created_at || ''
+    return db.localeCompare(da)
   })
 
   const handleScan = async () => {
@@ -192,14 +209,31 @@ export default function App() {
           {/* Filters sidebar (fixed width) */}
           <Filters onFilterChange={handleFilterChange} />
 
-          {/* Gallery grid (flex-1, scrollable) */}
-          <Gallery
-            clips={filteredClips}
-            selectedClipId={selectedClipId}
-            onSelect={(clipId) => setSelectedClipId(clipId)}
-            onReanalyze={handleReanalyzeClip}
-            reanalyzingIds={reanalyzingIds}
-          />
+          {/* Gallery column: sort toolbar + scrollable grid */}
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+            <div className="flex h-11 shrink-0 items-center justify-between border-b border-[--border] px-4">
+              <span className="text-xs text-[--text-muted]">{sortedClips.length} clips</span>
+              <label className="flex items-center gap-2 text-xs text-[--text-muted]">
+                Sort
+                <select
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value as 'date' | 'name' | 'duration')}
+                  className="rounded-md border border-[--border] bg-[--surface-2] px-2 py-1 text-xs text-[--text-primary] outline-none transition-colors focus:border-[--primary]"
+                >
+                  <option value="date">Date (newest)</option>
+                  <option value="name">Name (A–Z)</option>
+                  <option value="duration">Duration (longest)</option>
+                </select>
+              </label>
+            </div>
+            <Gallery
+              clips={sortedClips}
+              selectedClipId={selectedClipId}
+              onSelect={(clipId) => setSelectedClipId(clipId)}
+              onReanalyze={handleReanalyzeClip}
+              reanalyzingIds={reanalyzingIds}
+            />
+          </div>
         </div>
 
         {/* Detail panel (slide-in drawer, right side) */}
