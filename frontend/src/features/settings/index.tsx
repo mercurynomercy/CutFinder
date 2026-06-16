@@ -356,20 +356,23 @@ export function SettingsPage({ onSave }: SettingsPageProps) {
             {/* ── Model selectors ─────────────────────── */}
             <fieldset className="rounded-lg border border-[--border] bg-[--surface-1] p-4">
               <legend className="text-sm font-medium text-[--text-primary]">Models</legend>
-              <div className="mt-3 space-y-3">
+              <div className="mt-3 space-y-4">
                 <label className="block text-sm text-[--text-secondary]">Text model</label>
+                <p className="mb-1 text-xs text-[--text-muted]">用于 A-roll 的中文摘要 + 标签生成（通过 OMLX，纯文本模型）</p>
                 <input
                   type="text" value={prefs.text_model} readOnly
                   className="w-full rounded-md border border-[--border] bg-[--surface-2] px-3 py-1.5 text-sm"
                 />
 
                 <label className="mt-2 block text-sm text-[--text-secondary]">Vision model</label>
+                <p className="mb-1 text-xs text-[--text-muted]">用于 B-roll 的视觉标签 + 描述生成（通过 OMLX，多模态模型）</p>
                 <input
                   type="text" value={prefs.vision_model} readOnly
                   className="w-full rounded-md border border-[--border] bg-[--surface-2] px-3 py-1.5 text-sm"
                 />
 
                 <label className="mt-2 block text-sm text-[--text-secondary]">Whisper model</label>
+                <p className="mb-1 text-xs text-[--text-muted]">用于 A-roll 中文语音转文字（独立本地进程，不经过 OMLX）</p>
                 <input
                   type="text" value={prefs.whisper_model} readOnly
                   className="w-full rounded-md border border-[--border] bg-[--surface-2] px-3 py-1.5 text-sm"
@@ -384,6 +387,7 @@ export function SettingsPage({ onSave }: SettingsPageProps) {
               {/* Extensions */}
               <div className="mt-3">
                 <label className="mb-1 block text-sm text-[--text-secondary]">Supported extensions</label>
+                <p className="mb-1 text-xs text-[--text-muted]">扫描时只处理这些后缀的视频文件</p>
                 <div className="mb-2 flex gap-1.5">
                   {extDisplay.map((ext, i) => (
                     <ExtensionTag key={i} value={ext} onRemove={() => handleRemoveExtension(ext)} />
@@ -402,6 +406,7 @@ export function SettingsPage({ onSave }: SettingsPageProps) {
 
               {/* B-roll frame count */}
               <label className="mt-4 block text-sm text-[--text-secondary]">B-roll frame count</label>
+              <p className="mb-1 text-xs text-[--text-muted]">B-roll 视觉分析时提取的视频帧数，越多越准确但处理更慢</p>
               <input
                 type="number" min={1} step={1} value={prefs.broll_frame_count}
                 onChange={(e) => updateField('broll_frame_count', parseInt(e.target.value, 10))}
@@ -410,6 +415,7 @@ export function SettingsPage({ onSave }: SettingsPageProps) {
 
               {/* VAD threshold */}
               <label className="mt-4 block text-sm text-[--text-secondary]">VAD threshold (0–1)</label>
+              <p className="mb-1 text-xs text-[--text-muted]">语音检测灵敏度阈值，越高越严格（只标记有明显人声的片段为 A-roll）</p>
               <input
                 type="number" min={0} max={1} step={0.05} value={prefs.vad_threshold}
                 onChange={(e) => updateField('vad_threshold', parseFloat(e.target.value))}
@@ -418,6 +424,7 @@ export function SettingsPage({ onSave }: SettingsPageProps) {
 
               {/* AI output language */}
               <label className="mt-4 block text-sm text-[--text-secondary]">AI output language</label>
+              <p className="mb-1 text-xs text-[--text-muted]">AI 生成的摘要、标签等文字输出的语言</p>
               <select
                 value={prefs.output_language}
                 onChange={(e) => updateField('output_language', e.target.value as 'zh' | 'en')}
