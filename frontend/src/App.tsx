@@ -27,7 +27,7 @@ export default function App() {
   const [activeJobId, setActiveJobId] = useState<JobsPanelProps['activeJobId']>(null)
   const [appliedFilters, setAppliedFilters] = useState<Partial<FilterState>>({})
   const [reanalyzingIds, setReanalyzingIds] = useState<Set<number>>(new Set())
-  const [sortBy, setSortBy] = useState<'date' | 'name' | 'duration'>('date')
+  const [sortBy, setSortBy] = useState<'date-newest' | 'date-oldest'>('date-newest')
 
   const clipsRef = useRef(clips)
   clipsRef.current = clips
@@ -69,18 +69,10 @@ export default function App() {
 
   // Sort the filtered clips (default: by shooting date, newest first).
   const sortedClips = [...filteredClips].sort((a, b) => {
-    if (sortBy === 'name') {
-      const na = (a.source_path.split('/').pop() || '').toLowerCase()
-      const nb = (b.source_path.split('/').pop() || '').toLowerCase()
-      return na.localeCompare(nb)
-    }
-    if (sortBy === 'duration') {
-      return (b.duration_s ?? 0) - (a.duration_s ?? 0)
-    }
-    // 'date' — embedded capture time preferred, newest first
+    // 'date' — embedded capture time preferred
     const da = a.capture_time || a.created_at || ''
     const db = b.capture_time || b.created_at || ''
-    return db.localeCompare(da)
+    return sortBy === 'date-newest' ? db.localeCompare(da) : da.localeCompare(db)
   })
 
   const handleScan = async () => {
@@ -246,12 +238,11 @@ export default function App() {
                 Sort
                 <select
                   value={sortBy}
-                  onChange={(e) => setSortBy(e.target.value as 'date' | 'name' | 'duration')}
+                  onChange={(e) => setSortBy(e.target.value as 'date-newest' | 'date-oldest')}
                   className="rounded-md border border-[--border] bg-[--surface-2] px-2 py-1 text-xs text-[--text-primary] outline-none transition-colors focus:border-[--primary]"
                 >
-                  <option value="date">Date (newest)</option>
-                  <option value="name">Name (A–Z)</option>
-                  <option value="duration">Duration (longest)</option>
+                  <option value="date-newest">Date (newest)</option>
+                  <option value="date-oldest">Date (oldest)</option>
                 </select>
               </label>
             </div>
