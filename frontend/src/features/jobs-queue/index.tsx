@@ -48,8 +48,16 @@ function formatTime(value: string | null): string {
 
 // ── Single job row ────────────────────────────────────────────────
 
-function JobRow({ job, onChanged }: { job: JobStatus; onChanged: () => void }) {
+function JobRow({ job, paused, onChanged }: { job: JobStatus; paused: boolean; onChanged: () => void }) {
   const [busy, setBusy] = useState(false)
+
+  // A queued job can't progress while the whole worker is paused — say so
+  // explicitly instead of leaving it as an indefinite "排队中".
+  const isPausedQueued = paused && (job.status === 'queued' || job.status === 'pending')
+  const statusLabel = isPausedQueued ? '已暂停' : (STATUS_LABELS[job.status] ?? job.status)
+  const statusBadge = isPausedQueued
+    ? 'bg-[--warning]/15 text-[--warning]'
+    : (STATUS_BADGE[job.status] ?? 'bg-[--surface-3] text-[--text-secondary]')
 
   const handleDelete = async () => {
     setBusy(true)
@@ -84,8 +92,8 @@ function JobRow({ job, onChanged }: { job: JobStatus; onChanged: () => void }) {
         {KIND_LABELS[job.kind ?? ''] ?? job.kind ?? '—'}
       </td>
       <td className="px-4 py-3">
-        <span className={`inline-flex rounded px-2 py-0.5 text-xs font-medium ${STATUS_BADGE[job.status] ?? 'bg-[--surface-3] text-[--text-secondary]'}`}>
-          {STATUS_LABELS[job.status] ?? job.status}
+        <span className={`inline-flex rounded px-2 py-0.5 text-xs font-medium ${statusBadge}`}>
+          {statusLabel}
         </span>
       </td>
       <td className="px-4 py-3 text-sm tabular-nums text-[--text-secondary]">
@@ -178,6 +186,19 @@ export function JobsQueuePage({ onClose }: JobsQueuePageProps) {
       </header>
 
       <div className="flex-1 overflow-auto p-6">
+        {paused && (
+          <div className="mb-4 flex items-center justify-between gap-3 rounded-lg border border-[--warning]/30 bg-[--warning]/10 px-4 py-3">
+            <div className="flex items-center gap-2 text-sm text-[--warning]">
+              <svg className="h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24">
+                <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15.75 5.25v13.5m-7.5-13.5v13.5" />
+              </svg>
+              <span>队列已暂停 — 排队中的任务不会被处理。点击「恢复」继续。</span>
+            </div>
+            <Button size="sm" variant="secondary" onClick={handleTogglePause}>
+              恢复处理
+            </Button>
+          </div>
+        )}
         {jobs.length === 0 ? (
           <div className="flex h-full items-center justify-center text-sm text-[--text-muted]">
             暂无任务
@@ -196,7 +217,7 @@ export function JobsQueuePage({ onClose }: JobsQueuePageProps) {
             </thead>
             <tbody>
               {jobs.map((job) => (
-                <JobRow key={job.id} job={job} onChanged={refresh} />
+                <JobRow key={job.id} job={job} paused={paused} onChanged={refresh} />
               ))}
             </tbody>
           </table>

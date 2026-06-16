@@ -86,6 +86,20 @@ export default function App() {
   const handleScan = async () => {
     console.log('[App] Scan button clicked')
     try {
+      // If the worker is globally paused, a queued scan won't start processing.
+      // Warn the user and offer to resume before scanning.
+      try {
+        const { paused } = await api.listJobs()
+        if (paused) {
+          const ok = window.confirm(
+            '任务队列已暂停，扫描出的新任务不会自动开始处理。\n\n点击「确定」恢复处理并开始扫描；点击「取消」放弃本次扫描。',
+          )
+          if (!ok) return
+          await api.resumeJobs()
+        }
+      } catch {
+        // Couldn't check pause state — proceed with the scan anyway.
+      }
       // Trigger scan — SSE will stream progress events; poll for job id
       console.log('[App] Calling POST /api/scan...')
       const response = await fetch('/api/scan', { method: 'POST' })

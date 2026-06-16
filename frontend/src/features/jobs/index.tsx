@@ -53,6 +53,7 @@ function ScanProgress({ jobId, events }: ScanProgressProps) {
   // Poll job status for the determinate counter (SSE drives the live filename).
   useEffect(() => {
     if (!jobId) { setJob(null); return }
+    setJob(null)  // drop the previous job's status so it can't leak across jobs
     let cancelled = false
     const tick = () => {
       if (cancelled) return
@@ -63,9 +64,14 @@ function ScanProgress({ jobId, events }: ScanProgressProps) {
     return () => { cancelled = true; clearInterval(interval) }
   }, [jobId])
 
-  // The scan is finished once a terminal SSE event arrives (the toast then
-  // reports the outcome). The polled job status only feeds the done/total counter.
-  const finished = events.some((e) => e.type === 'job_completed' || e.type === 'job_failed')
+  // The scan is finished once a terminal SSE event arrives OR the polled job
+  // status is terminal. The status check is essential: SSE only delivers events
+  // emitted after we subscribe, so a job that completes before/around mount
+  // never yields a terminal SSE event — without the status fallback the card
+  // would linger forever.
+  const finishedBySse = events.some((e) => e.type === 'job_completed' || e.type === 'job_failed')
+  const finishedByStatus = job != null && ['done', 'failed', 'cancelled'].includes(job.status)
+  const finished = finishedBySse || finishedByStatus
 
   if (!jobId || finished) return null
 
