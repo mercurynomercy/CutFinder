@@ -152,6 +152,29 @@ export function SettingsPage({ onSave }: SettingsPageProps) {
     }
   }
 
+  // Switch the active library at runtime. Unlike other prefs (saved via
+  // PUT /settings into the *current* library), the library binding lives in
+  // ~/.cutfinder/active_library and must be changed via POST /api/library —
+  // otherwise the app keeps using the old library no matter what's picked.
+  const handleSwitchLibrary = async (path: string) => {
+    const p = path.trim()
+    if (!p || p === libraryPath) return
+    const ok = window.confirm(
+      `切换素材库到:\n${p}\n\n应用将改用这个目录的目录数据库、缩略图和设置（每个库各自独立）。当前库不会被修改。是否继续？`,
+    )
+    if (!ok) return
+    setSaving(true)
+    setError(null)
+    try {
+      await api.setLibrary(p)
+      await load()
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err : new Error(String(err)))
+    } finally {
+      setSaving(false)
+    }
+  }
+
   const updateField = <K extends keyof UpdateSettingsBody>(key: K, value: UpdateSettingsBody[K]) => {
     setPrefs((prev) => (prev ? { ...prev, [key]: value } : prev))
     // Clear field error for this key if present
@@ -188,7 +211,12 @@ export function SettingsPage({ onSave }: SettingsPageProps) {
 
     setSaving(true)
     try {
-      await api.putSettings(prefs)
+      // library_path is the active-library binding, not a normal pref — it's
+      // changed via setLibrary (POST /api/library). Stripping it here keeps the
+      // saved pref from diverging from the real binding.
+      const body = { ...prefs }
+      delete body.library_path
+      await api.putSettings(body)
       onSave?.()
     } catch (err: unknown) {
       setError(err instanceof Error ? err : new Error(String(err)))
@@ -278,7 +306,7 @@ export function SettingsPage({ onSave }: SettingsPageProps) {
             label="Add folder"
             icon={
               <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24">
-                <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M2 12.75a4.75 4.75 0 0 1 .836-2.69l2.475-3.08A4.75 4.75 0 0 1 8.692 3h6.616a4.75 4.75 0 0 1 3.352 1.38l2.475 3.08a4.75 4.75 0 0 1 .836 2.69v6.5a4.75 4.75 0 0 1-4.75 4.75H6.75a4.75 4.75 0 0 1-4.75-4.75z" />
+                <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 10.5v6m3-3H9m4.06-7.19-2.12-2.12a1.5 1.5 0 0 0-1.061-.44H4.5A2.25 2.25 0 0 0 2.25 6v12a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9a2.25 2.25 0 0 0-2.25-2.25h-5.379a1.5 1.5 0 0 1-1.06-.44Z" />
               </svg>
             }
             onChange={(folder) => {
@@ -292,12 +320,12 @@ export function SettingsPage({ onSave }: SettingsPageProps) {
         <fieldset className="rounded-lg border border-[--border] bg-[--surface-1] p-4">
           <legend className="text-sm font-medium text-[--text-primary]">Library path</legend>
           <p className="mt-1 text-xs leading-relaxed text-[--text-secondary]">
-            组织后的素材副本、缩略图和目录数据库会存储在这里。一旦设置，此路径不可更改。
+            组织后的素材副本、缩略图和目录数据库会存储在这里。切换到其他目录会改用那个库（每个库各自独立，当前库不会被修改）。
           </p>
           <div className="mt-2 flex gap-2">
             <input
               type="text"
-              value={prefs.library_path || ''}
+              value={libraryPath || ''}
               readOnly
               className="flex-1 rounded-md border border-[--border] bg-[--surface-3] px-3 py-1.5 text-sm outline-none opacity-70"
             />
@@ -305,10 +333,10 @@ export function SettingsPage({ onSave }: SettingsPageProps) {
               label="Choose…"
               icon={
                 <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24">
-                  <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M2 12.75a4.75 4.75 0 0 1 .836-2.69l2.475-3.08A4.75 4.75 0 0 1 8.692 3h6.616a4.75 4.75 0 0 1 3.352 1.38l2.475 3.08a4.75 4.75 0 0 1 .836 2.69v6.5a4.75 4.75 0 0 1-4.75 4.75H6.75a4.75 4.75 0 0 1-4.75-4.75z" />
+                  <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3.75 9.776c.112-.017.227-.026.344-.026h15.812c.117 0 .232.009.344.026m-16.5 0a2.25 2.25 0 0 0-1.883 2.542l.857 6a2.25 2.25 0 0 0 2.227 1.932H19.05a2.25 2.25 0 0 0 2.227-1.932l.857-6a2.25 2.25 0 0 0-1.883-2.542m-16.5 0V6A2.25 2.25 0 0 1 6 3.75h3.879a1.5 1.5 0 0 1 1.06.44l2.122 2.12a1.5 1.5 0 0 0 1.06.44H18A2.25 2.25 0 0 1 20.25 9v.776" />
                 </svg>
               }
-              onChange={(folder) => updateField('library_path', folder)}
+              onChange={(folder) => void handleSwitchLibrary(folder)}
             />
           </div>
         </fieldset>
