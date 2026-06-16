@@ -40,29 +40,50 @@ export function Filters({ onFilterChange }: FiltersProps) {
   const [filters, setFilters] = useState<FiltersState>(DEFAULT_FILTERS)
   const [collapsed, setCollapsed] = useState(false)
 
-  // Unique tag names and dates derived from the clip list (fetched on mount).
+  // Unique tag names (sorted by frequency) and dates, derived from the clip
+  // list (fetched on mount).
   const [allTags, setAllTags] = useState<string[]>([])
   const [allDates, setAllDates] = useState<string[]>([])
+
+  // Tag list controls (the list can grow into the hundreds).
+  const [tagQuery, setTagQuery] = useState('')
+  const [showAllTags, setShowAllTags] = useState(false)
 
   useEffect(() => {
     let cancelled = false
     api.listClips()
       .then((clips) => {
         if (cancelled) return
-        const tagNames = new Set<string>()
+        const tagCounts = new Map<string, number>()
         const dates = new Set<string>()
         for (const c of clips) {
-          c.tags?.forEach((t) => tagNames.add(t.name))
+          c.tags?.forEach((t) => tagCounts.set(t.name, (tagCounts.get(t.name) ?? 0) + 1))
           const d = clipDate(c)
           if (d) dates.add(d)
         }
-        setAllTags([...tagNames].sort())
+        // Most-used tags first, then alphabetical — surfaces the useful ones.
+        const sorted = [...tagCounts.keys()].sort(
+          (a, b) => (tagCounts.get(b)! - tagCounts.get(a)!) || a.localeCompare(b),
+        )
+        setAllTags(sorted)
         setAllDates([...dates].sort().reverse()) // newest first
       })
       .catch(() => { setAllTags([]); setAllDates([]) })
 
     return () => { cancelled = true }
   }, [])
+
+  // Visible tags: filter by search, then cap the count unless expanded. The
+  // selected tag is always kept visible so it can be toggled off.
+  const TAG_LIMIT = 24
+  const query = tagQuery.trim().toLowerCase()
+  const matchedTags = query ? allTags.filter((t) => t.toLowerCase().includes(query)) : allTags
+  const capped = showAllTags || query ? matchedTags : matchedTags.slice(0, TAG_LIMIT)
+  const visibleTags =
+    filters.tag && !capped.includes(filters.tag) && matchedTags.includes(filters.tag)
+      ? [filters.tag, ...capped]
+      : capped
+  const hiddenCount = matchedTags.length - capped.length
 
   const updateFilter = <K extends keyof FiltersState>(key: K, value: FiltersState[K]) => {
     const next = { ...filters, [key]: value }
@@ -156,29 +177,63 @@ export function Filters({ onFilterChange }: FiltersProps) {
         </select>
       </div>
 
-      {/* ── Tag filter (chips) ─────────────────────────── */}
+      {/* ── Tag filter (searchable, capped chips) ───────── */}
       <div>
-        <label className="mb-2 block text-xs font-medium uppercase tracking-wider text-[--text-muted]">
-          Tags
-        </label>
-        {allTags.length > 0 ? (
-          <div className="flex flex-wrap gap-1.5">
-            {allTags.map((tag) => (
-              <button
-                key={tag}
-                onClick={() => updateFilter('tag', filters.tag === tag ? null : tag)}
-                className={`rounded-full border px-2.5 py-0.5 text-xs font-medium transition-colors ${
-                  filters.tag === tag
-                    ? 'border-[--primary] bg-[--primary-soft] text-[--primary]'
-                    : 'border-[--border] bg-[--surface-2] text-[--text-secondary] hover:border-[--border-strong]'
-                }`}
-              >
-                {tag}
-              </button>
-            ))}
-          </div>
-        ) : (
+        <div className="mb-2 flex items-baseline justify-between">
+          <label className="text-xs font-medium uppercase tracking-wider text-[--text-muted]">
+            Tags
+          </label>
+          {allTags.length > 0 && (
+            <span className="text-[10px] text-[--text-muted]">{allTags.length}</span>
+          )}
+        </div>
+
+        {allTags.length === 0 ? (
           <p className="text-xs text-[--text-muted]">No tags yet</p>
+        ) : (
+          <>
+            {/* Search — only worth showing once the list is long. */}
+            {allTags.length > TAG_LIMIT && (
+              <input
+                type="text"
+                value={tagQuery}
+                onChange={(e) => setTagQuery(e.target.value)}
+                placeholder="Search tags…"
+                className="mb-2 w-full rounded-md border border-[--border] bg-[--surface-2] px-2.5 py-1 text-xs text-[--text-primary] placeholder:text-[--text-muted] outline-none transition-colors focus:border-[--primary]"
+              />
+            )}
+
+            {visibleTags.length > 0 ? (
+              <div className="flex flex-wrap gap-1.5">
+                {visibleTags.map((tag) => (
+                  <button
+                    key={tag}
+                    onClick={() => updateFilter('tag', filters.tag === tag ? null : tag)}
+                    className={`max-w-full truncate rounded-full border px-2.5 py-0.5 text-xs font-medium transition-colors ${
+                      filters.tag === tag
+                        ? 'border-[--primary] bg-[--primary-soft] text-[--primary]'
+                        : 'border-[--border] bg-[--surface-2] text-[--text-secondary] hover:border-[--border-strong]'
+                    }`}
+                    title={tag}
+                  >
+                    {tag}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs text-[--text-muted]">No matching tags</p>
+            )}
+
+            {/* Show more / less — hidden while searching (search already trims). */}
+            {!query && (hiddenCount > 0 || showAllTags) && matchedTags.length > TAG_LIMIT && (
+              <button
+                onClick={() => setShowAllTags((v) => !v)}
+                className="mt-2 text-xs font-medium text-[--text-muted] hover:text-[--primary]"
+              >
+                {showAllTags ? 'Show less' : `Show all ${matchedTags.length}`}
+              </button>
+            )}
+          </>
         )}
       </div>
 
