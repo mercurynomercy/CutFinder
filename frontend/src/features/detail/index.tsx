@@ -180,9 +180,15 @@ export function DetailPanel({ clipId, onClose }: DetailPanelProps) {
     return () => document.removeEventListener('keydown', handleKey)
   }, [clipId, onClose])
 
-  const captureDate = clip?.capture_time ? (() => {
-    return new Date(clip.capture_time).toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' })
-  }) : null
+  const captureDate = (() => {
+    if (!clip?.capture_time) return null
+    console.log('[DetailPanel] capture_time =', JSON.stringify(clip.capture_time))
+    const d = new Date(clip.capture_time)
+    if (isNaN(d.getTime())) return null
+    const result = d.toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' })
+    console.log('[DetailPanel] captureDate =', result)
+    return result
+  })()
 
   // Fetch clip detail when id changes
   useEffect(() => {
