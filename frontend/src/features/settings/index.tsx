@@ -263,7 +263,8 @@ export function SettingsPage({ onSave }: SettingsPageProps) {
 
   return (
     <div className="flex flex-1 overflow-auto p-6">
-      <form onSubmit={(e) => { e.preventDefault(); handleSave() }} className="w-full max-w-2xl space-y-6">
+      {/* Title + Back button — full width at top */}
+      <div className="mx-auto w-full max-w-5xl space-y-6">
         <div className="flex items-center justify-between gap-4">
           <h1 className="text-xl font-semibold tracking-tight text-[--text-primary]">Settings</h1>
           <Button variant="ghost" size="sm" onClick={() => onSave?.()}>
@@ -271,164 +272,179 @@ export function SettingsPage({ onSave }: SettingsPageProps) {
           </Button>
         </div>
 
-        {/* ── Source folders (read-only input for scan) ─────────────── */}
-        <fieldset className="rounded-lg border border-[--border] bg-[--surface-1] p-4">
-          <legend className="text-sm font-medium text-[--text-primary]">Source folders</legend>
-          <p className="mt-1 text-xs leading-relaxed text-[--text-secondary]">
-            这些文件夹是你的原始视频素材（只读，不会被修改或移动）。扫描时 CutFinder
-            只会读取这些文件夹里的文件。
-          </p>
-          <div className="mt-3 space-y-2">
-            {(prefs.source_folders || []).map((folder: string, i: number) => (
-              <div key={i} className="flex items-center gap-2">
+        {/* Responsive two-column grid — single column on narrow screens */}
+        <form onSubmit={(e) => { e.preventDefault(); handleSave() }} className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+
+          {/* ── Column 1 ───────────────────────────────────── */}
+          <div className="space-y-6">
+
+            {/* ── Source folders ─────────────────────── */}
+            <fieldset className="rounded-lg border border-[--border] bg-[--surface-1] p-4">
+              <legend className="text-sm font-medium text-[--text-primary]">Source folders</legend>
+              <p className="mt-1 text-xs leading-relaxed text-[--text-secondary]">
+                这些文件夹是你的原始视频素材（只读，不会被修改或移动）。扫描时 CutFinder
+                只会读取这些文件夹里的文件。
+              </p>
+              <div className="mt-3 space-y-2">
+                {(prefs.source_folders || []).map((folder: string, i: number) => (
+                  <div key={i} className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={folder}
+                      readOnly
+                      className="flex-1 rounded-md border border-[--border] bg-[--surface-3] px-3 py-1.5 text-sm outline-none opacity-70"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveSourceFolder(folder)}
+                      className="shrink-0 rounded-md p-1 text-[--text-muted] hover:bg-[--surface-3] hover:text-[--error]"
+                      aria-label={`Remove ${folder}`}
+                    >
+                      <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24">
+                        <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                ))}
+              </div>
+
+              {/* Hidden file input for folder picker — macOS only (webkitdirectory) */}
+              <FolderPickerButton
+                label="Add folder"
+                icon={
+                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24">
+                    <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 10.5v6m3-3H9m4.06-7.19-2.12-2.12a1.5 1.5 0 0 0-1.061-.44H4.5A2.25 2.25 0 0 0 2.25 6v12a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9a2.25 2.25 0 0 0-2.25-2.25h-5.379a1.5 1.5 0 0 1-1.06-.44Z" />
+                  </svg>
+                }
+                onChange={(folder) => {
+                  if (!prefs || (prefs.source_folders ?? []).includes(folder)) return
+                  updateField('source_folders', [...(prefs.source_folders || []), folder])
+                }}
+              />
+            </fieldset>
+
+            {/* ── Library path ─────────────────────── */}
+            <fieldset className="rounded-lg border border-[--border] bg-[--surface-1] p-4">
+              <legend className="text-sm font-medium text-[--text-primary]">Library path</legend>
+              <p className="mt-1 text-xs leading-relaxed text-[--text-secondary]">
+                组织后的素材副本、缩略图和目录数据库会存储在这里。切换到其他目录会改用那个库（每个库各自独立，当前库不会被修改）。
+              </p>
+              <div className="mt-2 flex gap-2">
                 <input
                   type="text"
-                  value={folder}
+                  value={libraryPath || ''}
                   readOnly
                   className="flex-1 rounded-md border border-[--border] bg-[--surface-3] px-3 py-1.5 text-sm outline-none opacity-70"
                 />
-                <button
-                  type="button"
-                  onClick={() => handleRemoveSourceFolder(folder)}
-                  className="shrink-0 rounded-md p-1 text-[--text-muted] hover:bg-[--surface-3] hover:text-[--error]"
-                  aria-label={`Remove ${folder}`}
-                >
-                  <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24">
-                    <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
+                <FolderPickerButton
+                  label="Choose…"
+                  icon={
+                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24">
+                      <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3.75 9.776c.112-.017.227-.026.344-.026h15.812c.117 0 .232.009.344.026m-16.5 0a2.25 2.25 0 0 0-1.883 2.542l.857 6a2.25 2.25 0 0 0 2.227 1.932H19.05a2.25 2.25 0 0 0 2.227-1.932l.857-6a2.25 2.25 0 0 0-1.883-2.542m-16.5 0V6A2.25 2.25 0 0 1 6 3.75h3.879a1.5 1.5 0 0 1 1.06.44l2.122 2.12a1.5 1.5 0 0 0 1.06.44H18A2.25 2.25 0 0 1 20.25 9v.776" />
+                    </svg>
+                  }
+                  onChange={(folder) => void handleSwitchLibrary(folder)}
+                />
               </div>
-            ))}
+            </fieldset>
+
           </div>
 
-          {/* Hidden file input for folder picker — macOS only (webkitdirectory) */}
-          <FolderPickerButton
-            label="Add folder"
-            icon={
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24">
-                <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 10.5v6m3-3H9m4.06-7.19-2.12-2.12a1.5 1.5 0 0 0-1.061-.44H4.5A2.25 2.25 0 0 0 2.25 6v12a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9a2.25 2.25 0 0 0-2.25-2.25h-5.379a1.5 1.5 0 0 1-1.06-.44Z" />
-              </svg>
-            }
-            onChange={(folder) => {
-              if (!prefs || (prefs.source_folders ?? []).includes(folder)) return
-              updateField('source_folders', [...(prefs.source_folders || []), folder])
-            }}
-          />
-        </fieldset>
+          {/* ── Column 2 ───────────────────────────────────── */}
+          <div className="space-y-6">
 
-        {/* ── Library path (where organized copies go) ─────────────── */}
-        <fieldset className="rounded-lg border border-[--border] bg-[--surface-1] p-4">
-          <legend className="text-sm font-medium text-[--text-primary]">Library path</legend>
-          <p className="mt-1 text-xs leading-relaxed text-[--text-secondary]">
-            组织后的素材副本、缩略图和目录数据库会存储在这里。切换到其他目录会改用那个库（每个库各自独立，当前库不会被修改）。
-          </p>
-          <div className="mt-2 flex gap-2">
-            <input
-              type="text"
-              value={libraryPath || ''}
-              readOnly
-              className="flex-1 rounded-md border border-[--border] bg-[--surface-3] px-3 py-1.5 text-sm outline-none opacity-70"
-            />
-            <FolderPickerButton
-              label="Choose…"
-              icon={
-                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24">
-                  <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3.75 9.776c.112-.017.227-.026.344-.026h15.812c.117 0 .232.009.344.026m-16.5 0a2.25 2.25 0 0 0-1.883 2.542l.857 6a2.25 2.25 0 0 0 2.227 1.932H19.05a2.25 2.25 0 0 0 2.227-1.932l.857-6a2.25 2.25 0 0 0-1.883-2.542m-16.5 0V6A2.25 2.25 0 0 1 6 3.75h3.879a1.5 1.5 0 0 1 1.06.44l2.122 2.12a1.5 1.5 0 0 0 1.06.44H18A2.25 2.25 0 0 1 20.25 9v.776" />
-                </svg>
-              }
-              onChange={(folder) => void handleSwitchLibrary(folder)}
-            />
-          </div>
-        </fieldset>
+            {/* ── Model selectors ─────────────────────── */}
+            <fieldset className="rounded-lg border border-[--border] bg-[--surface-1] p-4">
+              <legend className="text-sm font-medium text-[--text-primary]">Models</legend>
+              <div className="mt-3 space-y-3">
+                <label className="block text-sm text-[--text-secondary]">Text model</label>
+                <input
+                  type="text" value={prefs.text_model} readOnly
+                  className="w-full rounded-md border border-[--border] bg-[--surface-2] px-3 py-1.5 text-sm"
+                />
 
-        {/* ── Model selectors ─────────────────── */}
-        <fieldset className="rounded-lg border border-[--border] bg-[--surface-1] p-4">
-          <legend className="text-sm font-medium text-[--text-primary]">Models</legend>
-          <div className="mt-3 space-y-3">
-            <label className="block text-sm text-[--text-secondary]">Text model</label>
-            <input
-              type="text" value={prefs.text_model} readOnly
-              className="w-full rounded-md border border-[--border] bg-[--surface-2] px-3 py-1.5 text-sm"
-            />
+                <label className="mt-2 block text-sm text-[--text-secondary]">Vision model</label>
+                <input
+                  type="text" value={prefs.vision_model} readOnly
+                  className="w-full rounded-md border border-[--border] bg-[--surface-2] px-3 py-1.5 text-sm"
+                />
 
-            <label className="mt-2 block text-sm text-[--text-secondary]">Vision model</label>
-            <input
-              type="text" value={prefs.vision_model} readOnly
-              className="w-full rounded-md border border-[--border] bg-[--surface-2] px-3 py-1.5 text-sm"
-            />
+                <label className="mt-2 block text-sm text-[--text-secondary]">Whisper model</label>
+                <input
+                  type="text" value={prefs.whisper_model} readOnly
+                  className="w-full rounded-md border border-[--border] bg-[--surface-2] px-3 py-1.5 text-sm"
+                />
+              </div>
+            </fieldset>
 
-            <label className="mt-2 block text-sm text-[--text-secondary]">Whisper model</label>
-            <input
-              type="text" value={prefs.whisper_model} readOnly
-              className="w-full rounded-md border border-[--border] bg-[--surface-2] px-3 py-1.5 text-sm"
-            />
-          </div>
-        </fieldset>
+            {/* ── Processing options ─────────────────── */}
+            <fieldset className="rounded-lg border border-[--border] bg-[--surface-1] p-4">
+              <legend className="text-sm font-medium text-[--text-primary]">Processing options</legend>
 
-        {/* ── Extension whitelist + B-roll frames + VAD threshold ─ */}
-        <fieldset className="rounded-lg border border-[--border] bg-[--surface-1] p-4">
-          <legend className="text-sm font-medium text-[--text-primary]">Processing options</legend>
+              {/* Extensions */}
+              <div className="mt-3">
+                <label className="mb-1 block text-sm text-[--text-secondary]">Supported extensions</label>
+                <div className="mb-2 flex gap-1.5">
+                  {extDisplay.map((ext, i) => (
+                    <ExtensionTag key={i} value={ext} onRemove={() => handleRemoveExtension(ext)} />
+                  ))}
+                </div>
+                <div className="flex gap-2">
+                  <input
+                    type="text" value={extensions} onChange={(e) => setExtensions(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') handleAddExtension() }}
+                    placeholder=".webm"
+                    className="flex-1 rounded-md border border-[--border] bg-[--surface-2] px-3 py-1.5 text-sm font-mono outline-none focus:border-[--primary]"
+                  />
+                  <Button size="sm" variant="secondary" onClick={handleAddExtension}>+</Button>
+                </div>
+              </div>
 
-          {/* Extensions */}
-          <div className="mt-3">
-            <label className="mb-1 block text-sm text-[--text-secondary]">Supported extensions</label>
-            <div className="mb-2 flex gap-1.5">
-              {extDisplay.map((ext, i) => (
-                <ExtensionTag key={i} value={ext} onRemove={() => handleRemoveExtension(ext)} />
-              ))}
-            </div>
-            <div className="flex gap-2">
+              {/* B-roll frame count */}
+              <label className="mt-4 block text-sm text-[--text-secondary]">B-roll frame count</label>
               <input
-                type="text" value={extensions} onChange={(e) => setExtensions(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter') handleAddExtension() }}
-                placeholder=".webm"
-                className="flex-1 rounded-md border border-[--border] bg-[--surface-2] px-3 py-1.5 text-sm font-mono outline-none focus:border-[--primary]"
+                type="number" min={1} step={1} value={prefs.broll_frame_count}
+                onChange={(e) => updateField('broll_frame_count', parseInt(e.target.value, 10))}
+                className="w-full rounded-md border border-[--border] bg-[--surface-2] px-3 py-1.5 text-sm outline-none focus:border-[--primary]"
               />
-              <Button size="sm" variant="secondary" onClick={handleAddExtension}>+</Button>
-            </div>
+
+              {/* VAD threshold */}
+              <label className="mt-4 block text-sm text-[--text-secondary]">VAD threshold (0–1)</label>
+              <input
+                type="number" min={0} max={1} step={0.05} value={prefs.vad_threshold}
+                onChange={(e) => updateField('vad_threshold', parseFloat(e.target.value))}
+                className="w-full rounded-md border border-[--border] bg-[--surface-2] px-3 py-1.5 text-sm outline-none focus:border-[--primary]"
+              />
+
+              {/* AI output language */}
+              <label className="mt-4 block text-sm text-[--text-secondary]">AI output language</label>
+              <select
+                value={prefs.output_language}
+                onChange={(e) => updateField('output_language', e.target.value as 'zh' | 'en')}
+                className="w-full rounded-md border border-[--border] bg-[--surface-2] px-3 py-1.5 text-sm outline-none focus:border-[--primary]"
+              >
+                <option value="zh">中文</option>
+                <option value="en">English</option>
+              </select>
+
+              {/* Field errors */}
+              {fieldErrors.map((err) => (
+                <p key={err.field} className="mt-1 text-xs text-[--error]">{err.message}</p>
+              ))}
+            </fieldset>
+
           </div>
 
-          {/* B-roll frame count */}
-          <label className="mt-4 block text-sm text-[--text-secondary]">B-roll frame count</label>
-          <input
-            type="number" min={1} step={1} value={prefs.broll_frame_count}
-            onChange={(e) => updateField('broll_frame_count', parseInt(e.target.value, 10))}
-            className="w-full rounded-md border border-[--border] bg-[--surface-2] px-3 py-1.5 text-sm outline-none focus:border-[--primary]"
-          />
+        </form>
 
-          {/* VAD threshold */}
-          <label className="mt-4 block text-sm text-[--text-secondary]">VAD threshold (0–1)</label>
-          <input
-            type="number" min={0} max={1} step={0.05} value={prefs.vad_threshold}
-            onChange={(e) => updateField('vad_threshold', parseFloat(e.target.value))}
-            className="w-full rounded-md border border-[--border] bg-[--surface-2] px-3 py-1.5 text-sm outline-none focus:border-[--primary]"
-          />
-
-          {/* AI output language */}
-          <label className="mt-4 block text-sm text-[--text-secondary]">AI output language</label>
-          <select
-            value={prefs.output_language}
-            onChange={(e) => updateField('output_language', e.target.value as 'zh' | 'en')}
-            className="w-full rounded-md border border-[--border] bg-[--surface-2] px-3 py-1.5 text-sm outline-none focus:border-[--primary]"
-          >
-            <option value="zh">中文</option>
-            <option value="en">English</option>
-          </select>
-
-          {/* Field errors */}
-          {fieldErrors.map((err) => (
-            <p key={err.field} className="mt-1 text-xs text-[--error]">{err.message}</p>
-          ))}
-        </fieldset>
-
-        {/* ── Save button (sticky bottom) ─────── */}
+        {/* ── Save button — full width, below grid ─────────── */}
         <div className="flex justify-end pt-4">
           <Button type="submit" onClick={handleSave} disabled={saving}>
             {saving ? 'Saving…' : 'Save settings'}
           </Button>
         </div>
 
-      </form>
+      </div>
     </div>
   )
 }
