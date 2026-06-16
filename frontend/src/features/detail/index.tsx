@@ -180,7 +180,7 @@ export function DetailPanel({ clipId, onClose }: DetailPanelProps) {
     return () => document.removeEventListener('keydown', handleKey)
   }, [clipId, onClose])
 
-  const captureDate = clip.capture_time ? (() => {
+  const captureDate = clip?.capture_time ? (() => {
     return new Date(clip.capture_time).toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' })
   }) : null
 
