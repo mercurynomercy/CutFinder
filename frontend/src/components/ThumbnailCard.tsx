@@ -38,7 +38,7 @@ export interface ThumbnailCardProps extends React.HTMLAttributes<HTMLDivElement>
 
 const ThumbnailCard = React.forwardRef<HTMLDivElement, ThumbnailCardProps>(
   (
-    { thumbnailUrl, sourcePath, clipId, rollType, duration, isSelected = false, status, summary, tags, onReanalyze, reanalyzing = false, className, ...props },
+    { thumbnailUrl, sourcePath, clipId, rollType, duration, captureTime, isSelected = false, status, summary, tags, onReanalyze, reanalyzing = false, className, ...props },
     ref,
   ) => {
     const formatDuration = (s: number) => {
