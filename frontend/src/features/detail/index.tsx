@@ -231,25 +231,6 @@ export function DetailPanel({ clipId, onClose }: DetailPanelProps) {
     }
   }
 
-  // One-click "fix the A/B type and re-run": correct to the other roll, then
-  // re-analyze through the right pipeline (e.g. switch a misclassified clip to
-  // B-roll so it goes through the vision model).
-  const handleSwitchAndReanalyze = async () => {
-    if (!clip || reanalyzing) return
-    const clipId = clip.id
-    const target = clip.roll_type === 'a' ? 'b' : 'a'
-    setReanalyzing(true)
-    try {
-      await api.correctRoll(clipId, target)
-      setClip((prev) => prev ? { ...prev, roll_type: target } : null)
-      await runReanalyze(clipId)
-    } catch (err) {
-      console.error('Failed to switch roll & re-analyze:', err)
-    } finally {
-      setReanalyzing(false)
-    }
-  }
-
   // Correct A/B roll classification
   const handleCorrectRoll = async (roll: 'a' | 'b') => {
     if (!clip) return
@@ -417,41 +398,37 @@ export function DetailPanel({ clipId, onClose }: DetailPanelProps) {
 
               {/* ── Footer actions (sticky bottom) ─────── */}
               <div className="flex items-center justify-between border-t border-[--border] px-5 py-3">
-                {/* A/B correction buttons */}
-                <div className="flex gap-2">
-                  <Button
-                    size="sm"
-                    variant={clip.roll_type === 'a' ? 'primary' : 'secondary'}
-                    onClick={() => handleCorrectRoll('a')}
-                  >
-                    A-roll (narration)
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant={clip.roll_type === 'b' ? 'primary' : 'secondary'}
-                    onClick={() => handleCorrectRoll('b')}
-                  >
-                    B-roll (visual)
-                  </Button>
+                {/* A/B correction — compact segmented toggle. Switching type then
+                    hitting re-analyze re-runs through the right pipeline. */}
+                <div className="inline-flex rounded-md border border-[--border] p-0.5">
+                  {(['a', 'b'] as const).map((roll) => (
+                    <button
+                      key={roll}
+                      onClick={() => handleCorrectRoll(roll)}
+                      className={`rounded px-3 py-1 text-xs font-medium transition-colors ${
+                        clip.roll_type === roll
+                          ? 'bg-[--primary] text-white'
+                          : 'text-[--text-secondary] hover:text-[--text-primary]'
+                      }`}
+                    >
+                      {roll === 'a' ? 'A-roll' : 'B-roll'}
+                    </button>
+                  ))}
                 </div>
 
-                {/* Re-analyze actions */}
-                <div className="flex items-center gap-2">
-                  {/* One-click: fix the A/B type and re-run through the right pipeline */}
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    onClick={handleSwitchAndReanalyze}
-                    disabled={reanalyzing}
-                    title={`Switch this clip to ${clip.roll_type === 'a' ? 'B' : 'A'}-roll and re-analyze`}
-                  >
-                    {`→ ${clip.roll_type === 'a' ? 'B' : 'A'}-roll & re-analyze`}
-                  </Button>
-                  {/* Re-analyze with the current A/B type */}
-                  <Button size="sm" variant="ghost" onClick={handleReanalyze} disabled={reanalyzing}>
-                    {reanalyzing ? 'Re-analyzing…' : 'Re-analyze'}
-                  </Button>
-                </div>
+                {/* Re-analyze with the current A/B type (icon button) */}
+                <button
+                  onClick={handleReanalyze}
+                  disabled={reanalyzing}
+                  title={reanalyzing ? '重新分析中…' : '重新分析'}
+                  aria-label="重新分析"
+                  className="inline-flex items-center gap-1.5 rounded-md border border-[--border] px-3 py-1.5 text-xs font-medium text-[--text-secondary] transition-colors hover:text-[--text-primary] disabled:opacity-50"
+                >
+                  <svg className={`h-4 w-4 ${reanalyzing ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24">
+                    <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M16.023 9.348h4.992V4.356M3 14.652h4.992v4.992M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0 4.992a8.25 8.25 0 01-13.803 3.7L3 14.652" />
+                  </svg>
+                  重新分析
+                </button>
               </div>
 
             </>

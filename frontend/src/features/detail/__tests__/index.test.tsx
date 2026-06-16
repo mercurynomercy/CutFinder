@@ -33,12 +33,12 @@ describe('DetailPanel', () => {
     expect(onClose).toHaveBeenCalled()
   })
 
-  it('shows the A/B correction and re-analyze actions', async () => {
+  it('shows the A/B correction toggle and re-analyze action', async () => {
     render(<DetailPanel clipId={1} onClose={() => {}} />)
-    expect(await screen.findByRole('button', { name: /A-roll \(narration\)/ })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /B-roll \(visual\)/ })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Re-analyze' })).toBeInTheDocument()
-    // one-click "fix A/B type and re-run" action
-    expect(screen.getByRole('button', { name: /& re-analyze/ })).toBeInTheDocument()
+    // Compact segmented A/B toggle
+    expect(await screen.findByRole('button', { name: 'A-roll' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'B-roll' })).toBeInTheDocument()
+    // Re-analyze action (Chinese label, icon button)
+    expect(screen.getByRole('button', { name: '重新分析' })).toBeInTheDocument()
   })
 })

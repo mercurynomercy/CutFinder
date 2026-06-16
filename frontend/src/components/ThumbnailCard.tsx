@@ -28,11 +28,15 @@ export interface ThumbnailCardProps extends React.HTMLAttributes<HTMLDivElement>
   summary?: string | null
   /** Tag names — shown as small chips under the summary */
   tags?: string[]
+  /** When provided, shows a re-analyze button on the thumbnail (stops propagation). */
+  onReanalyze?: () => void
+  /** Whether this card is currently re-analyzing (spins the icon). */
+  reanalyzing?: boolean
 }
 
 const ThumbnailCard = React.forwardRef<HTMLDivElement, ThumbnailCardProps>(
   (
-    { thumbnailUrl, sourcePath, clipId, rollType, duration, isSelected = false, status, summary, tags, className, ...props },
+    { thumbnailUrl, sourcePath, clipId, rollType, duration, isSelected = false, status, summary, tags, onReanalyze, reanalyzing = false, className, ...props },
     ref,
   ) => {
     const formatDuration = (s: number) => {
@@ -77,6 +81,24 @@ const ThumbnailCard = React.forwardRef<HTMLDivElement, ThumbnailCardProps>(
                 />
               </svg>
             </div>
+          )}
+
+          {/* Re-analyze button (top-left) — shown on hover, always for 'partial' */}
+          {onReanalyze && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onReanalyze() }}
+              disabled={reanalyzing}
+              title={reanalyzing ? '重新分析中…' : '重新分析'}
+              aria-label="重新分析"
+              className={cn(
+                'absolute left-2 top-2 rounded-md bg-black/60 p-1.5 text-white backdrop-blur-sm transition-opacity hover:bg-black/80 disabled:opacity-60',
+                reanalyzing || status === 'partial' ? 'opacity-100' : 'opacity-0 group-hover:opacity-100',
+              )}
+            >
+              <svg className={cn('h-4 w-4', reanalyzing && 'animate-spin')} fill="none" viewBox="0 0 24 24">
+                <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M16.023 9.348h4.992V4.356M3 14.652h4.992v4.992M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0 4.992a8.25 8.25 0 01-13.803 3.7L3 14.652" />
+              </svg>
+            </button>
           )}
 
           {/* "Partial" marker (bottom-left) — AI analysis failed, can re-analyze */}

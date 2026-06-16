@@ -26,6 +26,7 @@ export default function App() {
   const [selectedClipId, setSelectedClipId] = useState<DetailPanelPropsType['clipId']>(null)
   const [activeJobId, setActiveJobId] = useState<JobsPanelProps['activeJobId']>(null)
   const [appliedFilters, setAppliedFilters] = useState<Partial<FilterState>>({})
+  const [reanalyzingIds, setReanalyzingIds] = useState<Set<number>>(new Set())
 
   const clipsRef = useRef(clips)
   clipsRef.current = clips
@@ -89,6 +90,35 @@ export default function App() {
 
   const handleFilterChange = (filters: FilterState) => {
     setAppliedFilters({ date: filters.date, roll_type: filters.roll_type, tag: filters.tag })
+  }
+
+  // Re-analyze a clip directly from its card: trigger the job, poll until it
+  // finishes, then refresh so the card's summary/tags/marker update in place.
+  const handleReanalyzeClip = async (clipId: number) => {
+    if (reanalyzingIds.has(clipId)) return
+    setReanalyzingIds((prev) => new Set(prev).add(clipId))
+    try {
+      const { job_id } = await api.reanalyzeClip(clipId)
+      const deadline = Date.now() + 5 * 60_000
+      while (Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, 1500))
+        try {
+          const job = await api.getJob(job_id)
+          if (['done', 'failed', 'cancelled'].includes(job.status)) break
+        } catch {
+          // transient error — keep polling
+        }
+      }
+      await refreshClips()
+    } catch (err) {
+      console.error('Failed to re-analyze clip:', err)
+    } finally {
+      setReanalyzingIds((prev) => {
+        const next = new Set(prev)
+        next.delete(clipId)
+        return next
+      })
+    }
   }
 
   const refreshClips = async () => {
@@ -167,6 +197,8 @@ export default function App() {
             clips={filteredClips}
             selectedClipId={selectedClipId}
             onSelect={(clipId) => setSelectedClipId(clipId)}
+            onReanalyze={handleReanalyzeClip}
+            reanalyzingIds={reanalyzingIds}
           />
         </div>
 

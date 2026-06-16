@@ -45,9 +45,13 @@ export interface GalleryProps {
   selectedClipId: number | null
   /** Called when a thumbnail card is clicked; receives the clip id. */
   onSelect: (clipId: number) => void
+  /** Called when a card's re-analyze button is clicked; receives the clip id. */
+  onReanalyze?: (clipId: number) => void
+  /** Set of clip ids currently being re-analyzed (spins their icon). */
+  reanalyzingIds?: Set<number>
 }
 
-export function Gallery({ clips, selectedClipId, onSelect }: GalleryProps) {
+export function Gallery({ clips, selectedClipId, onSelect, onReanalyze, reanalyzingIds }: GalleryProps) {
   if (clips.length === 0) return <EmptyState />
 
   return (
@@ -65,6 +69,8 @@ export function Gallery({ clips, selectedClipId, onSelect }: GalleryProps) {
           tags={clip.tags?.map((t) => t.name)}
           isSelected={selectedClipId === clip.id}
           onClick={() => onSelect(clip.id)}
+          onReanalyze={onReanalyze ? () => onReanalyze(clip.id) : undefined}
+          reanalyzing={reanalyzingIds?.has(clip.id)}
         />
       ))}
     </div>
