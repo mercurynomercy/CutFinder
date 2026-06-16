@@ -21,6 +21,9 @@ frontend/dist/
 # 运行时数据（素材库内的数据库与缩略图）
 .cutfinder/
 
+# dev server PID file (written by scripts/dev.sh on each run)
+.dev-pids
+
 # macOS
 .DS_Store
 
