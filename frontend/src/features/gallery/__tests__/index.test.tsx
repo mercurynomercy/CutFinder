@@ -146,15 +146,37 @@ describe('Gallery', () => {
   it('applies overflow-y-auto class to gallery container', () => {
     const onSelect = vi.fn()
     render(<Gallery clips={MOCK_CLIPS} selectedClipId={null} onSelect={onSelect} />)
-    const grid = document.querySelector('div[class*="grid"]') as HTMLElement | null
-    expect(grid?.className).toContain('overflow-y-auto')
+    const container = document.querySelector('div[class*="overflow-y-auto"]') as HTMLElement | null
+    expect(container?.className).toContain('overflow-y-auto')
   })
 
-  it('renders with p-4 padding on grid', () => {
+  it('renders with p-4 padding on the gallery container', () => {
     const onSelect = vi.fn()
     render(<Gallery clips={MOCK_CLIPS} selectedClipId={null} onSelect={onSelect} />)
-    const grid = document.querySelector('div[class*="grid"]') as HTMLElement | null
-    expect(grid?.className).toContain('p-4')
+    const container = document.querySelector('div[class*="overflow-y-auto"]') as HTMLElement | null
+    expect(container?.className).toContain('p-4')
+  })
+
+  it('groups clips into one date-headed section per capture date', () => {
+    const onSelect = vi.fn()
+    const clips = [
+      { id: 1, source_path: '/v/a.mp4', roll_type: 'a' as const, thumbnail_path: null, duration_s: 1, tags: [], capture_time: '2026-04-25T08:00:00Z' },
+      { id: 2, source_path: '/v/b.mp4', roll_type: 'b' as const, thumbnail_path: null, duration_s: 1, tags: [], capture_time: '2026-05-11T08:00:00Z' },
+      { id: 3, source_path: '/v/c.mp4', roll_type: 'a' as const, thumbnail_path: null, duration_s: 1, tags: [], capture_time: '2026-05-11T09:00:00Z' },
+    ]
+    render(<Gallery clips={clips} selectedClipId={null} onSelect={onSelect} />)
+
+    const headings = screen.getAllByRole('heading', { level: 2 })
+    expect(headings.map((h) => h.textContent)).toEqual(['2026/04/251', '2026/05/112'])
+  })
+
+  it('prefers capture_time over created_at for grouping', () => {
+    const onSelect = vi.fn()
+    const clips = [
+      { id: 1, source_path: '/v/a.mp4', roll_type: 'a' as const, thumbnail_path: null, duration_s: 1, tags: [], capture_time: '2026-04-25T08:00:00Z', created_at: '2024-01-01T00:00:00Z' },
+    ]
+    render(<Gallery clips={clips} selectedClipId={null} onSelect={onSelect} />)
+    expect(screen.getByRole('heading', { level: 2 }).textContent).toBe('2026/04/251')
   })
 
   it('renders clips with their source path as title', () => {
