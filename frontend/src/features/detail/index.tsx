@@ -201,30 +201,50 @@ export function DetailPanel({ clipId, onClose }: DetailPanelProps) {
     }
   }
 
-  // Re-analyze this single clip: trigger the job, wait for it to finish, then
-  // refresh the panel so the new summary/description/tags show up.
+  // Trigger a re-analyze job, wait for it to finish, then refresh the panel.
+  const runReanalyze = useCallback(async (id: number) => {
+    const { job_id } = await api.reanalyzeClip(id)
+    // Poll the job until it reaches a terminal state (cap at ~5 min).
+    const deadline = Date.now() + 5 * 60_000
+    while (Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 1500))
+      try {
+        const job = await api.getJob(job_id)
+        if (['done', 'failed', 'cancelled'].includes(job.status)) break
+      } catch {
+        // transient error — keep polling
+      }
+    }
+    await loadClip(id)
+  }, [loadClip])
+
+  // Re-analyze this single clip (re-runs AI for its current A/B type).
   const handleReanalyze = async () => {
     if (!clip || reanalyzing) return
-    const clipId = clip.id
     setReanalyzing(true)
     try {
-      const { job_id } = await api.reanalyzeClip(clipId)
-
-      // Poll the job until it reaches a terminal state (cap at ~5 min).
-      const deadline = Date.now() + 5 * 60_000
-      while (Date.now() < deadline) {
-        await new Promise((resolve) => setTimeout(resolve, 1500))
-        try {
-          const job = await api.getJob(job_id)
-          if (['done', 'failed', 'cancelled'].includes(job.status)) break
-        } catch {
-          // transient error — keep polling
-        }
-      }
-
-      await loadClip(clipId)
+      await runReanalyze(clip.id)
     } catch (err) {
       console.error('Failed to re-analyze:', err)
+    } finally {
+      setReanalyzing(false)
+    }
+  }
+
+  // One-click "fix the A/B type and re-run": correct to the other roll, then
+  // re-analyze through the right pipeline (e.g. switch a misclassified clip to
+  // B-roll so it goes through the vision model).
+  const handleSwitchAndReanalyze = async () => {
+    if (!clip || reanalyzing) return
+    const clipId = clip.id
+    const target = clip.roll_type === 'a' ? 'b' : 'a'
+    setReanalyzing(true)
+    try {
+      await api.correctRoll(clipId, target)
+      setClip((prev) => prev ? { ...prev, roll_type: target } : null)
+      await runReanalyze(clipId)
+    } catch (err) {
+      console.error('Failed to switch roll & re-analyze:', err)
     } finally {
       setReanalyzing(false)
     }
@@ -415,10 +435,23 @@ export function DetailPanel({ clipId, onClose }: DetailPanelProps) {
                   </Button>
                 </div>
 
-                {/* Re-analyze just this clip (re-runs AI for its current A/B type) */}
-                <Button size="sm" variant="ghost" onClick={handleReanalyze} disabled={reanalyzing}>
-                  {reanalyzing ? 'Re-analyzing…' : 'Re-analyze'}
-                </Button>
+                {/* Re-analyze actions */}
+                <div className="flex items-center gap-2">
+                  {/* One-click: fix the A/B type and re-run through the right pipeline */}
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={handleSwitchAndReanalyze}
+                    disabled={reanalyzing}
+                    title={`Switch this clip to ${clip.roll_type === 'a' ? 'B' : 'A'}-roll and re-analyze`}
+                  >
+                    {`→ ${clip.roll_type === 'a' ? 'B' : 'A'}-roll & re-analyze`}
+                  </Button>
+                  {/* Re-analyze with the current A/B type */}
+                  <Button size="sm" variant="ghost" onClick={handleReanalyze} disabled={reanalyzing}>
+                    {reanalyzing ? 'Re-analyzing…' : 'Re-analyze'}
+                  </Button>
+                </div>
               </div>
 
             </>

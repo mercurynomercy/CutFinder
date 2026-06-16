@@ -60,6 +60,7 @@ export function Gallery({ clips, selectedClipId, onSelect }: GalleryProps) {
           rollType={(clip.roll_type === 'a' ? 'a' : clip.roll_type === 'b' ? 'b' : undefined)}
           duration={clip.duration_s ?? undefined}
           thumbnailUrl={(typeof clip.thumbnail_path === 'string' && clip.thumbnail_path) || undefined}
+          status={clip.status}
           isSelected={selectedClipId === clip.id}
           onClick={() => onSelect(clip.id)}
         />

@@ -35,8 +35,10 @@ describe('DetailPanel', () => {
 
   it('shows the A/B correction and re-analyze actions', async () => {
     render(<DetailPanel clipId={1} onClose={() => {}} />)
-    expect(await screen.findByRole('button', { name: /A-roll/ })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /B-roll/ })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /Re-analyze/ })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: /A-roll \(narration\)/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /B-roll \(visual\)/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Re-analyze' })).toBeInTheDocument()
+    // one-click "fix A/B type and re-run" action
+    expect(screen.getByRole('button', { name: /& re-analyze/ })).toBeInTheDocument()
   })
 })

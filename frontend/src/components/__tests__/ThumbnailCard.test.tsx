@@ -22,6 +22,17 @@ describe('ThumbnailCard', () => {
     expect(container.container.firstChild).toHaveAttribute('data-clip-id', '42')
   })
 
+  it('shows a "partial" marker when status is partial', () => {
+    render(<ThumbnailCard {...baseProps} status="partial" />)
+    expect(screen.getByText('部分')).toBeInTheDocument()
+    expect(screen.getByTitle('AI 分析未完成，可重新分析')).toBeInTheDocument()
+  })
+
+  it('does not show the partial marker for a done clip', () => {
+    render(<ThumbnailCard {...baseProps} status="done" />)
+    expect(screen.queryByText('部分')).not.toBeInTheDocument()
+  })
+
   it('shows truncated file name from sourcePath in the info row', () => {
     render(<ThumbnailCard {...baseProps} />)
     expect(screen.getByText('vlog.mp4')).toBeInTheDocument()

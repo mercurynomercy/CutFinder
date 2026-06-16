@@ -22,11 +22,13 @@ export interface ThumbnailCardProps extends React.HTMLAttributes<HTMLDivElement>
   duration?: number | null
   /** Whether the card is selected (highlighted with ring) */
   isSelected?: boolean
+  /** Processing status — 'partial' shows a "needs re-analyze" marker */
+  status?: string
 }
 
 const ThumbnailCard = React.forwardRef<HTMLDivElement, ThumbnailCardProps>(
   (
-    { thumbnailUrl, sourcePath, clipId, rollType, duration, isSelected = false, className, ...props },
+    { thumbnailUrl, sourcePath, clipId, rollType, duration, isSelected = false, status, className, ...props },
     ref,
   ) => {
     const formatDuration = (s: number) => {
@@ -77,6 +79,19 @@ const ThumbnailCard = React.forwardRef<HTMLDivElement, ThumbnailCardProps>(
           {rollType && (
             <div className="absolute left-2 top-2">
               <Badge type={rollType} />
+            </div>
+          )}
+
+          {/* "Partial" marker (bottom-left) — AI analysis failed, can re-analyze */}
+          {status === 'partial' && (
+            <div
+              className="absolute bottom-2 left-2 flex items-center gap-1 rounded bg-[--warning] px-1.5 py-0.5 text-[10px] font-semibold text-black"
+              title="AI 分析未完成，可重新分析"
+            >
+              <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" aria-hidden="true">
+                <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 9v3.75m0 3.75h.008M10.34 3.94l-7.6 13.16A1.5 1.5 0 004.04 19.5h15.92a1.5 1.5 0 001.3-2.4L13.66 3.94a1.5 1.5 0 00-2.6 0z" />
+              </svg>
+              部分
             </div>
           )}
 
