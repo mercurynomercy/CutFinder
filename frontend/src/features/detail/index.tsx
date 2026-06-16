@@ -254,8 +254,8 @@ export function DetailPanel({ clipId, onClose, onOpenPath }: DetailPanelProps) {
     if (!clip) return
 
     try {
-      await api.correctRoll(clip.id, roll)
-      setClip((prev) => prev ? { ...prev, roll_type: roll } : null)
+      const res = await api.correctRoll(clip.id, roll)
+      setClip((prev) => prev ? { ...prev, roll_type: roll, library_path: res.library_path ?? prev.library_path } : null)
     } catch (err) {
       console.error('Failed to correct roll:', err)
     }

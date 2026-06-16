@@ -40,6 +40,9 @@ class CatalogRepository(Protocol):
     def delete_clip(self, clip_id: int) -> None:
         """Delete a clip and all related tags/transcripts."""
 
+    def set_library_path(self, clip_id: int, library_path: str) -> None:
+        """Update a clip's organised-copy path (after a copy or relocation)."""
+
     # ── Query / Filter / Search (FTS5) ─────────────────────────
 
     def query_clips(self, f: ClipFilter) -> list[ClipSummary]:

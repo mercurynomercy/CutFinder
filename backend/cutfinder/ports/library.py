@@ -24,3 +24,19 @@ class LibraryWriter(Protocol):
         Raises:
             OSError: On copy failure or size mismatch after copying.
         """
+
+    def recategorize(self, old_path: Path | str, new_roll_type: str) -> str:
+        """Move an existing library copy into the other A/B folder, renamed.
+
+        Used when the user corrects a clip's A/B classification.  The copy is
+        moved (same-volume rename, preserving timestamps) into the sibling
+        ``A-roll``/``B-roll`` folder under the same date, with the next
+        sequential name.  Returns the new destination path.
+
+        Args:
+            old_path: Current location of the library copy.
+            new_roll_type: The corrected roll, ``"a"`` or ``"b"``.
+
+        Raises:
+            FileNotFoundError: If *old_path* does not exist.
+        """

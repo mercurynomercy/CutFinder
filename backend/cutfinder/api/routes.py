@@ -337,8 +337,25 @@ def _build_router(ctx: Any) -> Any:
         if clip is None:
             raise HTTPException(status_code=404, detail="Clip not found")
 
+        previous_roll = clip.roll_type
         ctx.repository.correct_roll(clip_id, roll)
-        return {"status": "ok", "clip_id": clip_id, "roll_type": roll}
+
+        # If the roll actually changed, relocate the organised copy into the
+        # correct A/B folder (renamed) and update library_path.  Best-effort —
+        # a relocation failure must not fail the correction itself.
+        library_path = getattr(clip, "library_path", None)
+        writer = getattr(ctx.orchestrator, "library_writer", None) if ctx.orchestrator else None
+        if roll != previous_roll and writer is not None and library_path:
+            try:
+                new_path = writer.recategorize(library_path, roll)
+                set_lp = getattr(ctx.repository, "set_library_path", None)
+                if callable(set_lp):
+                    set_lp(clip_id, new_path)
+                library_path = new_path
+            except (OSError, AttributeError) as exc:
+                logger.warning("Could not relocate library copy for clip %s: %s", clip_id, exc)
+
+        return {"status": "ok", "clip_id": clip_id, "roll_type": roll, "library_path": library_path}
 
     # ── Summary/Description edit (PATCH /clips/{id}) ─────────
     @router.patch("/clips/{clip_id}")

@@ -579,6 +579,9 @@ class _NoOpRepository(CatalogRepository):
     def delete_clip(self, clip_id: int) -> None:
         pass
 
+    def set_library_path(self, clip_id: int, library_path: str) -> None:
+        pass
+
     def query_clips(self, f: "ClipFilter") -> list["ClipSummary"]:
         return []
 

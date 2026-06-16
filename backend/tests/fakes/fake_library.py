@@ -38,6 +38,7 @@ class FakeLibraryWriter:
         self._library_path = library_path
         # Track calls for assertions in tests
         self.calls: list[tuple[str, str, str]] = []
+        self.recategorize_calls: list[tuple[str, str]] = []  # (old_path, new_roll_type)
 
     def copy_into(self, src: Path | None, date: str, roll_type: str) -> str:
         """Return a deterministic destination path without copying.
@@ -61,3 +62,17 @@ class FakeLibraryWriter:
 
         roll_dir = "A-roll" if roll_type == "a" else "B-roll"
         return f"{self._library_path}/{date}/{roll_dir}/"
+
+    def recategorize(self, old_path: Path | str, new_roll_type: str) -> str:
+        """Return a deterministic relocated path without moving any file.
+
+        Keeps the date folder from *old_path* and swaps the roll subfolder,
+        mirroring :class:`FsLibraryWriter` behaviour for assertions.
+        """
+        old = Path(str(old_path))
+        self.recategorize_calls.append((str(old_path), new_roll_type))
+
+        date_dir = old.parent.parent
+        roll_dir = "A-roll" if new_roll_type == "a" else "B-roll"
+        prefix = "A" if new_roll_type == "a" else "B"
+        return str(date_dir / roll_dir / f"{prefix}-0001{old.suffix}")

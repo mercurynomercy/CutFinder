@@ -174,6 +174,48 @@ class FsLibraryWriter:
 
         return str(dest)
 
+    def recategorize(self, old_path: Path | str, new_roll_type: str) -> str:
+        """Move an existing library copy into the other A/B folder, renamed.
+
+        Used when the user corrects a clip's A/B classification.  The copy is
+        *moved* (a same-volume rename, so all timestamps are preserved) into the
+        sibling ``A-roll``/``B-roll`` folder under the same date, and given the
+        next sequential name there.  The source date folder is unchanged.
+
+        Parameters
+        ----------
+        old_path:
+            Current location of the library copy (``Clip.library_path``).
+        new_roll_type:
+            The corrected roll, ``"a"`` or ``"b"`` (RollType).
+
+        Returns
+        -------
+        str
+            The new absolute destination path as a string.
+
+        Raises
+        ------
+        FileNotFoundError:
+            If *old_path* does not exist on disk.
+        """
+        old = Path(old_path).resolve()
+        if not old.is_file():
+            raise FileNotFoundError(f"Library copy does not exist: {old}")
+
+        # old_path is ``<library>/<date>/<roll>/<name>`` — keep the date folder,
+        # swap only the roll subfolder.
+        date_dir = old.parent.parent
+        is_a_roll = new_roll_type == RollType.A.value
+        roll_dir = "A-roll" if is_a_roll else "B-roll"
+        prefix = "A" if is_a_roll else "B"
+        target_dir = date_dir / roll_dir
+        target_dir.mkdir(parents=True, exist_ok=True)
+
+        dest = self._next_dest(target_dir, prefix, old.suffix)
+        shutil.move(str(old), str(dest))  # rename on same volume → times preserved
+        return str(dest)
+
     def _next_dest(self, target_dir: Path, prefix: str, suffix: str) -> Path:
         """Return ``<target_dir>/<prefix>-NNNN<suffix>`` for the next free index.
 

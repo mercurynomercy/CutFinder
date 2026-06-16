@@ -274,6 +274,11 @@ class SqliteRepository:
         self._conn.commit()  # close any open cursors on this connection.
         return clip
 
+    def set_library_path(self, clip_id: int, library_path: str) -> None:
+        c = self._conn.cursor()
+        c.execute("UPDATE clips SET library_path = ? WHERE id = ?", (library_path, clip_id))
+        self._conn.commit()
+
     def delete_clip(self, clip_id: int) -> None:
         c = self._conn.cursor()
         # Also remove from FTS index.

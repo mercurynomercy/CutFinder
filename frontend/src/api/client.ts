@@ -194,8 +194,8 @@ export const api = {
     return _fetch(`/api/clips/${id}`)
   },
 
-  /** PATCH /api/clips/{id}/roll — correct A/B classification. */
-  correctRoll(id: number, roll: 'a' | 'b'): Promise<{ status: string; clip_id: number }> {
+  /** PATCH /api/clips/{id}/roll — correct A/B classification (relocates the copy). */
+  correctRoll(id: number, roll: 'a' | 'b'): Promise<{ status: string; clip_id: number; library_path?: string | null }> {
     return _fetch(`/api/clips/${id}/roll?roll=${roll}`, { method: 'PATCH' })
   },
 

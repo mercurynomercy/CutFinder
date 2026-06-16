@@ -638,6 +638,70 @@ class TestRollCorrection:
         data = resp.json()
         assert "clip_id" in data
 
+    def test_roll_correction_relocates_library_copy(self) -> None:
+        """Correcting A→B moves the organised copy and updates library_path."""
+        from types import SimpleNamespace
+
+        from cutfinder.api.routes import _build_router as main_router
+        from fastapi import FastAPI
+
+        from tests.fakes import FakeLibraryWriter
+
+        repo = FakeCatalogRepository()
+        repo.upsert_clip(_make_clip(
+            id=1, source_path="/tmp/roll.mp4", roll_type="a", duration_s=10.5,
+            library_path="/lib/2026-05-14/A-roll/A-0001.mp4",
+        ))
+
+        writer = FakeLibraryWriter(library_path="/lib")
+        ctx = SimpleNamespace(
+            repository=repo, worker_queue=None, thumbnail_root=None,
+            library_path="/lib",
+            orchestrator=SimpleNamespace(library_writer=writer),
+        )
+
+        app = FastAPI()
+        app.include_router(main_router(ctx))
+        client = TestClient(app, raise_server_exceptions=False)  # type: ignore[arg-type]
+
+        resp = client.patch("/api/clips/1/roll?roll=b")
+        assert resp.status_code == 200
+
+        # The copy was relocated into the B-roll folder under the same date.
+        assert writer.recategorize_calls == [("/lib/2026-05-14/A-roll/A-0001.mp4", "b")]
+        assert resp.json()["library_path"] == "/lib/2026-05-14/B-roll/B-0001.mp4"
+        assert repo.get_clip(1).library_path == "/lib/2026-05-14/B-roll/B-0001.mp4"
+
+    def test_roll_correction_same_roll_no_relocation(self) -> None:
+        """Re-selecting the current roll does not move the copy."""
+        from types import SimpleNamespace
+
+        from cutfinder.api.routes import _build_router as main_router
+        from fastapi import FastAPI
+
+        from tests.fakes import FakeLibraryWriter
+
+        repo = FakeCatalogRepository()
+        repo.upsert_clip(_make_clip(
+            id=1, source_path="/tmp/roll.mp4", roll_type="a", duration_s=10.5,
+            library_path="/lib/2026-05-14/A-roll/A-0001.mp4",
+        ))
+
+        writer = FakeLibraryWriter(library_path="/lib")
+        ctx = SimpleNamespace(
+            repository=repo, worker_queue=None, thumbnail_root=None,
+            library_path="/lib",
+            orchestrator=SimpleNamespace(library_writer=writer),
+        )
+
+        app = FastAPI()
+        app.include_router(main_router(ctx))
+        client = TestClient(app, raise_server_exceptions=False)  # type: ignore[arg-type]
+
+        resp = client.patch("/api/clips/1/roll?roll=a")
+        assert resp.status_code == 200
+        assert writer.recategorize_calls == []  # unchanged roll → no move
+
     def test_roll_correction_invalid(self) -> None:
         """Invalid roll value (not a/b) → 422."""
         repo = FakeCatalogRepository()

@@ -200,6 +200,43 @@ class TestSequentialNaming:
         assert (lib_dir / "A-0001.mp4").read_bytes() == b"existing-1"
 
 
+# ─── Recategorize (A↔B relocation) tests ───────────────────────────
+
+class TestRecategorize:
+    """Verify a library copy moves to the other A/B folder, renamed."""
+
+    def test_moves_to_other_roll_folder(self, tmp_path):
+        """An A-roll copy corrected to B-roll moves into B-roll/B-0001."""
+        src = _make_src_file(tmp_path, "clip.mp4")
+        writer = FsLibraryWriter(_make_config(tmp_path))
+
+        a_path = Path(writer.copy_into(src, "2024-01-15", "a"))
+        assert a_path.name == "A-0001.mp4"
+
+        new_path = Path(writer.recategorize(a_path, "b"))
+
+        assert new_path == tmp_path / "2024-01-15" / "B-roll" / "B-0001.mp4"
+        assert new_path.exists()
+        assert not a_path.exists()  # the old A-roll copy is gone (moved)
+
+    def test_preserves_times_on_move(self, tmp_path):
+        """Relocation is a rename, so mtime is preserved."""
+        known_ts = 1705312200.0
+        src = _make_src_file(tmp_path, "clip.mp4")
+        writer = FsLibraryWriter(_make_config(tmp_path))
+
+        a_path = Path(writer.copy_into(src, "2024-01-15", "a"))
+        new_path = Path(writer.recategorize(a_path, "b"))
+
+        assert os.path.getmtime(new_path) == known_ts
+
+    def test_missing_copy_raises(self, tmp_path):
+        """Recategorizing a path that no longer exists raises FileNotFoundError."""
+        writer = FsLibraryWriter(_make_config(tmp_path))
+        with pytest.raises(FileNotFoundError, match="Library copy does not exist"):
+            writer.recategorize(tmp_path / "2024-01-15" / "A-roll" / "A-0001.mp4", "b")
+
+
 # ─── Error handling tests ──────────────────────────────────────────
 
 class TestErrorHandling:
