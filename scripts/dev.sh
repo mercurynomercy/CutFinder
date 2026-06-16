@@ -15,12 +15,28 @@ if [ -f "$ROOT/.env" ]; then
 fi
 
 _cleaned=0
+
+# Kill a PID and all of its descendants (uvicorn --reload, npx both spawn children).
+_kill_tree() {
+  local pid="$1"
+  # Get direct children; if none, kill the PID itself.
+  local kids
+  kids=$(ps -o pid= --ppid "$pid" 2>/dev/null) || return
+  if [ -z "$kids" ]; then
+    kill -TERM "$pid" 2>/dev/null || true
+    return
+  fi
+  # Recursively kill children first, then the parent.
+  for kid in $kids; do _kill_tree "$kid"; done
+  kill -TERM "$pid" 2>/dev/null || true
+}
+
 cleanup() {
   [ "$_cleaned" = 1 ] && return
   _cleaned=1
   echo "Shutting down dev servers..."
   if [ -f "$PIDFILE" ]; then
-    while read -r pid; do kill "$pid" 2>/dev/null || true; done < "$PIDFILE"
+    while read -r pid; do _kill_tree "$pid"; done < "$PIDFILE"
     rm -f "$PIDFILE"
   fi
 }

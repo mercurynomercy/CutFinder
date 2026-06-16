@@ -304,7 +304,7 @@ export function DetailPanel({ clipId, onClose }: DetailPanelProps) {
               {/* ── Video preview area ─────────────────────── */}
               <div className="relative aspect-video w-full bg-[--surface-2]">
                 {clip.thumbnail_path ? (
-                  <img src={clip.thumbnail_path} alt="Thumbnail" className="h-full w-full object-cover" />
+                  <img src={`/api/clips/${clip.id}/thumbnail`} alt="Thumbnail" className="h-full w-full object-cover" />
                 ) : (
                   <div className="flex h-full items-center justify-center">
                     <svg className="h-10 w-10 text-[--text-muted]" fill="none" viewBox="0 0 24 24">

@@ -4,7 +4,7 @@
 
 把一堆 A-roll（有中文解说）和 B-roll（纯空镜）自动**分类、打标签、生成简介与缩略图**，让你之后能按日期 / 类型 / 标签 / 台词快速找回任意一段素材。面向 macOS（Apple Silicon）+ Final Cut Pro 工作流，**全程离线、AI 全本地**。
 
-> **状态：核心功能已打通并可端到端运行。** 后端适配器、编排层、API 装配层（`create_app`）、前端均已实现并接通；`make test`（293 单元测试）、前端 `vitest`（167 项）、`make check-omlx`、`make dev` 均可跑通。模型推理链路（文本/视觉/转写/VAD）通过真实 OMLX + 本地集成测试验证（见[测试](#测试)）。
+> **状态：核心功能已打通并可端到端运行。** 后端适配器、编排层、API 装配层（`create_app`）、前端均已实现并接通；`make test-unit`（330 单元测试）、前端 `vitest`（174 项）、`npm run build`（类型干净）、`make check-omlx`、`make dev` 均可跑通。模型推理链路（文本/视觉/转写/VAD）通过真实 OMLX + 本地集成测试验证（见[测试](#测试)）。
 
 ---
 
@@ -14,10 +14,12 @@
 - **A-roll 简介 + 标签**：`mlx-whisper` 转写中文解说 → Qwen 文本模型总结，转写全文一并保存可搜索。
 - **B-roll 画面标签 + 描述**：抽帧交给视觉模型识别画面内容。
 - **AI 输出语言可选**：简介/画面描述可在「设置」页切换**中文 / 英文**（默认中文）。
-- **按拍摄日期 + 类型自动归档**：复制到 `库/YYYY-MM-DD/A-roll(或 B-roll)/`。
-- **缩略图墙 + 多维检索**：按日期 / 类型 / 标签筛选，按台词全文搜索。
-- **重新分析单个片段**：换模型或结果不佳时一键重跑 AI，保留你的手动纠正与标签。
-- **设置页绑定素材库**：首次使用填一个绝对路径即可绑定库，**运行时热生效、无需重启**（也支持 `CUTFINDER_LIBRARY` 环境变量）。
+- **按拍摄日期 + 类型自动归档**：复制到 `库/YYYY-MM-DD/A-roll(或 B-roll)/`。即使 AI 分析失败，原文件仍按日期+类型归档（状态标为 `partial`），AI 简介/标签为尽力而为。
+- **缩略图墙 + 多维检索**：按日期 / 类型 / 标签筛选，按台词全文搜索；分析未完成的片段（`partial`）在缩略图上有「部分」标记，一眼可辨。
+- **重新分析单个片段**：换模型或结果不佳时一键重跑 AI，保留你的手动纠正与标签。分类判错时，可用「→ B-roll & re-analyze」一键纠正 A/B 类型并走对的管道重跑。
+- **任务队列管理**：单独的「任务队列」页可查看所有扫描/重分析任务，支持删除、重试失败项、全局暂停/恢复。
+- **原生文件夹选择**：设置页选「素材文件夹 / 素材库」时弹出 macOS 原生选择框，返回真实绝对路径（浏览器选择器拿不到绝对路径）。
+- **设置页绑定素材库**：首次使用选/填一个绝对路径即可绑定库，**运行时热生效、无需重启**（也支持 `CUTFINDER_LIBRARY` 环境变量）。
 - **深色专业界面**：近黑面板让缩略图突出，A-roll/B-roll 以颜色+图标区分，贴近 FCP 调性（见 [`doc/ui-design.md`](./doc/ui-design.md)）。
 
 ### 不破坏原素材（核心约束）
@@ -129,7 +131,7 @@ make dev
 
 素材库目录用于存放整理后的副本、缩略图与 SQLite 目录（都在 `<库>/.cutfinder/`）。两种方式：
 
-- **设置页（推荐）**：打开 http://localhost:5080 → 「设置」→ **Set up your library** → 填一个绝对路径 → **运行时热生效、无需重启**，且选择会被记住（持久化到 `~/.cutfinder`）。
+- **设置页（推荐）**：打开 http://localhost:5080 → 「设置」→ **Set up your library** → 点 **Choose…** 用 macOS 原生选择框选目录（或手填绝对路径）→ **运行时热生效、无需重启**，且选择会被记住（持久化到 `~/.cutfinder`）。
 - **环境变量**：在根 `.env` 里加 `CUTFINDER_LIBRARY=/path/to/library`，再 `make dev`。
 
 > 未绑定库时后端正常启动，但目录类接口返回 503、「设置」页显示绑定向导，直到你绑定一个库。
@@ -169,7 +171,7 @@ WHISPER_MODEL_PATH=/Users/you/AI/Models/ASRs/mlx-community/whisper-large-v3-mlx
 ```bash
 cd backend
 
-uv run pytest -m "not integration"   # 仅单元测试（293 项，无需外部服务，秒级）
+uv run pytest tests/unit             # 仅单元测试（330 项，无需外部服务，秒级）
 uv run pytest -m integration         # 集成测试（需真实 OMLX / ffmpeg / 样片）
 uv run mypy cutfinder/               # 类型检查（strict，clean）
 uv run ruff check cutfinder/         # linting（clean）
@@ -195,7 +197,8 @@ npx playwright test             # e2e（自动起 Vite dev server）
 ### Makefile 快捷命令
 
 ```bash
-make test              # 后端单元测试（uv sync + pytest）
+make test-unit         # 后端单元测试（快，tests/unit，无外部依赖）—— 日常用这个
+make test              # 后端全量（含 -m integration；本机有 OMLX/.env 时会真跑，可能慢/挂起）
 make test-integration  # 仅跑 -m integration（自动加载 .env；需 ffmpeg/OMLX）
 make e2e               # Playwright e2e
 ```
@@ -204,8 +207,8 @@ make e2e               # Playwright e2e
 
 ### 已知遗留项（不影响运行）
 
-- **前端 `npm run build` 的 `tsc -b` 仍有历史遗留类型错误**（与本次改动无关，应用代码早先就未做到 type-clean）。Vitest 不做类型检查，故 `vitest` 全绿、`make dev` 正常；要让 `tsc` 干净需单独清理。
-- 真实集成测试中**视觉打标的输出文本可能中英混杂**（Qwen3-VL-8B 的模型/prompt 表现，非适配器 bug）；结构化结果（description + tags）始终有效。
+- 真实集成测试中**视觉/文本打标的输出文本可能中英混杂**（Qwen3-VL-8B / 文本模型的模型/prompt 表现，非适配器 bug）；结构化结果（description/summary + tags）始终有效。
+- **AI 简介为非确定性**：OMLX 调用使用 `temperature=0.7`（并已去掉会让量化模型陷入复读循环的严格 `json_schema`，改为宽松解析），对清晰素材稳定，对**噪声/含糊音轨**的边缘片段可能无法生成简介 —— 此时片段仍会被归档（状态 `partial`），可手动重分析。
 
 ---
 

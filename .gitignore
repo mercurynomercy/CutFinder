@@ -32,6 +32,7 @@ frontend/dist/
 *.tsbuildinfo
 playwright-report/
 test-results/
+.vite/
 
 # Debug scripts (e2e development)
 *e2e/_debug*.mjs

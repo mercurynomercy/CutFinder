@@ -77,6 +77,9 @@ function JobRow({ job, onChanged }: { job: JobStatus; onChanged: () => void }) {
 
   return (
     <tr className="border-b border-[--border]">
+      <td className="px-4 py-3 text-sm tabular-nums text-[--text-muted]">
+        #{job.id}
+      </td>
       <td className="px-4 py-3 text-sm text-[--text-primary]">
         {KIND_LABELS[job.kind ?? ''] ?? job.kind ?? '—'}
       </td>
@@ -177,6 +180,7 @@ export function JobsQueuePage({ onClose }: JobsQueuePageProps) {
           <table className="w-full border-collapse overflow-hidden rounded-lg border border-[--border] bg-[--surface-1]">
             <thead>
               <tr className="border-b border-[--border] text-left text-xs font-medium text-[--text-secondary]">
+                <th className="px-4 py-2 w-16">ID</th>
                 <th className="px-4 py-2">类型</th>
                 <th className="px-4 py-2">状态</th>
                 <th className="px-4 py-2">进度</th>

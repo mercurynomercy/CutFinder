@@ -441,7 +441,7 @@ class TestLifecycleAndEdgeCases:
 
     @pytest.mark.asyncio
     async def test_empty_candidates_list(self) -> None:
-        """enqueue_scan with empty list creates job but no clips processed."""
+        """enqueue_scan with empty list immediately marks job done."""
         repo = FakeCatalogRepository()
         orch = _make_fake_orchestrator(process_result=1)
         queue = WorkerQueue(orchestrator=orch, repository=repo)
@@ -449,12 +449,16 @@ class TestLifecycleAndEdgeCases:
         await queue.start()
         job_id = await queue.enqueue_scan([])  # empty list
 
-        # Job should exist with total=0
+        # Job should be immediately done (not stuck in queued/running)
         job = repo.get_job(job_id)
         assert job is not None
         assert job.total == 0
+        assert job.status == "done"
 
-        await asyncio.sleep(0.1)  # give worker time to notice empty queue
+        # Worker should not have processed any clips
+        assert orch.process_clip_calls == []
+
+        await queue.stop()
         await queue.stop()
 
     @pytest.mark.asyncio

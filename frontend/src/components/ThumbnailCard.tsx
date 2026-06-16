@@ -55,7 +55,7 @@ const ThumbnailCard = React.forwardRef<HTMLDivElement, ThumbnailCardProps>(
         <div className="relative w-full pb-[56.25%]"> {/* 16:9 = 9/16 = 56.25% */}
           {thumbnailUrl ? (
             <img
-              src={thumbnailUrl.startsWith('/') || thumbnailUrl.startsWith('http') ? thumbnailUrl : `/api/thumbnails/${clipId}`}
+              src={/^(https?:)?\/\//.test(thumbnailUrl) ? thumbnailUrl : `/api/thumbnails/${clipId}`}
               alt={sourcePath}
               className="absolute inset-0 h-full w-full object-cover transition-transform duration-200 group-hover:scale-[1.02]"
               loading="lazy"

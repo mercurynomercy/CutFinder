@@ -242,6 +242,14 @@ class WorkerQueue:
         # Emit progress events for batch start and per-clip processing
         self._emit({"type": "job_started", "job_id": job_id, "total": len(candidates)})
 
+        # Handle empty candidate list: no items to enqueue → immediately mark done.
+        if not candidates:
+            logger.info("enqueue_scan: no candidates, marking job %d as done", job_id)
+            if self._repository:
+                self._repository.update_job(job_id, status="done", total=0, done=0)
+            self._emit({"type": "job_completed", "job_id": job_id})
+            return job_id
+
         for candidate in candidates:
             await self._queue.put(("clip", candidate, job_id))
 

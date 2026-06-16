@@ -76,10 +76,10 @@ describe('ThumbnailCard', () => {
     expect(img).toBeNull()
   })
 
-  it('uses absolute path directly when thumbnailUrl starts with /', () => {
+  it('falls back to API endpoint when thumbnailUrl is a server-side path starting with /', () => {
     const container = render(<ThumbnailCard {...baseProps} thumbnailUrl="/thumbnails/42.jpg" />)
     const img = container.container.querySelector('img') as HTMLImageElement | null
-    expect(img?.src).toContain('/thumbnails/42.jpg')
+    expect(img?.src).toContain('/api/thumbnails/42')
   })
 
   it('uses absolute path directly when thumbnailUrl starts with http', () => {
