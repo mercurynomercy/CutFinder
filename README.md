@@ -90,9 +90,10 @@ API 层 (FastAPI，薄)                       :5081
 
 ```bash
 git clone <repo> && cd CutFinder
-cp .env.example .env            # 填入 OMLX_BASE_URL 与 OMLX_API_KEY（见下）
 make setup                      # mise install + brew bundle + uv sync + npm install
 ```
+
+> OMLX 配置可在**设置页**里填（见步骤 2），无需 `.env`。若你偏好用 `.env`，再 `cp .env.example .env` 并填值。
 
 > 没有 mise？先 `brew install mise`，或手动执行：
 > ```bash
@@ -100,24 +101,33 @@ make setup                      # mise install + brew bundle + uv sync + npm ins
 > cd ../frontend && npm install   # Vite + React + Tailwind
 > ```
 
-### 2. 配置 `.env`
+### 2. 配置 OMLX 连接
 
-```ini
-# OMLX 本地推理服务器（OpenAI 兼容）。默认假设 :8000；按你的实际端口改。
-OMLX_BASE_URL=http://localhost:8000/v1
-OMLX_API_KEY=your-omlx-key
-```
+需要配置三项：OMLX 地址、API key、（可选）Whisper 模型路径。两种方式，任选其一：
 
-`.env` 位于**仓库根目录**。`make dev` / `make check-omlx` / `make test-integration` 都会自动加载它。
-若你手动用 `uvicorn` 起后端，请先 `set -a; source .env; set +a` 导出这些变量。
+- **设置页（推荐，无需 `.env`）**：启动后打开 http://localhost:5080 → 「设置」→ **OMLX connection** 填写 Base URL / API key / Whisper 路径 → 保存。这些值存到 `~/.cutfinder/config.json`（**全机共用**，换素材库不用重填），保存即生效。
+
+- **`.env`（可选，用于临时覆盖）**：在**仓库根目录**放一个 `.env`：
+
+  ```ini
+  # OMLX 本地推理服务器（OpenAI 兼容）。默认假设 :8000；按你的实际端口改。
+  OMLX_BASE_URL=http://localhost:8000/v1
+  OMLX_API_KEY=your-omlx-key
+  ```
+
+  `make dev` / `make check-omlx` / `make test-integration` 会自动加载它；手动用 `uvicorn` 起后端则先 `set -a; source .env; set +a` 导出。
+
+> **优先级**（高→低）：**设置页全局配置**（`~/.cutfinder/config.json`）> **环境变量 / `.env`**。设置页是权威来源——存进去的值始终生效，即使 `.env` 设了同一个键也不会被它盖掉（注意 `make dev` 会把 `.env` 导出成环境变量，所以两者属于同一层「兜底」）。`.env` / 环境变量只用于填设置页尚未配置的键。
 
 ### 3. 验证 OMLX 就绪
 
 ```bash
-make check-omlx                 # 校验文本/视觉模型是否已加载（读取根 .env）
+make check-omlx                 # 校验文本/视觉模型是否已加载
 # → OMLX OK — models: [...]
 #   All required text/vision models are present.
 ```
+
+> `make check-omlx` 只读 `.env` / 环境变量，**不读**设置页存的全局配置。若你走 UI 配置（无 `.env`），可跳过这步，直接在应用里扫描时验证；或临时 `OMLX_BASE_URL=... OMLX_API_KEY=... make check-omlx`。
 
 ### 4. 启动开发服务器（推荐：一条命令同时起前后端）
 
@@ -156,7 +166,7 @@ cd frontend && npx vite        # http://localhost:5080
 make models                     # 预下载 mlx-whisper large-v3-mlx
 ```
 
-默认下载到 HuggingFace 缓存（`~/.cache/huggingface`）。若想把模型放到自定义目录，在根 `.env` 里设置：
+默认下载到 HuggingFace 缓存（`~/.cache/huggingface`）。若想把模型放到自定义目录，在**设置页 → OMLX connection → Whisper model path** 填该目录，或在根 `.env` 里设置：
 
 ```ini
 WHISPER_MODEL_PATH=/Users/you/AI/Models/ASRs/mlx-community/whisper-large-v3-mlx

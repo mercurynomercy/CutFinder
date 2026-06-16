@@ -77,22 +77,23 @@ def _build_into(ctx: LibraryContext, library_path: Union[str, Path]) -> None:
 
     from cutfinder.config import (
         AppConfig,
-        EnvSettings,
         Prefs,
         load_config,
+        resolve_env,
         save_prefs,
     )
 
     # Config — bootstrap default prefs on first run (load_config requires a
-    # persisted library_path pref; default it to this directory).
+    # persisted library_path pref; default it to this directory). OMLX creds
+    # may still be unset here — the user fills them in via the Settings UI.
     try:
         config = load_config(lib_dir)
     except ValueError as exc:
         if "library_path" in str(exc):
-            config = AppConfig(env=EnvSettings(), prefs=Prefs(library_path=str(lib_dir)))
+            config = AppConfig(env=resolve_env(), prefs=Prefs(library_path=str(lib_dir)))
             save_prefs(config.prefs, lib_dir)
         else:
-            raise  # missing OMLX env vars — surface the real error
+            raise
 
     prefs = config.prefs
 
@@ -188,11 +189,13 @@ def create_app(
     from cutfinder.api.library_routes import _build_router as library_router
     from cutfinder.api.routes import _build_router as main_router
     from cutfinder.api.settings_routes import _build_router as settings_router
-    from cutfinder.config import load_config, save_prefs
+    from cutfinder.config import load_config, save_global_settings, save_prefs
 
     app.include_router(main_router(ctx))
     app.include_router(
-        settings_router(load_config, save_prefs, lambda: ctx.library_path)
+        settings_router(
+            load_config, save_prefs, lambda: ctx.library_path, save_global_settings
+        )
     )
     app.include_router(library_router(ctx, rebind_library))
 

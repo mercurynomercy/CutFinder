@@ -10,9 +10,11 @@ raise a clear ``ValueError`` at load time.
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from typing import Any, Literal
 
+from dotenv import dotenv_values
 from pydantic import BaseModel, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -20,18 +22,27 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 # EnvSettings — secrets and endpoints from .env / environment variables
 # ---------------------------------------------------------------------------
 
-_REQUIRED_ENV_VARS = ("OMLX_BASE_URL", "OMLX_API_KEY")
+# Keys that live in the machine-global store / environment (not per-library).
+_GLOBAL_KEYS = ("OMLX_BASE_URL", "OMLX_API_KEY", "WHISPER_MODEL_PATH")
 
 # Repo root, anchored to this file (backend/cutfinder/config.py -> repo root).
 # Used so the root ``.env`` is found even when the process runs from backend/.
 _ROOT_ENV_FILE = Path(__file__).resolve().parents[2] / ".env"
 
+# Machine-global settings written by the UI. These are shared across all
+# libraries (OMLX endpoint/key, whisper model path are machine-wide, not
+# per-library) and let the app run with no ``.env`` at all.
+_GLOBAL_CONFIG_FILE = Path.home() / ".cutfinder" / "config.json"
+
 
 class EnvSettings(BaseSettings):
-    """Environment-driven configuration from ``.env`` / OS env vars.
+    """OMLX endpoint/key + whisper model path.
 
-    When any required field is missing a clear :class:`ValueError` is raised
-    at load time so the user knows exactly what to fix.
+    Resolved by :func:`resolve_env` with precedence ``OS env / .env`` >
+    ``~/.cutfinder/config.json`` (written by the UI) > empty. Missing values
+    are allowed: the app starts unconfigured and the user fills them in via
+    the Settings UI; adapters surface a clear connection error if used while
+    still empty.
     """
 
     model_config = SettingsConfigDict(
@@ -59,13 +70,72 @@ class EnvSettings(BaseSettings):
         ),
     )
 
-    def __init__(self, **data: Any) -> None:  # noqa: ANN401
-        super().__init__(**data)
-        missing = [v for v in _REQUIRED_ENV_VARS if not getattr(self, v)]
-        if missing:
-            raise ValueError(
-                f"Missing required environment variables: {', '.join(missing)}"
-            )
+
+# ── Machine-global settings (UI-editable, no .env required) ──────────
+
+
+def load_global_settings() -> dict[str, str]:
+    """Read the machine-global settings from ``~/.cutfinder/config.json``.
+
+    Returns only the recognised :data:`_GLOBAL_KEYS` with truthy values; a
+    missing or unreadable file yields an empty dict.
+    """
+    if not _GLOBAL_CONFIG_FILE.is_file():
+        return {}
+    try:
+        data = json.loads(_GLOBAL_CONFIG_FILE.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return {k: str(data[k]) for k in _GLOBAL_KEYS if data.get(k)}
+
+
+def save_global_settings(updates: dict[str, str]) -> None:
+    """Merge *updates* into ``~/.cutfinder/config.json`` (creating it if needed).
+
+    Only recognised :data:`_GLOBAL_KEYS` are persisted; other keys are ignored.
+    """
+    current = load_global_settings()
+    current.update({k: v for k, v in updates.items() if k in _GLOBAL_KEYS})
+    _GLOBAL_CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
+    _GLOBAL_CONFIG_FILE.write_text(
+        json.dumps(current, indent=2, ensure_ascii=False), encoding="utf-8"
+    )
+
+
+def _read_dotenv() -> dict[str, str]:
+    """Return recognised keys from the ``.env`` file(s) — bootstrap defaults.
+
+    These are the *lowest* priority layer: values saved through the Settings
+    UI (the global store) override them so UI edits actually take effect.
+    """
+    values: dict[str, str | None] = {}
+    for env_file in (_ROOT_ENV_FILE, Path(".env")):
+        try:
+            if env_file.is_file():
+                values.update(dotenv_values(env_file))
+        except OSError:
+            continue
+    return {k: v for k, v in values.items() if k in _GLOBAL_KEYS and v}
+
+
+def resolve_env() -> EnvSettings:
+    """Resolve OMLX/whisper config, layering all sources.
+
+    Precedence (highest wins): ``~/.cutfinder/config.json`` (Settings UI) >
+    OS environment variable > ``.env`` file > empty.
+
+    The Settings UI is authoritative — values saved there always take effect,
+    even when a stale ``.env`` sets the same key (note ``make dev`` exports
+    ``.env`` into the environment, so env vars and ``.env`` are effectively the
+    same fallback layer). Env / ``.env`` only fill keys the UI hasn't set.
+    """
+    layered: dict[str, str] = {}
+    layered.update(_read_dotenv())
+    layered.update({k: os.environ[k] for k in _GLOBAL_KEYS if os.environ.get(k)})
+    layered.update(load_global_settings())
+    # _env_file=None: the .env is layered above by hand, not by pydantic's own
+    # reader (which would otherwise outrank the global store).
+    return EnvSettings(_env_file=None, **layered)
 
 
 # ---------------------------------------------------------------------------
@@ -142,8 +212,8 @@ def load_config(library_path: str | Path) -> AppConfig:
     """
     library_dir = Path(library_path).resolve()
 
-    # Load EnvSettings from environment / .env
-    env = EnvSettings()
+    # Load EnvSettings from environment / .env, falling back to the global store.
+    env = resolve_env()
 
     # Load Prefs — merge JSON file on top of defaults
     json_file = _config_path(library_dir)

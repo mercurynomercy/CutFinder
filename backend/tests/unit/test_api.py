@@ -60,6 +60,7 @@ def _build_settings_app(  # type: ignore[misc]
     load_config_fn: Any = None,
     save_prefs_fn: Any = None,
     get_library_fn: Any = None,
+    save_global_fn: Any = None,
 ):
     """Build a FastAPI app with injected settings router."""
     from cutfinder.api.settings_routes import (  # noqa: E402
@@ -67,7 +68,14 @@ def _build_settings_app(  # type: ignore[misc]
     )
 
     app = FastAPI()
-    app.include_router(settings_router(load_config_fn, save_prefs_fn, get_library_fn))
+    app.include_router(
+        settings_router(
+            load_config_fn,
+            save_prefs_fn,
+            get_library_fn,
+            save_global_fn or (lambda _updates: None),
+        )
+    )
     return app
 
 
@@ -877,6 +885,7 @@ class TestSettingsEndpoints:
             load_config_fn=lambda p: None,
             save_prefs_fn=lambda p, _label: None,
             get_library_fn=get_library_none,
+            save_global_fn=lambda _updates: None,
         )
 
         from fastapi import FastAPI  # noqa: E402

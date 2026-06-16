@@ -13,8 +13,7 @@ setup: \
 	install-mise \
 	brew-bundle \
 	uv-sync \
-	frontend-deps \
-	env-boilerplate
+	frontend-deps
 
 install-mise:
 	@command -v mise >/dev/null 2>&1 || ( \
@@ -44,11 +43,10 @@ uv-sync:
 frontend-deps:
 	cd frontend && npm install
 
-env-boilerplate:
-	@test -f .env || (cp .env.example .env && echo "Created .env from .env.example — edit it with your OMLX key.")
-
 # ── 2. dev — start both backend and frontend servers in one command ─
-dev: uv-sync frontend-deps env-boilerplate
+# No .env is required: configure OMLX in the Settings UI (stored in
+# ~/.cutfinder/config.json). A .env, if present, is read as a fallback only.
+dev: uv-sync frontend-deps
 	@bash scripts/dev.sh
 
 # ── 3. models — download MLX Whisper model (honors WHISPER_MODEL_PATH) ──
@@ -76,11 +74,11 @@ e2e: frontend-deps
 	cd frontend && npx playwright test
 
 # ── 8. frontend — start Vite dev server only ───────────────────
-frontend: frontend-deps env-boilerplate
+frontend: frontend-deps
 	cd frontend && $(VITE)
 
 # ── 9. backend — start uvicorn dev server only (with --reload) ─
-backend: env-boilerplate
+backend:
 	cd backend && $(UV) run uvicorn cutfinder.api.app:app --reload --port 5081
 
 # ── Cleanup (local venv, node_modules) ───────────────────────────

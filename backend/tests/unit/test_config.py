@@ -24,6 +24,19 @@ from cutfinder.config import (
 # ── Fixtures / helpers ───────────────────────────────────────────────
 
 
+@pytest.fixture(autouse=True)
+def _isolate_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep every test hermetic from the developer's real machine config.
+
+    ``resolve_env`` now reads ``~/.cutfinder/config.json`` and the repo-root
+    ``.env``; redirect both so tests aren't polluted by local state.
+    """
+    import cutfinder.config as cfg
+
+    monkeypatch.setattr(cfg, "_GLOBAL_CONFIG_FILE", tmp_path / "global-config.json")
+    monkeypatch.setattr(cfg, "_read_dotenv", dict)
+
+
 @pytest.fixture()
 def tmp_library(tmp_path: Path) -> Path:
     """Return ``<tmp>/.cutfinder`` so the config directory already exists."""
@@ -60,47 +73,22 @@ class TestEnvSettings:
         assert env.OMLX_BASE_URL == "http://localhost:8000/v1"
         assert env.OMLX_API_KEY == "test-key-123"
 
-    def test_missing_base_url_raises(
+    def test_missing_vars_default_empty(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """OMLX_BASE_URL absent → ValueError with clear message."""
-        monkeypatch.setenv("OMLX_API_KEY", "test-key-123")
+        """Missing OMLX vars no longer raise — they default to empty strings.
+
+        Creds are now optional at load time and filled via the UI / global
+        store; adapters surface a clear error only if used while unset.
+        """
         monkeypatch.delenv("OMLX_BASE_URL", raising=False)
+        monkeypatch.delenv("OMLX_API_KEY", raising=False)
 
         # _env_file=None isolates the unit test from the repo-root .env, which
         # EnvSettings otherwise always loads (see config._ROOT_ENV_FILE).
-        with pytest.raises(ValueError, match="Missing required environment variables: OMLX_BASE_URL"):
-            EnvSettings(_env_file=None)
-
-    def test_missing_api_key_raises(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """OMLX_API_KEY absent → ValueError with clear message."""
-        monkeypatch.setenv("OMLX_BASE_URL", "http://localhost:8000/v1")
-        monkeypatch.delenv("OMLX_API_KEY", raising=False)
-
-        with pytest.raises(ValueError, match="Missing required environment variables: OMLX_API_KEY"):
-            EnvSettings(_env_file=None)
-
-    def test_missing_both_keys_raises(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """Both missing → ValueError lists both names."""
-        monkeypatch.delenv("OMLX_BASE_URL", raising=False)
-        monkeypatch.delenv("OMLX_API_KEY", raising=False)
-
-        with pytest.raises(ValueError, match="Missing required environment variables: OMLX_BASE_URL, OMLX_API_KEY"):
-            EnvSettings(_env_file=None)
-
-    def test_empty_string_treated_as_missing(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """Empty string value is treated as missing by pydantic-settings."""
-        monkeypatch.setenv("OMLX_BASE_URL", "")
-        monkeypatch.delenv("OMLX_API_KEY", raising=False)
-
-        with pytest.raises(ValueError):
-            EnvSettings()
+        env = EnvSettings(_env_file=None)
+        assert env.OMLX_BASE_URL == ""
+        assert env.OMLX_API_KEY == ""
 
     def test_whisper_model_path_defaults_empty(
         self, monkeypatch: pytest.MonkeyPatch
@@ -121,6 +109,91 @@ class TestEnvSettings:
         monkeypatch.setenv("WHISPER_MODEL_PATH", "/models/whisper-large-v3-mlx")
 
         assert EnvSettings().WHISPER_MODEL_PATH == "/models/whisper-large-v3-mlx"
+
+
+# ── Global settings store (~/.cutfinder/config.json) ─────────────────
+
+
+class TestGlobalSettings:
+    """Machine-global store + env→global layering via resolve_env."""
+
+    @pytest.fixture()
+    def global_file(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> Path:
+        """Redirect the global config file into a temp dir."""
+        import cutfinder.config as cfg
+
+        target = tmp_path / ".cutfinder" / "config.json"
+        monkeypatch.setattr(cfg, "_GLOBAL_CONFIG_FILE", target)
+        # Isolate from the real repo-root .env so env-vs-global precedence is
+        # driven only by what each test sets.
+        monkeypatch.setattr(cfg, "_read_dotenv", dict)
+        return target
+
+    def test_save_then_load_round_trip(self, global_file: Path) -> None:
+        """save_global_settings persists only recognised keys; load reads them."""
+        from cutfinder.config import load_global_settings, save_global_settings
+
+        save_global_settings(
+            {"OMLX_BASE_URL": "http://x/v1", "OMLX_API_KEY": "k", "bogus": "no"}
+        )
+
+        loaded = load_global_settings()
+        assert loaded == {"OMLX_BASE_URL": "http://x/v1", "OMLX_API_KEY": "k"}
+
+    def test_save_merges_without_clobbering(self, global_file: Path) -> None:
+        """A second partial save preserves previously stored keys."""
+        from cutfinder.config import load_global_settings, save_global_settings
+
+        save_global_settings({"OMLX_BASE_URL": "http://x/v1", "OMLX_API_KEY": "k"})
+        save_global_settings({"OMLX_BASE_URL": "http://y/v1"})
+
+        loaded = load_global_settings()
+        assert loaded["OMLX_BASE_URL"] == "http://y/v1"
+        assert loaded["OMLX_API_KEY"] == "k"
+
+    def test_load_missing_file_returns_empty(self, global_file: Path) -> None:
+        """No file yet → empty dict, not an error."""
+        from cutfinder.config import load_global_settings
+
+        assert load_global_settings() == {}
+
+    def test_resolve_env_falls_back_to_global(
+        self, global_file: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Empty env values are filled from the global store."""
+        from cutfinder.config import resolve_env, save_global_settings
+
+        monkeypatch.delenv("OMLX_BASE_URL", raising=False)
+        monkeypatch.delenv("OMLX_API_KEY", raising=False)
+        save_global_settings(
+            {"OMLX_BASE_URL": "http://global/v1", "OMLX_API_KEY": "global-key"}
+        )
+
+        env = resolve_env()
+        assert env.OMLX_BASE_URL == "http://global/v1"
+        assert env.OMLX_API_KEY == "global-key"
+
+    def test_resolve_env_prefers_global_over_env(
+        self, global_file: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The Settings UI (global store) is authoritative over env vars.
+
+        ``make dev`` exports ``.env`` into the environment, so a stale env var
+        must not shadow what the user saved in the UI.
+        """
+        from cutfinder.config import resolve_env, save_global_settings
+
+        monkeypatch.setenv("OMLX_BASE_URL", "http://env/v1")
+        monkeypatch.setenv("OMLX_API_KEY", "env-key")
+        save_global_settings(
+            {"OMLX_BASE_URL": "http://global/v1", "OMLX_API_KEY": "global-key"}
+        )
+
+        env = resolve_env()
+        assert env.OMLX_BASE_URL == "http://global/v1"
+        assert env.OMLX_API_KEY == "global-key"
 
 
 # ── Prefs tests ──────────────────────────────────────────────────────
