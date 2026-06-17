@@ -55,13 +55,14 @@ CutSuggestion(rank:int, start_s:float, end_s:float, reason:str,
   - `GET /api/clips/{id}` 详情响应增加 `keyframes: [...]`。
   - `GET /api/clips/{id}/keyframes/{rank}/image` → 返回帧 JPEG，`Cache-Control: no-store`。
 - [ ] `api/schemas.py`：`CutSuggestionOut`；并入 `ClipDetailResponse`。
+- [ ] 列表/搜索响应增加 `has_keyframes: bool`（供画廊卡片角标）：`query_clips`/`search` 用 `EXISTS(SELECT 1 FROM keyframes WHERE clip_id=…)` 计算；`ClipSummary` / `ClipListItem` 增加该字段（默认 false）。
 
 ### 前端
-- [ ] `api/client.ts`：类型 `CutSuggestion`；`suggestKeyframes(id)`；详情含 `keyframes`。
+- [ ] `api/client.ts`：类型 `CutSuggestion`；`suggestKeyframes(id)`；详情含 `keyframes`；`ClipSummary` 增加 `has_keyframes?`。
 - [ ] `features/detail`：新增「Suggested cuts / 剪辑建议」区——每条 = 帧缩略图 + `mm:ss–mm:ss` + 理由；点击帧用默认播放器打开视频。新增「推荐关键帧」按钮 + loading 态；重跑后刷新。
+- [ ] `components/ThumbnailCard` + `features/gallery`：当 `has_keyframes` 为真时，在卡片角落显示一个小角标（剪刀/胶片图标，复用现有「部分」角标的样式语言），一眼可辨哪些片段已有建议。
 - [ ] `features/settings`：关键帧数量（可配置上限）+「扫描后自动推荐」开关。
 - [ ] `i18n`：EN/ZH 文案。
-- [ ] （v1 暂不做）画廊卡片「已有建议」标记。
 
 ---
 
@@ -73,8 +74,8 @@ CutSuggestion(rank:int, start_s:float, end_s:float, reason:str,
   - `keyframe_count` 改变上限生效；无 transcript 的 A-roll 优雅跳过（不抛）。
   - 仓储：save/get/clear 往返；clip 删除级联删 keyframes 与帧目录。
   - worker：`keyframes` job 计数/终态正确；scan 完成后 `keyframe_auto=True` 自动入队、`False` 不入队。
-  - API：`POST …/keyframes` 入队；详情含 keyframes；图片端点 `no-store`。
-- **前端**：详情面板渲染建议列表（缩略图+时码+理由）、`vitest` 通过、`tsc` 干净。
+  - API：`POST …/keyframes` 入队；详情含 keyframes；图片端点 `no-store`；列表/搜索响应含 `has_keyframes`（有建议为 true）。
+- **前端**：详情面板渲染建议列表（缩略图+时码+理由）；画廊卡片在 `has_keyframes` 为真时显示角标；`vitest` 通过、`tsc` 干净。
 - `ruff` / `mypy`（strict 现状）不新增告警。
 
 ---
