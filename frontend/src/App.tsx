@@ -215,9 +215,8 @@ export default function App() {
       {/* Header bar */}
       <header className="h-14 shrink-0 border-b border-[--border] bg-[--surface-1] px-6 flex items-center justify-between">
         <h1 className="flex items-center">
-          {/* Logo is black-on-white; invert + screen-blend renders it as a clean
-              white mark on the dark header (the white background drops out). */}
-          <img src="/logo.png" alt="CutFinder" className="h-9 w-auto select-none invert mix-blend-screen" />
+          {/* Full colour logo (transparent SVG, includes the wordmark). */}
+          <img src="/logo.svg" alt="CutFinder" className="h-11 w-auto select-none" />
           <span className="sr-only">CutFinder</span>
         </h1>
         <div className="flex items-center gap-3">
