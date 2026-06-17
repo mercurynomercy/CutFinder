@@ -55,7 +55,17 @@ export interface ClipSummary {
   created_at?: string      // used for client-side date filtering
   capture_time?: string | null  // embedded EXIF capture time (ISO); primary date source
   date_source?: string     // 'embedded' | 'file'
+  has_keyframes?: boolean  // true if the clip has keyframe suggestions
   tags?: TagItem[]         // present on detail / mock data; absent from the list endpoint
+}
+
+export interface CutSuggestion {
+  rank: number
+  start_s: number
+  end_s: number
+  reason: string
+  source: 'text' | 'vision'
+  has_frame: boolean
 }
 
 export interface ClipDetail extends ClipSummary {
@@ -69,6 +79,7 @@ export interface ClipDetail extends ClipSummary {
   date_source: string          // 'embedded' | 'file'
   tags: TagItem[]
   transcript?: TranscriptData
+  keyframes?: CutSuggestion[]
 }
 
 export interface TagItem {
@@ -97,6 +108,8 @@ export interface SettingsPrefs {
   broll_frame_count: number
   vad_threshold: number
   output_language: 'zh' | 'en'
+  keyframe_count: number
+  keyframe_auto: boolean
 }
 
 export interface SettingsResponse {
@@ -131,6 +144,8 @@ export interface UpdateSettingsBody {
   broll_frame_count?: number
   vad_threshold?: number
   output_language?: 'zh' | 'en'
+  keyframe_count?: number
+  keyframe_auto?: boolean
   // Machine-global keys (persisted to ~/.cutfinder/config.json, shared across
   // libraries). Omit OMLX_API_KEY to leave the stored secret unchanged.
   OMLX_BASE_URL?: string
@@ -227,6 +242,11 @@ export const api = {
   /** POST /api/clips/{id}/reanalyze — trigger re-analysis. */
   reanalyzeClip(id: number): Promise<{ job_id: number }> {
     return _fetch(`/api/clips/${id}/reanalyze`, { method: 'POST' })
+  },
+
+  /** POST /api/clips/{id}/keyframes — generate keyframe (cut/frame) suggestions. */
+  suggestKeyframes(id: number): Promise<{ job_id: number }> {
+    return _fetch(`/api/clips/${id}/keyframes`, { method: 'POST' })
   },
 
   /** GET /api/search?q= — full-text search. */

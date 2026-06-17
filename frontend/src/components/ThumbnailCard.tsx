@@ -39,11 +39,13 @@ export interface ThumbnailCardProps extends React.HTMLAttributes<HTMLDivElement>
   reanalyzing?: boolean
   /** When provided, shows a play/open button that opens the video (stops propagation). */
   onOpen?: () => void
+  /** Whether the clip has keyframe suggestions (shows a corner badge). */
+  hasKeyframes?: boolean
 }
 
 const ThumbnailCard = React.forwardRef<HTMLDivElement, ThumbnailCardProps>(
   (
-    { thumbnailUrl, sourcePath, libraryPath, clipId, rollType, duration, captureTime, isSelected = false, status, summary, tags, onReanalyze, reanalyzing = false, onOpen, className, ...props },
+    { thumbnailUrl, sourcePath, libraryPath, clipId, rollType, duration, captureTime, isSelected = false, status, summary, tags, onReanalyze, reanalyzing = false, onOpen, hasKeyframes = false, className, ...props },
     ref,
   ) => {
     const { t } = useI18n()
@@ -140,6 +142,22 @@ const ThumbnailCard = React.forwardRef<HTMLDivElement, ThumbnailCardProps>(
                 <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 9v3.75m0 3.75h.008M10.34 3.94l-7.6 13.16A1.5 1.5 0 004.04 19.5h15.92a1.5 1.5 0 001.3-2.4L13.66 3.94a1.5 1.5 0 00-2.6 0z" />
               </svg>
               {t('card.partial')}
+            </div>
+          )}
+
+          {/* Keyframe-suggestions badge (top-right) — scissors mark */}
+          {hasKeyframes && (
+            <div
+              className={cn(
+                'absolute top-2 flex items-center rounded bg-black/60 p-1 text-white backdrop-blur-sm',
+                isSelected ? 'right-9' : 'right-2',  // make room for the selection check
+              )}
+              title={t('card.hasKeyframes')}
+              aria-label={t('card.hasKeyframes')}
+            >
+              <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" aria-hidden="true">
+                <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M7.848 8.25l1.536.887M7.848 8.25a3 3 0 11-5.196-3 3 3 0 015.196 3zm1.536.887a2.165 2.165 0 011.083 1.839c.005.351.054.695.14 1.024M9.384 9.137l10.962 6.331M7.848 15.75l1.536-.887m-1.536.887a3 3 0 11-5.196 3 3 3 0 015.196-3zm1.536-.887a2.165 2.165 0 001.083-1.838c.005-.352.054-.695.14-1.025m0 0l10.962-6.33" />
+              </svg>
             </div>
           )}
 

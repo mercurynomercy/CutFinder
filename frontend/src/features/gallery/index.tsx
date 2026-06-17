@@ -144,6 +144,7 @@ export function Gallery({ clips, selectedClipId, onSelect, onReanalyze, reanalyz
                 onReanalyze={onReanalyze ? () => onReanalyze(clip.id) : undefined}
                 reanalyzing={reanalyzingIds?.has(clip.id)}
                 onOpen={onOpenPath ? () => onOpenPath(clip.library_path || clip.source_path) : undefined}
+                hasKeyframes={clip.has_keyframes}
               />
             ))}
           </div>

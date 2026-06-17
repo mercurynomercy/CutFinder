@@ -62,6 +62,8 @@ function makeSettingsPrefs(overrides: Partial<SettingsPrefs> = {}): SettingsPref
     broll_frame_count: overrides.broll_frame_count ?? 5,
     vad_threshold: overrides.vad_threshold ?? 0.48,
     output_language: overrides.output_language ?? 'zh',
+    keyframe_count: overrides.keyframe_count ?? 3,
+    keyframe_auto: overrides.keyframe_auto ?? true,
   }
 }
 
@@ -153,6 +155,11 @@ export const handlers = [
 
   // POST /api/clips/:id/reanalyze — trigger re-analysis (returns job id)
   http.post('http://localhost:5080/api/clips/:id/reanalyze', () => {
+    return HttpResponse.json({ job_id: Math.floor(Math.random() * 100) })
+  }),
+
+  // POST /api/clips/:id/keyframes — enqueue keyframe suggestion (returns job id)
+  http.post('http://localhost:5080/api/clips/:id/keyframes', () => {
     return HttpResponse.json({ job_id: Math.floor(Math.random() * 100) })
   }),
 

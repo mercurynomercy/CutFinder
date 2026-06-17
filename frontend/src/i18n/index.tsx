@@ -99,6 +99,13 @@ const en = {
   'detail.removeTag': 'Remove tag {name}',
   'detail.minutes': 'min',
   'detail.fps': 'fps',
+  'detail.suggestedCuts': 'Suggested cuts',
+  'detail.suggestKeyframes': 'Suggest keyframes',
+  'detail.suggesting': 'Suggesting…',
+  'detail.noKeyframes': 'No suggestions yet — click "Suggest keyframes".',
+
+  // Thumbnail card badge
+  'card.hasKeyframes': 'Has cut suggestions',
 
   // Common
   'common.close': 'Close',
@@ -197,6 +204,10 @@ const en = {
     'Speech-detection sensitivity — higher is stricter (only segments with clear speech are marked A-roll)',
   'settings.aiOutputLanguage': 'AI output language',
   'settings.aiOutputLanguageDesc': 'Language of AI-generated summaries, tags, and other text output',
+  'settings.keyframeCount': 'Keyframe suggestions per clip',
+  'settings.keyframeCountDesc': 'Max ranked cut/frame suggestions generated per clip (1–10)',
+  'settings.keyframeAuto': 'Auto-suggest keyframes after scan',
+  'settings.keyframeAutoDesc': 'When a scan finishes, queue keyframe suggestion for the new clips',
   'settings.langZh': '中文',
   'settings.langEn': 'English',
   'settings.uiLanguage': 'Interface language',
@@ -282,6 +293,12 @@ const zh: Record<Key, string> = {
   'detail.removeTag': '移除标签 {name}',
   'detail.minutes': '分钟',
   'detail.fps': 'fps',
+  'detail.suggestedCuts': '剪辑建议',
+  'detail.suggestKeyframes': '推荐关键帧',
+  'detail.suggesting': '分析中…',
+  'detail.noKeyframes': '暂无建议 —— 点「推荐关键帧」生成。',
+
+  'card.hasKeyframes': '已有剪辑建议',
 
   'common.close': '关闭',
 
@@ -373,6 +390,10 @@ const zh: Record<Key, string> = {
   'settings.vadThresholdDesc': '语音检测灵敏度阈值，越高越严格（只标记有明显人声的片段为 A-roll）',
   'settings.aiOutputLanguage': 'AI 输出语言',
   'settings.aiOutputLanguageDesc': 'AI 生成的摘要、标签等文字输出的语言',
+  'settings.keyframeCount': '每段关键帧建议数',
+  'settings.keyframeCountDesc': '每段素材生成的剪辑/帧建议上限（1–10）',
+  'settings.keyframeAuto': '扫描后自动推荐关键帧',
+  'settings.keyframeAutoDesc': '扫描完成后，自动为新片段排队生成关键帧建议',
   'settings.langZh': '中文',
   'settings.langEn': 'English',
   'settings.uiLanguage': '界面语言',

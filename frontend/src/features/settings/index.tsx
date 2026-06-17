@@ -516,6 +516,26 @@ export function SettingsPage({ onSave }: SettingsPageProps) {
                 <option value="en">{t('settings.langEn')}</option>
               </select>
 
+              {/* Keyframe suggestions per clip */}
+              <label className="mt-4 block text-sm text-[--text-secondary]">{t('settings.keyframeCount')}</label>
+              <p className="mb-1 text-xs text-[--text-muted]">{t('settings.keyframeCountDesc')}</p>
+              <input
+                type="number" min={1} max={10} step={1} value={prefs.keyframe_count ?? 3}
+                onChange={(e) => updateField('keyframe_count', parseInt(e.target.value, 10))}
+                className="w-full rounded-md border border-[--border] bg-[--surface-2] px-3 py-1.5 text-sm outline-none focus:border-[--primary]"
+              />
+
+              {/* Auto-suggest keyframes after scan */}
+              <label className="mt-4 flex items-center gap-2 text-sm text-[--text-secondary]">
+                <input
+                  type="checkbox" checked={prefs.keyframe_auto ?? true}
+                  onChange={(e) => updateField('keyframe_auto', e.target.checked)}
+                  className="h-4 w-4 rounded border-[--border] bg-[--surface-2]"
+                />
+                {t('settings.keyframeAuto')}
+              </label>
+              <p className="mb-1 mt-1 text-xs text-[--text-muted]">{t('settings.keyframeAutoDesc')}</p>
+
               {/* Field errors */}
               {fieldErrors.map((err) => (
                 <p key={err.field} className="mt-1 text-xs text-[--error]">{t(err.messageKey)}</p>

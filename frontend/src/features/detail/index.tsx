@@ -16,6 +16,12 @@ import { Badge, Chip } from '@/components/ChipBadge'
 import { Button } from '@/components/Button'
 import { useI18n } from '@/i18n'
 
+/** Format seconds as m:ss for cut-window timecodes. */
+function fmtClock(s: number): string {
+  const total = Math.max(0, Math.round(s))
+  return `${Math.floor(total / 60)}:${(total % 60).toString().padStart(2, '0')}`
+}
+
 // ── Tag editor component (add/delete) ────────────────────────────
 
 interface TagEditorProps {
@@ -164,6 +170,7 @@ export function DetailPanel({ clipId, onClose, onOpenPath }: DetailPanelProps) {
   const [editSummary, setEditSummary] = useState('')
   const [saving, setSaving] = useState(false)
   const [reanalyzing, setReanalyzing] = useState(false)
+  const [suggesting, setSuggesting] = useState(false)
 
   // (Re)fetch the clip detail — reused after re-analyze / roll correction.
   const loadClip = useCallback((id: number) => {
@@ -250,6 +257,30 @@ export function DetailPanel({ clipId, onClose, onOpenPath }: DetailPanelProps) {
       console.error('Failed to re-analyze:', err)
     } finally {
       setReanalyzing(false)
+    }
+  }
+
+  // Generate keyframe suggestions, wait for the job, then refresh the panel.
+  const handleSuggestKeyframes = async () => {
+    if (!clip || suggesting) return
+    setSuggesting(true)
+    try {
+      const { job_id } = await api.suggestKeyframes(clip.id)
+      const deadline = Date.now() + 5 * 60_000
+      while (Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, 1500))
+        try {
+          const job = await api.getJob(job_id)
+          if (['done', 'failed', 'cancelled'].includes(job.status)) break
+        } catch {
+          // transient error — keep polling
+        }
+      }
+      await loadClip(clip.id)
+    } catch (err) {
+      console.error('Failed to suggest keyframes:', err)
+    } finally {
+      setSuggesting(false)
     }
   }
 
@@ -402,6 +433,48 @@ export function DetailPanel({ clipId, onClose, onOpenPath }: DetailPanelProps) {
                     await api.setTags(clip.id, { tags: next })
                     setClip((prev) => prev ? { ...prev, tags: next } : null)
                   }} />
+                </div>
+
+                {/* ── Suggested cuts (keyframes) ─────────── */}
+                <div>
+                  <div className="mb-1 flex items-center justify-between gap-2">
+                    <label className="text-xs font-medium uppercase tracking-wider text-[--text-muted]">
+                      {t('detail.suggestedCuts')}
+                    </label>
+                    <button
+                      onClick={handleSuggestKeyframes}
+                      disabled={suggesting}
+                      className="inline-flex items-center gap-1 rounded-md border border-[--border] px-2 py-0.5 text-[11px] font-medium text-[--text-secondary] transition-colors hover:text-[--text-primary] disabled:opacity-50"
+                    >
+                      <svg className={`h-3 w-3 ${suggesting ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24">
+                        <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
+                      </svg>
+                      {suggesting ? t('detail.suggesting') : t('detail.suggestKeyframes')}
+                    </button>
+                  </div>
+                  {clip.keyframes && clip.keyframes.length > 0 ? (
+                    <div className="space-y-2">
+                      {clip.keyframes.map((k) => (
+                        <div key={k.rank} className="flex gap-2 rounded-md border border-[--border] bg-[--surface-2] p-2">
+                          <button
+                            onClick={() => onOpenPath?.(clip.library_path || clip.source_path)}
+                            title={t('detail.openVideo')}
+                            className="relative h-12 w-20 shrink-0 overflow-hidden rounded bg-[--surface-3]"
+                          >
+                            {k.has_frame && (
+                              <img src={`/api/clips/${clip.id}/keyframes/${k.rank}/image`} alt="" className="h-full w-full object-cover" />
+                            )}
+                          </button>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-xs tabular-nums text-[--text-secondary]">{fmtClock(k.start_s)}–{fmtClock(k.end_s)}</p>
+                            {k.reason && <p className="line-clamp-2 text-[11px] leading-snug text-[--text-muted]" title={k.reason}>{k.reason}</p>}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-[--text-muted]">{t('detail.noKeyframes')}</p>
+                  )}
                 </div>
 
                 {/* ── Transcript (collapsible, A-roll only) */}
