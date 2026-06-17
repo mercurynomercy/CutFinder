@@ -6,7 +6,7 @@ UV      := uv
 VITE    := npx vite
 NODE    ?= node
 
-.PHONY: setup dev models check-omlx test test-integration e2e clean frontend backend
+.PHONY: setup dev models check-omlx test test-integration e2e clean frontend backend app
 
 # ── 1. setup — install everything needed to develop and run ───────
 setup: \
@@ -80,6 +80,10 @@ frontend: frontend-deps
 # ── 9. backend — start uvicorn dev server only (with --reload) ─
 backend:
 	cd backend && $(UV) run uvicorn cutfinder.api.app:app --reload --port 5081
+
+# ── 10. app — package the self-setup macOS .app (+ .dmg) ─────────
+app:
+	./scripts/build-app.sh
 
 # ── Cleanup (local venv, node_modules) ───────────────────────────
 clean:

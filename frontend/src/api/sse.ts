@@ -27,7 +27,7 @@ interface UseJobEventsReturn {
   events: JobEvent[]
 }
 
-const BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5080'
+const BASE = import.meta.env.VITE_API_BASE_URL ?? (import.meta.env.PROD ? '' : 'http://localhost:5080')
 
 /**
  * React hook that subscribes to SSE events for a specific job.

@@ -238,7 +238,13 @@ make e2e               # Playwright e2e
 
 ## 更新日志 (Changelog)
 
-### 2026-06-17（今日）
+### 2026-06-18
+
+**功能：**
+- **打包为自安装 `CutFinder.app`**（`make app` → `dist/CutFinder.app` + `.dmg`）：拖入「应用程序」双击即用；首次启动用 `uv` 自建 Python 环境、检测/装 ffmpeg，再由单进程同时提供 UI + API（后端新增可选静态托管 `CUTFINDER_STATIC_DIR`，前端生产构建走同源 `/api`）。运行环境放在 `~/Library/Application Support/CutFinder/`，不写进 .app 包内。
+- **Dock 退出修复**：启动器不再 `exec` 进 venv 的 Python（那会让 macOS 撤掉 Dock 图标、服务器变孤儿进程无法退出）；改为保持脚本为前台进程、把 uvicorn 作为子进程并转发 Dock 的「退出」信号（SIGTERM，`--timeout-graceful-shutdown 5`），图标常驻、可从 Dock 正常关闭。
+
+### 2026-06-17
 
 **功能：**
 - **界面语言可切换（英 / 中）**：新增轻量 i18n 层（`src/i18n`），整套 UI 文案默认英文、可在「设置 → Interface language」切到中文，按设备记忆（localStorage）；与 AI 输出语言完全解耦。
@@ -288,7 +294,34 @@ make e2e               # Playwright e2e
 
 ---
 
+## 打包为 macOS App（CutFinder.app）
+
+把整个应用打包成一个可拖入「应用程序」文件夹的 `CutFinder.app`（自安装启动器）：
+
+```bash
+make app          # → dist/CutFinder.app（以及 dist/CutFinder.dmg）
+```
+
+把 `dist/CutFinder.app` 拖到 `/Applications`，双击即可：
+
+- 首次启动会**自建运行环境**——用 `uv` 安装 Python 依赖、检测/安装 ffmpeg（有 Homebrew 时自动 `brew install ffmpeg`），随后启动本地服务并在浏览器打开（默认 `http://127.0.0.1:5080`）。之后启动是秒开。
+- 运行环境写在 `~/Library/Application Support/CutFinder/`（**不写进 .app 包内**，便于更新/签名）；日志在同目录 `launch.log`。
+- `.app` 内置了**预构建的前端**与后端源码，由同一个服务同时提供 UI 与 API（运行时**不需要 Node**）。
+
+> ⚠️ 两件事仍需另行准备（无法塞进我们的 .app）：
+> 1. **OMLX** 是独立的第三方菜单栏 App（本地模型服务器），需自行安装并加载 `Qwen` 模型；
+> 2. **Whisper 模型**首次转写时从 HuggingFace 下载（约 3GB），或按上文 `WHISPER_MODEL_PATH` 预置。
+>
+> 该 .app 未做 Apple 代码签名/公证，首次打开可能需「右键 → 打开」放行。品牌图源在 `branding/`。
+
+---
+
 ## 路线图
 
 - **v1**：需求 0–7（自定义文件夹、保留拍摄时间、A/B 判定、A-roll 简介、日期+类型归档、标签、缩略图、接 OMLX）
-- **后续**：关键帧（剪辑切点）建议、Final Cut Pro 深度集成（FCPXML/关键词）、打包独立 `.app`
+- **已完成（v1 之外）**：打包为自安装 `CutFinder.app`（`make app`）
+- **进行中**：关键帧（剪辑切点）建议（需求 8）
+- **后续 / TODO**：
+  - **原生 .app 外壳（Swift/ObjC 包装器）**：当前是 shell 脚本 .app，Dock 退出靠 SIGTERM。换成最小原生壳可获得标准应用菜单、稳定的 Dock 生命周期、点击 Dock 图标重开 UI、以及未来代码签名/公证。
+  - Final Cut Pro 深度集成（FCPXML / 关键词导出）
+  - PyInstaller 全离线包 / Tauri 原生窗口

@@ -45,3 +45,9 @@
   - 期间补修：`silero-vad`/`onnxruntime` 缺依赖、Whisper 模型 id（`large-v3` → `mlx-community/whisper-large-v3-mlx`）。
 - [ ] **全链路端到端**（扫描→分类→归档→检索 的一次性贯通脚本/手测尚未串跑；各环节已分别验证）
   - 备注：视觉集成测试改用真实帧后单测在高负载下推理偏慢；适配器本身已直连验证通过。
+
+---
+
+### 待办 (TODO)
+- [ ] **原生 macOS .app 外壳**：现为 shell 脚本启动器（`packaging/launcher.sh` + `scripts/build-app.sh`），Dock 退出依赖 SIGTERM 转发。后续用最小 Swift/ObjC 包装器替代，获得标准应用菜单、稳定的 Dock 生命周期、点击 Dock 图标重开 UI，以及代码签名/公证能力。
+- [ ] **关键帧（剪辑切点）推荐（需求 8）** — 进行中。

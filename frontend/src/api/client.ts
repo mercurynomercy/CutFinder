@@ -14,8 +14,10 @@ Usage:
 
 // ── Environment config ────────────────────────────────────────────
 
+// Dev: talk to the Vite dev server (which proxies /api → backend). Production
+// build (packaged .app): same-origin, since one server serves UI + API.
 const BASE =
-  import.meta.env.VITE_API_BASE_URL || 'http://localhost:5080'
+  import.meta.env.VITE_API_BASE_URL ?? (import.meta.env.PROD ? '' : 'http://localhost:5080')
 
 // ── Types (mirrors Pydantic models on the server) ───────────────
 

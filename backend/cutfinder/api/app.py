@@ -238,6 +238,17 @@ def create_app(
     )
     app.include_router(library_router(ctx, rebind_library))
 
+    # ── Serve the built frontend (packaged single-server mode) ──────
+    # In dev the UI is served by Vite (:5080) which proxies /api here. When
+    # packaged as a .app there is one server: point CUTFINDER_STATIC_DIR at the
+    # built `frontend/dist` and we serve it at "/" (mounted last so /api wins).
+    _static_dir = os.environ.get("CUTFINDER_STATIC_DIR")
+    if _static_dir and Path(_static_dir).is_dir():
+        from fastapi.staticfiles import StaticFiles
+
+        app.mount("/", StaticFiles(directory=_static_dir, html=True), name="frontend")
+        logger.info("Serving frontend from %s", _static_dir)
+
     # ── Startup / shutdown — start/stop the worker queue ────────────
     @app.on_event("startup")
     async def _startup() -> None:

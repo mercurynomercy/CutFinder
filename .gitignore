@@ -18,6 +18,9 @@ node_modules/
 frontend/dist/
 *.local
 
+# 打包产物（CutFinder.app / .dmg）
+/dist/
+
 # 运行时数据（素材库内的数据库与缩略图）
 .cutfinder/
 
