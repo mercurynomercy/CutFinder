@@ -50,5 +50,5 @@
 
 ### 待办 (TODO)
 - [ ] **原生 macOS .app 外壳**：现为 shell 脚本启动器（`packaging/launcher.sh` + `scripts/build-app.sh`），Dock 退出依赖 SIGTERM 转发。后续用最小 Swift/ObjC 包装器替代，获得标准应用菜单、稳定的 Dock 生命周期、点击 Dock 图标重开 UI，以及代码签名/公证能力。
-- [ ] **关键帧（剪辑切点）推荐（需求 8）** — 进行中。
+- [ ] [**16 关键帧推荐（剪辑切点 + 精选帧，需求 8）**](./16-keyframes.md) — 设计已定稿，待实现。
 - [ ] **导出 transcript 为 Final Cut Pro 支持的字幕**：A-roll 转写已按 `Segment(start_s, end_s, text)` 存好（带时间轴），导出 iTT（FCP 原生）/ SRT 只需格式化时间码、无需调模型。建议后端 `GET /api/clips/{id}/transcript.srt|.itt` + 详情面板「导出字幕」按钮；进阶可并入 FCPXML 深度集成（字幕作为 caption 轨道随片段灌入 FCP）。
