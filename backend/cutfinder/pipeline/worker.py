@@ -22,6 +22,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Callable
 
 from cutfinder.domain.models import (
@@ -508,6 +509,8 @@ class WorkerQueue:
 
         Returns ``(success, error)`` — counters are updated by the caller.
         """
+        name = Path(candidate.path).name
+        logger.info("▶ Processing %s", name)
         self._emit({"type": "clip_started", "path": candidate.path})
 
         try:
@@ -517,6 +520,7 @@ class WorkerQueue:
                 await asyncio.to_thread(self._orchestrator.process_clip, candidate)
                 if self._orchestrator else None
             )
+            logger.info("✓ Finished %s%s", name, f" (clip #{clip_id})" if clip_id is not None else "")
             self._emit({
                 "type": "clip_done",
                 "path": candidate.path,
@@ -525,6 +529,7 @@ class WorkerQueue:
             return True, None
 
         except Exception as exc:  # noqa: BLE001 — error isolation
+            logger.error("✗ Failed %s: %s", name, exc)
             self._emit({
                 "type": "clip_error",
                 "path": candidate.path,
@@ -537,6 +542,7 @@ class WorkerQueue:
 
         Returns ``(success, error)`` — counters are updated by the caller.
         """
+        logger.info("▶ Re-analyzing clip #%s", clip_id)
         self._emit({"type": "reanalyze_started", "clip_id": clip_id})
 
         try:
@@ -546,8 +552,10 @@ class WorkerQueue:
                 if self._orchestrator else True
             )
             if success:
+                logger.info("✓ Re-analyzed clip #%s", clip_id)
                 self._emit({"type": "reanalyze_done", "clip_id": clip_id})
                 return True, None
+            logger.warning("✗ Re-analyze returned False for clip #%s", clip_id)
             self._emit({"type": "reanalyze_error", "clip_id": clip_id})
             return False, "reanalyze returned False"
 

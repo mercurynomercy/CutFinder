@@ -490,8 +490,13 @@ def _build_router(ctx: Any) -> Any:
         return StreamingResponse(
             iter_file(),
             media_type=mime_type,
+            # Never cache: a clip's thumbnail can change in place (re-analysis,
+            # A/B re-classification), and the URL stays the same — caching would
+            # show a stale/wrong image.
             headers={
-                "Cache-Control": "public, max-age=86400",
+                "Cache-Control": "no-store, no-cache, must-revalidate",
+                "Pragma": "no-cache",
+                "Expires": "0",
             },
         )
 

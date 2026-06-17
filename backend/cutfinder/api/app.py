@@ -23,6 +23,26 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+# Logs per-clip pipeline steps so the UI log viewer shows processing progress.
+_progress_logger = logging.getLogger("cutfinder.pipeline.progress")
+
+
+def _log_progress_event(evt: Any) -> None:
+    """Orchestrator ``progress_callback`` that logs each pipeline step.
+
+    ``evt`` is a ``ProgressEvent`` (step / ok / detail).  Detail is only
+    attached for the informative steps (VAD classification, copy destination)
+    and for failures, to keep the log readable.
+    """
+    step = getattr(evt, "step", "") or "?"
+    detail = getattr(evt, "detail", None)
+    if getattr(evt, "ok", True):
+        extra = f" — {detail}" if detail and step in ("vad", "copy") else ""
+        _progress_logger.info("  · %s%s", step, extra)
+    else:
+        _progress_logger.warning("  · %s failed%s", step, f" — {detail}" if detail else "")
+
+
 # Where the chosen library path is persisted (so it survives a restart).
 _ACTIVE_LIBRARY_FILE = Path.home() / ".cutfinder" / "active_library"
 
@@ -132,6 +152,11 @@ def _build_into(ctx: LibraryContext, library_path: Union[str, Path]) -> None:
         num_frames=prefs.broll_frame_count,
         thumbnail_dir=cutfinder_dir / "thumbnails",
     )
+
+    # Surface each per-clip pipeline step (probe/thumbnail/vad/analysis/copy)
+    # into the log buffer so the UI's log viewer shows processing progress, not
+    # just the OMLX HTTP calls.
+    orchestrator.progress_callback = _log_progress_event
 
     worker_queue = WorkerQueue(orchestrator=orchestrator, repository=repository)
 

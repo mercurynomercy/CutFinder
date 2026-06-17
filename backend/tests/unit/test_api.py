@@ -1187,6 +1187,23 @@ class TestLogs:
         assert all("older-line-xyz" not in m for m in messages)
 
 
+class TestThumbnailCaching:
+    """The thumbnail endpoint must not be cached (it can change in place)."""
+
+    def test_thumbnail_served_with_no_store(self, tmp_path: Any) -> None:
+        thumb = tmp_path / "thumb.jpg"
+        thumb.write_bytes(b"\xff\xd8\xff\xd9")  # tiny JPEG-ish payload
+
+        repo = FakeCatalogRepository()
+        repo.upsert_clip(_make_clip(id=1, thumbnail_path=str(thumb)))
+
+        client = TestClient(_build_app(repository=repo), raise_server_exceptions=False)
+        resp = client.get("/api/clips/1/thumbnail")
+
+        assert resp.status_code == 200
+        assert "no-store" in resp.headers.get("cache-control", "").lower()
+
+
 # ── Public exports (module-level marker) ─────────────────────
 
 __all__: list[str] = []  # noqa: PLE0611 — module-level helper, no direct exports
