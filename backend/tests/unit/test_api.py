@@ -1150,6 +1150,43 @@ class TestOpenPath:
         assert resp.status_code == 404
 
 
+class TestLogs:
+    """The in-memory backend-log endpoint (GET /logs)."""
+
+    def _client(self) -> TestClient:
+        return TestClient(_build_app(), raise_server_exceptions=False)
+
+    def test_returns_buffered_log_lines(self) -> None:
+        import logging
+
+        from cutfinder.logbuffer import install_log_buffer
+
+        install_log_buffer()
+        logging.getLogger("cutfinder.test").info("hello-from-test-log")
+
+        resp = self._client().get("/api/logs")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert any("hello-from-test-log" in r["message"] for r in data["logs"])
+        assert data["last_seq"] >= 1
+
+    def test_after_returns_only_newer_lines(self) -> None:
+        import logging
+
+        from cutfinder.logbuffer import install_log_buffer
+
+        install_log_buffer()
+        log = logging.getLogger("cutfinder.test")
+        log.info("older-line-xyz")
+        seq = self._client().get("/api/logs").json()["last_seq"]
+
+        log.info("newer-line-xyz")
+        data = self._client().get(f"/api/logs?after={seq}").json()
+        messages = [r["message"] for r in data["logs"]]
+        assert any("newer-line-xyz" in m for m in messages)
+        assert all("older-line-xyz" not in m for m in messages)
+
+
 # ── Public exports (module-level marker) ─────────────────────
 
 __all__: list[str] = []  # noqa: PLE0611 — module-level helper, no direct exports

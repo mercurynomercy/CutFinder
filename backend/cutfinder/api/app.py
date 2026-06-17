@@ -172,6 +172,11 @@ def create_app(
     ctx = LibraryContext()
     app.state.library_context = ctx
 
+    # Capture backend logs into an in-memory ring buffer so the UI can show them
+    # (GET /api/logs) without the user tailing the terminal.
+    from cutfinder.logbuffer import install_log_buffer
+    install_log_buffer()
+
     initial = (
         str(library_path).strip()
         if library_path is not None and str(library_path).strip()

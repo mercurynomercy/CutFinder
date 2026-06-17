@@ -202,6 +202,11 @@ export const handlers = [
     return HttpResponse.json(makeJobStatus({ id }))
   }),
 
+  // GET /api/logs — backend log ring buffer (empty by default in tests)
+  http.get('http://localhost:5080/api/logs', () => {
+    return HttpResponse.json({ logs: [], last_seq: 0 })
+  }),
+
   // GET /api/library — active library (bound by default in tests)
   http.get('http://localhost:5080/api/library', () => {
     return HttpResponse.json({ library_path: '/Users/jan/Media/CutFinder_Library' })

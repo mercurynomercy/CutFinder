@@ -30,6 +30,16 @@ const en = {
   'app.scan': 'Scan',
   'app.taskQueue': 'Task queue',
   'app.settings': 'Settings',
+  'app.logs': 'Backend logs',
+
+  // Backend logs modal
+  'logs.title': 'Backend logs',
+  'logs.empty': 'No logs yet',
+  'logs.autoscroll': 'Auto-scroll',
+  'logs.clear': 'Clear',
+  'logs.close': 'Close',
+  'logs.paused': 'Paused',
+  'logs.live': 'Live',
 
   // Gallery toolbar + empty state
   'gallery.clipsCount': '{n} clips',
@@ -208,6 +218,15 @@ const zh: Record<Key, string> = {
   'app.scan': '扫描',
   'app.taskQueue': '任务队列',
   'app.settings': '设置',
+  'app.logs': '后端日志',
+
+  'logs.title': '后端日志',
+  'logs.empty': '暂无日志',
+  'logs.autoscroll': '自动滚动',
+  'logs.clear': '清空',
+  'logs.close': '关闭',
+  'logs.paused': '已暂停',
+  'logs.live': '实时',
 
   'gallery.clipsCount': '{n} 个片段',
   'gallery.sort': '排序',

@@ -106,6 +106,19 @@ export interface LibraryStatus {
   library_path: string | null
 }
 
+export interface LogEntry {
+  seq: number
+  time: number        // epoch seconds
+  level: string       // 'INFO' | 'WARNING' | 'ERROR' | ...
+  name: string        // logger name
+  message: string
+}
+
+export interface LogsResponse {
+  logs: LogEntry[]
+  last_seq: number
+}
+
 export interface UpdateSettingsBody {
   source_folders?: string[]
   library_path?: string | null
@@ -277,5 +290,10 @@ export const api = {
   /** POST /api/open — reveal a folder in Finder or open a file in its default app. */
   openPath(path: string): Promise<{ status: string; path: string }> {
     return _fetch('/api/open', { method: 'POST', body: JSON.stringify({ path }) })
+  },
+
+  /** GET /api/logs — recent backend log lines (poll with `after` for new ones). */
+  getLogs(after = 0, limit = 500): Promise<LogsResponse> {
+    return _fetch(`/api/logs?after=${after}&limit=${limit}`)
   },
 } as const

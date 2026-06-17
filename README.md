@@ -4,7 +4,7 @@
 
 把一堆 A-roll（有中文解说）和 B-roll（纯空镜）自动**分类、打标签、生成简介与缩略图**，让你之后能按日期 / 类型 / 标签 / 台词快速找回任意一段素材。面向 macOS（Apple Silicon）+ Final Cut Pro 工作流，**全程离线、AI 全本地**。
 
-> **状态：核心功能已打通并可端到端运行。** 后端适配器、编排层、API 装配层（`create_app`）、前端均已实现并接通；`make test-unit`（347 单元测试）、前端 `vitest`（183 项）、`npm run build`（类型干净）、`make check-omlx`、`make dev` 均可跑通。模型推理链路（文本/视觉/转写/VAD）通过真实 OMLX + 本地集成测试验证（见[测试](#测试)）。
+> **状态：核心功能已打通并可端到端运行。** 后端适配器、编排层、API 装配层（`create_app`）、前端均已实现并接通；`make test-unit`（349 单元测试）、前端 `vitest`（187 项）、`npm run build`（类型干净）、`make check-omlx`、`make dev` 均可跑通。模型推理链路（文本/视觉/转写/VAD）通过真实 OMLX + 本地集成测试验证（见[测试](#测试)）。
 
 ---
 
@@ -185,7 +185,7 @@ WHISPER_MODEL_PATH=/Users/you/AI/Models/ASRs/mlx-community/whisper-large-v3-mlx
 ```bash
 cd backend
 
-uv run pytest tests/unit             # 仅单元测试（347 项，无需外部服务，秒级）
+uv run pytest tests/unit             # 仅单元测试（349 项，无需外部服务，秒级）
 uv run pytest -m integration         # 集成测试（需真实 OMLX / ffmpeg / 样片）
 uv run mypy cutfinder/               # 类型检查（strict，clean）
 uv run ruff check cutfinder/         # linting（clean）
@@ -247,6 +247,7 @@ make e2e               # Playwright e2e
 - **A/B 纠正会重定位副本**：在详情面板切换 A/B 时，库副本会**移动**到正确的 A-roll/B-roll 目录并重命名（同卷 rename，保留时间戳），`library_path` 同步更新。
 - **打开 / 在 Finder 查看**：新增 `POST /api/open`（仅限库/源目录内的路径），缩略图与详情面板可一键播放视频，日期分组可一键在 Finder 中打开该日期文件夹。
 - **搜索可用并移入侧栏**：搜索框从顶部 Header 移到左侧过滤侧栏，并真正生效——按文件名 / 简介 / 描述 / 标签客户端即时过滤。
+- **后端日志查看器**：Header 新增日志按钮，弹出 modal 实时查看后端日志（`GET /api/logs` 内存环形缓冲，轮询增量拉取），按级别着色、可暂停/清空——无需再盯终端。
 
 **UI / UX：**
 - 详情面板的折叠区（Transcript / Source file / Metadata）统一为同一风格，Source file 与 Metadata 归并到底部。

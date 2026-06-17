@@ -14,6 +14,7 @@ import { DetailPanel, type DetailPanelProps as DetailPanelPropsType } from '@/fe
 import { JobsPanel, type JobsPanelProps } from '@/features/jobs'
 import { JobsQueuePage } from '@/features/jobs-queue'
 import { SettingsPage } from '@/features/settings'
+import { LogModal } from '@/features/logs'
 import { useI18n } from '@/i18n'
 
 // ── App state ────────────────────────────────────────
@@ -24,6 +25,7 @@ export default function App() {
   const [loading, setLoading] = useState(true)
   const [showSettings, setShowSettings] = useState(false)
   const [showJobs, setShowJobs] = useState(false)
+  const [showLogs, setShowLogs] = useState(false)
   const [selectedClipId, setSelectedClipId] = useState<DetailPanelPropsType['clipId']>(null)
   const [activeJobId, setActiveJobId] = useState<JobsPanelProps['activeJobId']>(null)
   const [appliedFilters, setAppliedFilters] = useState<Partial<FilterState>>({})
@@ -224,6 +226,16 @@ export default function App() {
             {t('app.scan')}
           </button>
           <button
+            onClick={() => setShowLogs(true)}
+            className="rounded-md p-1.5 text-[--text-secondary] hover:bg-[--surface-3] transition-colors"
+            aria-label={t('app.logs')}
+            title={t('app.logs')}
+          >
+            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24">
+              <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8.25 7.5h7.5M8.25 11.25h7.5M8.25 15h4.5M6 3.75h12A2.25 2.25 0 0120.25 6v12A2.25 2.25 0 0118 20.25H6A2.25 2.25 0 013.75 18V6A2.25 2.25 0 016 3.75z" />
+            </svg>
+          </button>
+          <button
             onClick={() => setShowJobs(true)}
             className="rounded-md p-1.5 text-[--text-secondary] hover:bg-[--surface-3] transition-colors"
             aria-label={t('app.taskQueue')}
@@ -282,6 +294,9 @@ export default function App() {
         {/* Detail panel (slide-in drawer, right side) */}
         <DetailPanel clipId={selectedClipId} onClose={() => setSelectedClipId(null)} onOpenPath={handleOpenPath} />
       </div>
+
+      {/* Backend log viewer (modal) */}
+      <LogModal open={showLogs} onClose={() => setShowLogs(false)} />
     </div>
   )
 }

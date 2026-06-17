@@ -517,6 +517,22 @@ def _build_router(ctx: Any) -> Any:
             for c in clips
         ]
 
+    # ── Backend logs (GET /logs) ───────────────────────────
+    @router.get("/logs")
+    async def get_logs(
+        after: int = Query(0, ge=0),       # only records newer than this seq
+        limit: int = Query(500, ge=1, le=5000),
+    ) -> dict[str, Any]:
+        """Return recent backend log lines from the in-memory ring buffer.
+
+        Poll with ``after=<last_seq>`` to fetch only newly-emitted lines.
+        """
+        from cutfinder.logbuffer import get_log_buffer
+
+        recs = get_log_buffer().records(after=after, limit=limit)
+        last_seq = recs[-1]["seq"] if recs else after
+        return {"logs": recs, "last_seq": last_seq}
+
     # ── Native folder picker (POST /pick-folder) ───────────
     @router.post("/pick-folder")
     async def pick_folder() -> dict[str, Optional[str]]:
