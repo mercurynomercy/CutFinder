@@ -323,5 +323,6 @@ make app          # → dist/CutFinder.app（以及 dist/CutFinder.dmg）
 - **进行中**：关键帧（剪辑切点）建议（需求 8）
 - **后续 / TODO**：
   - **原生 .app 外壳（Swift/ObjC 包装器）**：当前是 shell 脚本 .app，Dock 退出靠 SIGTERM。换成最小原生壳可获得标准应用菜单、稳定的 Dock 生命周期、点击 Dock 图标重开 UI、以及未来代码签名/公证。
-  - Final Cut Pro 深度集成（FCPXML / 关键词导出）
+  - **导出 transcript 为 Final Cut Pro 可导入的字幕**（A-roll 已有带时间轴的 `Segment`，纯文本格式化即可导出 iTT / SRT；后端可加 `GET /api/clips/{id}/transcript.srt|.itt` + 详情面板「导出字幕」按钮，无需再调模型）
+  - Final Cut Pro 深度集成（FCPXML / 关键词导出；可与上一条合并：把字幕作为 caption 轨道随片段灌入 FCP）
   - PyInstaller 全离线包 / Tauri 原生窗口
