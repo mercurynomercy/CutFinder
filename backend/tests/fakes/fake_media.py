@@ -80,6 +80,7 @@ class FakeFrameExtractor(FrameExtractor):
         self._should_fail = should_fail
         # Track calls for assertions in tests
         self.calls: list[tuple[Path, Optional[int]]] = []
+        self.grab_calls: list[tuple[Path, float, Path]] = []
 
     def extract(self, path: Path, count: int | None = None) -> list[Path]:
         """Return the pre-set output paths (or fail if configured to)."""
@@ -89,6 +90,13 @@ class FakeFrameExtractor(FrameExtractor):
             raise RuntimeError("FakeFrameExtractor: simulated failure")
 
         return [p.resolve() for p in self._output_paths]
+
+    def grab_at(self, path: Path, seconds: float, out_path: Path) -> Path:
+        """Pretend to grab a frame at *seconds*; return the requested out_path."""
+        self.grab_calls.append((path, seconds, out_path))
+        if self._should_fail:
+            raise RuntimeError("FakeFrameExtractor: simulated grab failure")
+        return out_path
 
 
 def make_sample_thumbnail_path() -> Path:

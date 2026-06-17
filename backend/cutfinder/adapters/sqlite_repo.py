@@ -19,6 +19,7 @@ from ..domain.models import (
     Clip,
     ClipFilter,
     ClipSummary,
+    CutSuggestion,
     Job,
     JobFailedItem,
     Tag,
@@ -66,6 +67,18 @@ CREATE TABLE IF NOT EXISTS transcripts (
     clip_id     INTEGER PRIMARY KEY REFERENCES clips(id) ON DELETE CASCADE,
     full_text   TEXT,
     segments_json TEXT
+)"""
+
+_CREATE_KEYFRAMES = """
+CREATE TABLE IF NOT EXISTS keyframes (
+    clip_id    INTEGER NOT NULL REFERENCES clips(id) ON DELETE CASCADE,
+    rank       INTEGER NOT NULL,
+    start_s    REAL    NOT NULL,
+    end_s      REAL    NOT NULL,
+    reason     TEXT    NOT NULL DEFAULT '',
+    frame_path TEXT,
+    source     TEXT    NOT NULL DEFAULT 'vision',
+    PRIMARY KEY (clip_id, rank)
 )"""
 
 _CREATE_JOBS = """
@@ -163,6 +176,7 @@ class SqliteRepository:
         c.execute(_CREATE_CLIPS)
         c.execute(_CREATE_TAGS)
         c.execute(_CREATE_TRANSCRIPTS)
+        c.execute(_CREATE_KEYFRAMES)
         c.execute(_CREATE_JOBS)
         c.execute(_CREATE_JOB_FAILED_ITEMS)
 
@@ -184,8 +198,23 @@ class SqliteRepository:
     # ── helpers / internal queries ───────────────────────────
 
     def _row_to_clip_summary(self, row: tuple[Any, ...]) -> ClipSummary:
-        """Convert a DB row to :class:`ClipSummary`."""
-        return ClipSummary(**dict(zip(_CLIP_COLUMNS, row)))
+        """Convert a DB row to :class:`ClipSummary`.
+
+        Rows include the standard clip columns plus a trailing ``has_keyframes``
+        flag (see the ``EXISTS(...)`` in :meth:`query_clips` / :meth:`search`).
+        """
+        n = len(_CLIP_COLUMNS)
+        data = dict(zip(_CLIP_COLUMNS, row[:n]))
+        if len(row) > n:
+            data["has_keyframes"] = bool(row[n])
+        return ClipSummary(**data)
+
+    @staticmethod
+    def _select_clip_summary_sql(where: str = "") -> str:
+        """``SELECT`` for clip-summary rows incl. a trailing has_keyframes flag."""
+        kf = "EXISTS(SELECT 1 FROM keyframes k WHERE k.clip_id = clips.id)"
+        tail = f" WHERE {where}" if where else ""
+        return f"SELECT {_clip_columns_sql()}, {kf} FROM clips{tail}"
 
     # ── Clip CRUD ────────────────────────────────────────────
 
@@ -284,6 +313,8 @@ class SqliteRepository:
         # Also remove from FTS index.
         c.execute("DELETE FROM clips_fts WHERE summary LIKE ? OR description LIKE ? OR transcript LIKE ?",
                   (f"%clip_id:{clip_id}%", f"%clip_id:{clip_id}%", f"%clip_id:{clip_id}%"))
+        # Foreign-key cascade may be off (PRAGMA), so clear keyframes explicitly.
+        c.execute("DELETE FROM keyframes WHERE clip_id = ?", (clip_id,))
         c.execute("DELETE FROM clips WHERE id = ?", (clip_id,))
         self._conn.commit()
 
@@ -308,7 +339,8 @@ class SqliteRepository:
             conditions.append("id IN (SELECT clip_id FROM tags WHERE name = ?)")
             params.append(f.tag)
 
-        sql = f"SELECT {_clip_columns_sql()} FROM clips WHERE {' AND '.join(conditions)} ORDER BY id" if conditions else f"SELECT {_clip_columns_sql()} FROM clips ORDER BY id"
+        where = " AND ".join(conditions)
+        sql = self._select_clip_summary_sql(where) + " ORDER BY id"
         c.execute(sql, params)
 
         return [self._row_to_clip_summary(r) for r in c.fetchall()]
@@ -328,19 +360,17 @@ class SqliteRepository:
 
         # FTS5 trigram tokenizer requires queries >= 3 chars.
         if len(trimmed) >= 3:
-            c.execute(f"""
-                SELECT {_clip_columns_sql()} FROM clips
-                WHERE id IN (
-                    SELECT rowid FROM clips_fts WHERE clips_fts MATCH ? ORDER BY rank
-                )
-            """, (trimmed,))
+            sql = self._select_clip_summary_sql(
+                "id IN (SELECT rowid FROM clips_fts WHERE clips_fts MATCH ? ORDER BY rank)"
+            )
+            c.execute(sql, (trimmed,))
         else:
             # Short-query fallback (trigram needs ≥3 chars): LIKE across summary, description and transcript.
-            c.execute(f"""
-                SELECT {_clip_columns_sql()} FROM clips
-                    WHERE summary LIKE ? OR description LIKE ?
-                        OR id IN (SELECT t.clip_id FROM transcripts t WHERE t.full_text LIKE ?)
-            """, (f"%{trimmed}%", f"%{trimmed}%", f"%{trimmed}%"))
+            sql = self._select_clip_summary_sql(
+                "summary LIKE ? OR description LIKE ?"
+                " OR id IN (SELECT t.clip_id FROM transcripts t WHERE t.full_text LIKE ?)"
+            )
+            c.execute(sql, (f"%{trimmed}%", f"%{trimmed}%", f"%{trimmed}%"))
 
         results = [self._row_to_clip_summary(r) for r in c.fetchall()]
         return results
@@ -546,6 +576,52 @@ class SqliteRepository:
             INSERT OR REPLACE INTO clips_fts (rowid, summary, description, transcript)
             VALUES (?, ?, ?, ?)
         """, (clip_id, summary_text, desc_text, transcript_text))
+
+    # ── Keyframe suggestions (req 8) ──────────────────────────
+
+    def save_keyframes(self, clip_id: int, suggestions: list[CutSuggestion]) -> None:
+        c = self._conn.cursor()
+        c.execute("DELETE FROM keyframes WHERE clip_id = ?", (clip_id,))
+        if suggestions:
+            c.executemany(
+                "INSERT INTO keyframes (clip_id, rank, start_s, end_s, reason, frame_path, source)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?)",
+                [
+                    (clip_id, s.rank, s.start_s, s.end_s, s.reason, s.frame_path, s.source)
+                    for s in suggestions
+                ],
+            )
+        self._conn.commit()
+
+    def get_keyframes(self, clip_id: int) -> list[CutSuggestion]:
+        c = self._conn.cursor()
+        c.execute(
+            "SELECT rank, start_s, end_s, reason, frame_path, source"
+            " FROM keyframes WHERE clip_id = ? ORDER BY rank",
+            (clip_id,),
+        )
+        return [
+            CutSuggestion(
+                rank=r[0], start_s=r[1], end_s=r[2], reason=r[3] or "",
+                frame_path=r[4], source=r[5] or "vision",
+            )
+            for r in c.fetchall()
+        ]
+
+    def clear_keyframes(self, clip_id: int) -> None:
+        c = self._conn.cursor()
+        c.execute("DELETE FROM keyframes WHERE clip_id = ?", (clip_id,))
+        self._conn.commit()
+
+    def clip_ids_without_keyframes(self) -> list[int]:
+        c = self._conn.cursor()
+        c.execute(
+            "SELECT id FROM clips"
+            " WHERE status IN ('done', 'partial')"
+            " AND id NOT IN (SELECT DISTINCT clip_id FROM keyframes)"
+            " ORDER BY id",
+        )
+        return [int(r[0]) for r in c.fetchall()]
 
     # ── Job CRUD ──────────────────────────────────────────────
 

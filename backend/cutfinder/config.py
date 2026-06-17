@@ -165,6 +165,10 @@ class Prefs(BaseModel, frozen=True):
     vad_threshold: float = Field(default=0.35, gt=0, le=1)
     # Language for AI-generated summaries / visual descriptions ("zh" or "en").
     output_language: Literal["zh", "en"] = "zh"
+    # Keyframe recommendation: max ranked cut/frame suggestions per clip, and
+    # whether to auto-queue a keyframes job after each scan completes.
+    keyframe_count: int = Field(default=3, ge=1, le=10)
+    keyframe_auto: bool = True
 
     @field_validator("text_model", "vision_model", "whisper_model", mode="before")
     @classmethod

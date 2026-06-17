@@ -42,6 +42,7 @@ from cutfinder.domain.models import (
     ClipCandidate,
     ClipFilter,
     ClipSummary,
+    CutSuggestion,
     Job,
     JobFailedItem,
     SummaryResult,
@@ -153,6 +154,9 @@ class Orchestrator:
         library_writer: LibraryWriter | None = None,
         num_frames: int = 3,
         thumbnail_dir: Path | None = None,
+        keyframe_dir: Path | None = None,
+        keyframe_count: int = 3,
+        keyframe_sample_count: int = 12,
     ) -> None:
         self.probe = probe
         self.thumbnail_maker = thumbnail_maker
@@ -183,6 +187,13 @@ class Orchestrator:
         #: Directory thumbnails are written to. When None, a system temp dir is
         #: used. We must NEVER write next to the source file (read-only source).
         self.thumbnail_dir = thumbnail_dir
+
+        #: Where keyframe representative frames are written (per-clip subdir).
+        self.keyframe_dir = keyframe_dir
+        #: Max ranked keyframe suggestions per clip.
+        self.keyframe_count = keyframe_count
+        #: Frames sampled from a B-roll clip when picking keyframes (vision).
+        self.keyframe_sample_count = keyframe_sample_count
 
     # ── Public API ────────────────────────────────────────────────
 
@@ -412,6 +423,103 @@ class Orchestrator:
 
         return True
 
+    def recommend_keyframes(self, clip_id: int) -> bool:
+        """Recommend ranked cut windows + representative frames for a clip.
+
+        A-roll uses the text model over the stored transcript segments; B-roll
+        uses the vision model over freshly-sampled frames. Suggestions (with
+        persisted frame images) are saved via the repository. Best-effort: on
+        any failure returns False without raising.
+        """
+        emit = self.progress_callback
+        clip: Clip | None = self.repository.get_clip(clip_id) if self.repository else None
+        if not clip:
+            emit(ProgressEvent(step="keyframes", ok=False, detail=f"clip_id={clip_id} not found"))
+            return False
+
+        try:
+            if clip.roll_type == "a":
+                suggestions = self._keyframes_a_roll(clip)
+            else:
+                suggestions = self._keyframes_b_roll(clip)
+        except Exception as exc:  # noqa: BLE001 — best effort, never abort the queue
+            logger.warning("Keyframe recommendation failed for clip %s: %s", clip_id, exc)
+            emit(ProgressEvent(clip_id=clip_id, step="keyframes", ok=False, detail=str(exc)))
+            return False
+
+        self.repository.save_keyframes(clip_id, suggestions)
+        emit(ProgressEvent(clip_id=clip_id, step="keyframes", ok=True, detail=f"{len(suggestions)} suggestion(s)"))
+        return True
+
+    def _keyframe_out_dir(self, clip_id: int) -> Path:
+        """Per-clip dir for persisted keyframe images (cleared before regen)."""
+        base = self.keyframe_dir if self.keyframe_dir is not None else Path(tempfile.gettempdir()) / "cutfinder_keyframes"
+        out = base / str(clip_id)
+        import shutil
+        shutil.rmtree(out, ignore_errors=True)
+        out.mkdir(parents=True, exist_ok=True)
+        return out
+
+    def _keyframes_a_roll(self, clip: Clip) -> list[CutSuggestion]:
+        """A-roll: text model picks transcript stretches; grab a frame per cut."""
+        if self.summarizer is None:
+            return []
+        transcript = self.repository.get_transcript(clip.id) if clip.id is not None else None
+        segments = list(transcript.segments) if transcript is not None else []
+        if not segments:
+            return []  # no transcript → gracefully skip (don't fall back to vision)
+
+        cuts = self.summarizer.recommend_cuts(segments, self.keyframe_count)
+        if not cuts:
+            return []
+
+        out_dir = self._keyframe_out_dir(clip.id) if clip.id is not None else None
+        filled: list[CutSuggestion] = []
+        for cut in cuts:
+            frame_path: str | None = None
+            if self.frame_extractor is not None and out_dir is not None:
+                mid = (cut.start_s + cut.end_s) / 2.0
+                try:
+                    p = self.frame_extractor.grab_at(Path(clip.source_path), mid, out_dir / f"k{cut.rank}.jpg")
+                    frame_path = str(p)
+                except Exception as exc:  # noqa: BLE001 — a missing frame shouldn't drop the suggestion
+                    logger.warning("Keyframe grab failed (clip %s, rank %s): %s", clip.id, cut.rank, exc)
+            filled.append(cut.model_copy(update={"frame_path": frame_path}))
+        return filled
+
+    def _keyframes_b_roll(self, clip: Clip) -> list[CutSuggestion]:
+        """B-roll: vision model ranks sampled frames; persist the chosen frames."""
+        if self.vision_tagger is None or self.frame_extractor is None:
+            return []
+
+        frame_paths = self.frame_extractor.extract(Path(clip.source_path), self.keyframe_sample_count)
+        if not frame_paths:
+            return []
+        try:
+            duration = clip.duration_s or 0.0
+            n = len(frame_paths)
+            pairs = [(p, (duration * i / n) if duration > 0 else float(i)) for i, p in enumerate(frame_paths)]
+            picks = self.vision_tagger.recommend_keyframes(pairs, self.keyframe_count)
+            if not picks:
+                return []
+
+            out_dir = self._keyframe_out_dir(clip.id) if clip.id is not None else None
+            import shutil
+            filled: list[CutSuggestion] = []
+            for pick in picks:
+                frame_path = pick.frame_path
+                if frame_path and out_dir is not None:
+                    dest = out_dir / f"k{pick.rank}.jpg"
+                    try:
+                        shutil.copy2(frame_path, dest)
+                        frame_path = str(dest)
+                    except OSError as exc:
+                        logger.warning("Keyframe copy failed (clip %s): %s", clip.id, exc)
+                filled.append(pick.model_copy(update={"frame_path": frame_path}))
+            return filled
+        finally:
+            self._cleanup_frames(frame_paths)
+
     # ── Internal helpers (each wrapped in try/except by callers) ───
 
     def _do_probe(self, path: str) -> VideoMetadata:
@@ -603,6 +711,9 @@ class _NoOpRepository(CatalogRepository):
     def correct_roll(self, clip_id: int, roll: str) -> None:
         pass
 
+    def set_status(self, clip_id: int, status: str) -> None:
+        pass
+
     def update_analysis(self, clip_id: int, r: AnalysisResult) -> None:
         pass
 
@@ -611,6 +722,18 @@ class _NoOpRepository(CatalogRepository):
 
     def get_transcript(self, clip_id: int) -> Transcript | None:
         return None
+
+    def save_keyframes(self, clip_id: int, suggestions: list[Any]) -> None:
+        pass
+
+    def get_keyframes(self, clip_id: int) -> list[Any]:
+        return []
+
+    def clear_keyframes(self, clip_id: int) -> None:
+        pass
+
+    def clip_ids_without_keyframes(self) -> list[int]:
+        return []
 
     def create_job(self, total: int = 0, kind: str = "scan") -> Job:
         return Job(  # — minimal stub

@@ -20,6 +20,8 @@ import pytest
 from cutfinder.domain.models import (
     Clip,
     ClipCandidate,
+    CutSuggestion,
+    Segment,
     SummaryResult,
     Tag,
     Transcript,
@@ -642,6 +644,97 @@ class TestDatabaseLibraryCorrectness:
         assert src_str == "/tmp/test.mp4"
         assert date_str == "2026-01-15"  # from VideoMetadata.capture_time
         assert roll_type == "b"
+
+
+# ═════════════════════════════════════════════════════════════════════
+# 6. Keyframe recommendation
+# ════════════════════════════════════════════════════════════════════
+
+
+class TestKeyframes:
+    """recommend_keyframes: A-roll via text/transcript, B-roll via vision."""
+
+    def test_a_roll_uses_transcript_and_grabs_frames(self, tmp_path):
+        repo = FakeCatalogRepository()
+        repo._clips[1] = _make_clip(id=1, roll_type="a", source_path="/tmp/a.mp4", status="done")
+        repo._clip_by_fp["aabbccdd00112233"] = 1
+        repo._transcripts[1] = Transcript(
+            full_text="一 二 三",
+            segments=[Segment(start_s=0, end_s=2, text="一"), Segment(start_s=2, end_s=5, text="二")],
+        )
+
+        summarizer = MagicMock()
+        summarizer.recommend_cuts.return_value = [
+            CutSuggestion(rank=1, start_s=0.0, end_s=5.0, reason="精彩", source="text"),
+        ]
+        frame_extractor = MagicMock()
+        frame_extractor.grab_at.return_value = tmp_path / "k1.jpg"
+
+        orch = Orchestrator(
+            summarizer=summarizer, frame_extractor=frame_extractor,
+            repository=repo, keyframe_dir=tmp_path, keyframe_count=3,
+        )
+        assert orch.recommend_keyframes(1) is True
+
+        summarizer.recommend_cuts.assert_called_once()
+        frame_extractor.grab_at.assert_called_once()
+        saved = repo.get_keyframes(1)
+        assert len(saved) == 1
+        assert saved[0].source == "text"
+        assert saved[0].frame_path == str(tmp_path / "k1.jpg")
+
+    def test_a_roll_without_transcript_skips(self, tmp_path):
+        repo = FakeCatalogRepository()
+        repo._clips[1] = _make_clip(id=1, roll_type="a", status="done")
+        summarizer = MagicMock()
+
+        orch = Orchestrator(summarizer=summarizer, repository=repo, keyframe_dir=tmp_path)
+        assert orch.recommend_keyframes(1) is True  # graceful
+        summarizer.recommend_cuts.assert_not_called()
+        assert repo.get_keyframes(1) == []
+
+    def test_b_roll_uses_vision(self, tmp_path):
+        f0 = tmp_path / "f0.jpg"; f0.write_bytes(b"x")
+        repo = FakeCatalogRepository()
+        repo._clips[2] = _make_clip(id=2, roll_type="b", source_path="/tmp/b.mp4", status="done", duration_s=10.0)
+
+        frame_extractor = MagicMock()
+        frame_extractor.extract.return_value = [f0]
+        vision = MagicMock()
+        vision.recommend_keyframes.return_value = [
+            CutSuggestion(rank=1, start_s=4.0, end_s=6.0, reason="好画面", frame_path=str(f0), source="vision"),
+        ]
+
+        orch = Orchestrator(
+            vision_tagger=vision, frame_extractor=frame_extractor,
+            repository=repo, keyframe_dir=tmp_path, keyframe_count=3,
+        )
+        assert orch.recommend_keyframes(2) is True
+
+        vision.recommend_keyframes.assert_called_once()
+        saved = repo.get_keyframes(2)
+        assert len(saved) == 1 and saved[0].source == "vision"
+        # frame persisted into the keyframe dir
+        assert saved[0].frame_path == str(tmp_path / "2" / "k1.jpg")
+
+    def test_keyframe_count_caps_via_recommender(self, tmp_path):
+        repo = FakeCatalogRepository()
+        repo._clips[1] = _make_clip(id=1, roll_type="a", status="done")
+        repo._transcripts[1] = Transcript(full_text="x", segments=[Segment(start_s=0, end_s=1, text="x")])
+        summarizer = MagicMock()
+        summarizer.recommend_cuts.return_value = []
+
+        orch = Orchestrator(summarizer=summarizer, frame_extractor=MagicMock(),
+                            repository=repo, keyframe_dir=tmp_path, keyframe_count=2)
+        orch.recommend_keyframes(1)
+        # the configured cap is passed to the recommender
+        _, kwargs = summarizer.recommend_cuts.call_args[0], summarizer.recommend_cuts.call_args
+        assert summarizer.recommend_cuts.call_args[0][1] == 2
+
+    def test_missing_clip_returns_false(self):
+        repo = FakeCatalogRepository()
+        orch = Orchestrator(repository=repo)
+        assert orch.recommend_keyframes(999) is False
 
 
 # ═════════════════════════════════════════════════════════════════════

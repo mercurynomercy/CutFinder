@@ -73,6 +73,7 @@ class FakeCatalogRepository:
         self._clip_by_fp: dict[str, int] = {}  # fingerprint -> clip_id
         self._tags: dict[int, list[Tag]] = {}   # clip_id -> [Tag]
         self._transcripts: dict[int, Transcript] = {}  # clip_id -> Transcript
+        self._keyframes: dict[int, list[Any]] = {}  # clip_id -> [CutSuggestion]
 
         self._jobs: dict[int, Job] = {}
         self._failed_items: dict[int, list[JobFailedItem]] = {}  # job_id -> [JobFailedItem]
@@ -200,6 +201,7 @@ class FakeCatalogRepository:
             error=clip.error,
             capture_time=clip.capture_time,
             date_source=clip.date_source,
+            has_keyframes=bool(self._keyframes.get(clip.id or 0)),
         )
 
     # ── Tag CRUD (per clip) ────────────────────────────────────────
@@ -324,6 +326,27 @@ class FakeCatalogRepository:
     def get_transcript(self, clip_id: int) -> Transcript | None:
         """Return the transcript for *clip_id*, or ``None``."""
         return self._transcripts.get(clip_id)
+
+    # ── Keyframe suggestions (req 8) ────────────────────────────────
+
+    def save_keyframes(self, clip_id: int, suggestions: list[Any]) -> None:
+        """Replace keyframe suggestions for *clip_id*."""
+        self._keyframes[clip_id] = list(suggestions)
+
+    def get_keyframes(self, clip_id: int) -> list[Any]:
+        """Return keyframe suggestions for *clip_id* (rank order as stored)."""
+        return list(self._keyframes.get(clip_id, []))
+
+    def clear_keyframes(self, clip_id: int) -> None:
+        """Remove keyframe suggestions for *clip_id*."""
+        self._keyframes.pop(clip_id, None)
+
+    def clip_ids_without_keyframes(self) -> list[Any]:
+        """Return processed clip ids that have no keyframe suggestions yet."""
+        return [
+            cid for cid, clip in self._clips.items()
+            if clip.status in ("done", "partial") and not self._keyframes.get(cid)
+        ]
 
     # ── Job CRUD (queue tracking) ───────────────────────────────────
 

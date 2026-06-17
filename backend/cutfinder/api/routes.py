@@ -254,6 +254,7 @@ def _build_router(ctx: Any) -> Any:
                 "status": c.status,
                 "capture_time": _iso(getattr(c, 'capture_time', None)),
                 "date_source": getattr(c, 'date_source', 'file'),
+                "has_keyframes": getattr(c, 'has_keyframes', False),
                 "tags": [
                     {"name": t.name, "source": getattr(t, 'source', 'auto')}
                     for t in ctx.repository.get_tags(c.id)
@@ -319,6 +320,21 @@ def _build_router(ctx: Any) -> Any:
                     for s in getattr(transcript, 'segments', [])
                 ],
             }
+
+        # Keyframe suggestions (req 8) — ranked cut windows + representative frames.
+        keyframes = ctx.repository.get_keyframes(clip_id)
+        result["has_keyframes"] = bool(keyframes)
+        result["keyframes"] = [
+            {
+                "rank": k.rank,
+                "start_s": k.start_s,
+                "end_s": k.end_s,
+                "reason": k.reason,
+                "source": k.source,
+                "has_frame": bool(k.frame_path),
+            }
+            for k in keyframes
+        ]
 
         return result
 
@@ -453,6 +469,53 @@ def _build_router(ctx: Any) -> Any:
         job_id = await ctx.worker_queue.enqueue_reanalyze(clip_id)
         return {"job_id": job_id}
 
+    # ── Keyframe suggestions (POST /clips/{id}/keyframes) ───
+    @router.post("/clips/{clip_id}/keyframes")
+    async def suggest_keyframes(
+        clip_id: int,
+    ) -> dict[str, Any]:
+        """Enqueue keyframe (cut + representative frame) suggestion for a clip."""
+        if ctx.worker_queue is None:
+            raise HTTPException(status_code=503, detail="Worker queue not available")
+
+        clip = ctx.repository.get_clip(clip_id)
+        if clip is None:
+            raise HTTPException(status_code=404, detail="Clip not found")
+
+        job_id = await ctx.worker_queue.enqueue_keyframes([clip_id])
+        return {"job_id": job_id}
+
+    # ── Keyframe image (GET /clips/{id}/keyframes/{rank}/image) ─
+    @router.get("/clips/{clip_id}/keyframes/{rank}/image")
+    async def get_keyframe_image(
+        clip_id: int,
+        rank: int,
+    ) -> StreamingResponse:
+        """Serve the representative frame JPEG for a clip's keyframe suggestion."""
+        if ctx.repository is None:
+            raise HTTPException(status_code=503, detail="Catalog not available")
+
+        match = next(
+            (k for k in ctx.repository.get_keyframes(clip_id) if k.rank == rank), None,
+        )
+        if match is None or not match.frame_path:
+            raise HTTPException(status_code=404, detail="Keyframe image not found")
+
+        frame_file = Path(match.frame_path)
+        if not frame_file.is_file():
+            raise HTTPException(status_code=404, detail="Keyframe image file not found")
+
+        def iter_file() -> Any:
+            with open(frame_file, "rb") as f:
+                while chunk := f.read(65_536):
+                    yield chunk
+
+        return StreamingResponse(
+            iter_file(),
+            media_type="image/jpeg",
+            headers={"Cache-Control": "no-store, no-cache, must-revalidate", "Pragma": "no-cache", "Expires": "0"},
+        )
+
     # ── Thumbnail (GET /clips/{id}/thumbnail) ───────────────
     @router.get("/clips/{clip_id}/thumbnail")
     async def get_clip_thumbnail(
@@ -518,6 +581,7 @@ def _build_router(ctx: Any) -> Any:
                 "roll_type": c.roll_type,
                 "summary": getattr(c, 'summary', None),
                 "description": getattr(c, 'description', None),
+                "has_keyframes": getattr(c, 'has_keyframes', False),
             }
             for c in clips
         ]

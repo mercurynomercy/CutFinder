@@ -8,6 +8,7 @@ import datetime as _dt  # noqa: F401 — kept for type annotations below
 from ..domain.models import (
     Clip,
     ClipSummary,
+    CutSuggestion,
     Tag,
     Transcript,
     AnalysisResult,
@@ -93,6 +94,23 @@ class CatalogRepository(Protocol):
 
     def get_transcript(self, clip_id: int) -> Transcript | None:
         """Load transcript for a single clip."""
+
+    # ── Keyframe suggestions (req 8) ──────────────────────────────
+
+    def save_keyframes(self, clip_id: int, suggestions: list[CutSuggestion]) -> None:
+        """Replace all keyframe suggestions for a clip (rank-ordered)."""
+
+    def get_keyframes(self, clip_id: int) -> list[CutSuggestion]:
+        """Return a clip's keyframe suggestions ordered by rank."""
+
+    def clear_keyframes(self, clip_id: int) -> None:
+        """Remove all keyframe suggestions for a clip."""
+
+    def clip_ids_without_keyframes(self) -> list[int]:
+        """Return ids of processed clips (done/partial) that have no keyframes yet.
+
+        Used to auto-queue keyframe suggestion for newly-scanned clips.
+        """
 
     # ── Job queue tracking ────────────────────────────────────────
 

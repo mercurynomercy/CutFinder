@@ -215,3 +215,34 @@ class FfmpegFrameExtractor(FrameExtractor):
             shutil.rmtree(tmp_dir, ignore_errors=True)
 
         return output_paths
+
+    def grab_at(self, path: Path, seconds: float, out_path: Path) -> Path:
+        """Grab a single frame at *seconds* into *path*, writing it to *out_path*.
+
+        Used for keyframe representative frames. Clamps a negative seek to 0 and
+        creates the output's parent directory. Returns the absolute output path.
+        """
+        if not path.is_file():
+            raise FileNotFoundError(f"Not a video file: {path}")
+
+        seek = max(0.0, float(seconds))
+        _ensure_parent(out_path)
+
+        cmd = [
+            self._executable,
+            "-y",
+            "-ss", str(seek),
+            "-i", str(path),
+            "-vframes", "1",
+            "-vf", "scale=w=1280:h=720:force_original_aspect_ratio=decrease",
+            "-q:v", "2",
+            str(out_path),
+        ]
+        result = subprocess.run(  # noqa: S603 — ffmpeg is a trusted local tool
+            cmd, capture_output=True, text=True, check=False,
+        )
+        if result.returncode != 0 or not out_path.is_file():
+            raise RuntimeError(
+                f"ffmpeg frame grab failed (exit {result.returncode}): {result.stderr.strip()}"
+            )
+        return out_path.resolve()

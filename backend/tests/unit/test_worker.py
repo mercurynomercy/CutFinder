@@ -37,6 +37,7 @@ def _make_fake_orchestrator(
         def __init__(self) -> None:
             self.process_clip_calls: list[ClipCandidate] = []
             self.reanalyze_calls: list[int] = []
+            self.keyframe_calls: list[int] = []
 
         def process_clip(self, candidate: ClipCandidate) -> int | None:
             self.process_clip_calls.append(candidate)
@@ -45,6 +46,10 @@ def _make_fake_orchestrator(
         def reanalyze(self, clip_id: int) -> bool:
             self.reanalyze_calls.append(clip_id)
             return reanalyze_result
+
+        def recommend_keyframes(self, clip_id: int) -> bool:
+            self.keyframe_calls.append(clip_id)
+            return True
 
     return FakeOrchestrator()
 
@@ -743,3 +748,72 @@ class TestRetry:
         ok = await queue.retry_job(job_id)
         assert ok is False
 
+
+
+# ── Keyframe jobs (req 8) ──────────────────────────────────────────
+
+class TestKeyframeJobs:
+    """enqueue_keyframes processing + auto-queue after a scan completes."""
+
+    @pytest.mark.asyncio
+    async def test_enqueue_keyframes_processed(self) -> None:
+        orch = _make_fake_orchestrator()
+        repo = FakeCatalogRepository()
+        queue = WorkerQueue(orchestrator=orch, repository=repo)
+        await queue.start()
+
+        job_id = await queue.enqueue_keyframes([7, 8])
+        job = repo.get_job(job_id)
+        while job is None or job.done < 2:
+            await asyncio.sleep(0.02)
+            job = repo.get_job(job_id)
+
+        await queue.stop()
+        assert orch.keyframe_calls == [7, 8]
+
+    @pytest.mark.asyncio
+    async def test_auto_queue_after_scan_when_enabled(self) -> None:
+        orch = _make_fake_orchestrator()
+        repo = FakeCatalogRepository()
+        # A processed clip with no keyframes yet → should be picked up.
+        repo._clips[5] = _make_clip_done(5)
+        queue = WorkerQueue(orchestrator=orch, repository=repo, keyframe_auto=True)
+        await queue.start()
+
+        await queue.enqueue_scan([_make_candidate("/tmp/x.mp4")])
+        # Wait for the auto-queued keyframes job to run on clip 5.
+        for _ in range(200):
+            if 5 in orch.keyframe_calls:
+                break
+            await asyncio.sleep(0.02)
+
+        await queue.stop()
+        assert orch.keyframe_calls == [5]
+
+    @pytest.mark.asyncio
+    async def test_no_auto_queue_when_disabled(self) -> None:
+        orch = _make_fake_orchestrator()
+        repo = FakeCatalogRepository()
+        repo._clips[5] = _make_clip_done(5)
+        queue = WorkerQueue(orchestrator=orch, repository=repo, keyframe_auto=False)
+        await queue.start()
+
+        jid = await queue.enqueue_scan([_make_candidate("/tmp/x.mp4")])
+        job = repo.get_job(jid)
+        while job is None or job.done < 1:
+            await asyncio.sleep(0.02)
+            job = repo.get_job(jid)
+        await asyncio.sleep(0.1)  # give any (erroneous) auto-queue a chance
+
+        await queue.stop()
+        assert orch.keyframe_calls == []
+
+
+def _make_clip_done(clip_id: int):
+    import datetime as _dt
+    from cutfinder.domain.models import Clip
+    return Clip(
+        id=clip_id, fingerprint=f"fp{clip_id}", source_path=f"/s/{clip_id}.mp4",
+        roll_type="b", status="done",
+        created_at=_dt.datetime.now(_dt.timezone.utc).isoformat(),
+    )

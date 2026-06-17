@@ -151,6 +151,8 @@ def _build_into(ctx: LibraryContext, library_path: Union[str, Path]) -> None:
         library_writer=FsLibraryWriter(config),
         num_frames=prefs.broll_frame_count,
         thumbnail_dir=cutfinder_dir / "thumbnails",
+        keyframe_dir=cutfinder_dir / "keyframes",
+        keyframe_count=prefs.keyframe_count,
     )
 
     # Surface each per-clip pipeline step (probe/thumbnail/vad/analysis/copy)
@@ -158,7 +160,10 @@ def _build_into(ctx: LibraryContext, library_path: Union[str, Path]) -> None:
     # just the OMLX HTTP calls.
     orchestrator.progress_callback = _log_progress_event
 
-    worker_queue = WorkerQueue(orchestrator=orchestrator, repository=repository)
+    worker_queue = WorkerQueue(
+        orchestrator=orchestrator, repository=repository,
+        keyframe_auto=prefs.keyframe_auto,
+    )
 
     ctx.library_path = str(lib_dir)
     ctx.repository = repository

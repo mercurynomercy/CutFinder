@@ -127,11 +127,16 @@ class WorkerQueue:
         orchestrator: Any | None = None,
         repository: CatalogRepository | None = None,
         progress_callback: Callable[[Any], None] | None = None,
+        keyframe_auto: bool = False,
     ) -> None:
         self._queue: asyncio.Queue[Any] = asyncio.Queue()
         self._worker_task: asyncio.Task[None] | None = None
         self._repository = repository
         self._progress_callback = progress_callback
+        # When True, a completed scan job auto-enqueues a keyframes job for
+        # clips that don't have suggestions yet.
+        self._keyframe_auto = keyframe_auto
+        self._kf_autoqueued: set[int] = set()  # scan job_ids already followed-up
 
         # SSE event stream (lazy-initialized on first subscribe)
         self._stream: _EventStream | None = None
@@ -293,6 +298,38 @@ class WorkerQueue:
 
         return job_id  # pyright: ignore[reportPossiblyUnboundVariable]
 
+    async def enqueue_keyframes(
+        self,
+        clip_ids: list[int],
+        job_id: int | None = None,
+    ) -> int:
+        """Enqueue keyframe-suggestion work for *clip_ids* as one job.
+
+        Returns the job id. An empty list creates a job that completes immediately.
+        """
+        if self._repository:
+            if job_id is not None and (self._repository.get_job(job_id) is not None):
+                pass
+            elif job_id is None:
+                job = self._repository.create_job(total=len(clip_ids), kind="keyframes")
+                job_id = job.id
+
+        if job_id is None:
+            self._next_job_counter += 1
+            job_id = self._next_job_counter
+
+        self._emit({"type": "job_started", "job_id": job_id, "total": len(clip_ids)})
+
+        if not clip_ids:
+            if self._repository:
+                self._repository.update_job(job_id, status="done", total=0, done=0)
+            self._emit({"type": "job_completed", "job_id": job_id})
+            return job_id
+
+        for cid in clip_ids:
+            await self._queue.put(("keyframes", cid, job_id))
+        return job_id
+
     async def enqueue_clip(self, candidate: ClipCandidate) -> None:
         """Enqueue a single clip for processing (no job tracking).
 
@@ -345,6 +382,8 @@ class WorkerQueue:
         for item in items:
             if item.kind == "reanalyze":
                 await self._queue.put(("reanalyze", item.clip_id, job_id))
+            elif item.kind == "keyframes":
+                await self._queue.put(("keyframes", item.clip_id, job_id))
             elif item.path is not None and item.fingerprint is not None:
                 await self._queue.put((
                     "clip",
@@ -436,6 +475,8 @@ class WorkerQueue:
                         success, error = await self._process_clip(payload)
                     elif kind == "reanalyze":
                         success, error = await self._process_reanalyze(payload)
+                    elif kind == "keyframes":
+                        success, error = await self._process_keyframes(payload)
                     else:
                         success, error = True, None
 
@@ -446,11 +487,29 @@ class WorkerQueue:
                     success, error = False, str(exc)
 
                 self._update_job_after_item(job_id, kind, payload, success, error)
+                # After a scan finishes, optionally auto-queue keyframe suggestion.
+                if kind == "clip" and job_id is not None:
+                    await self._maybe_autoqueue_keyframes(job_id)
                 self._queue.task_done()
 
         except asyncio.CancelledError:
             # Normal shutdown — drain remaining items if possible
             pass
+
+    async def _maybe_autoqueue_keyframes(self, scan_job_id: int) -> None:
+        """When a scan job has just completed, enqueue keyframes for new clips."""
+        if not self._keyframe_auto or self._repository is None:
+            return
+        if scan_job_id in self._kf_autoqueued:
+            return
+        job = self._repository.get_job(scan_job_id)
+        if job is None or job.kind != "scan" or job.status != "done":
+            return
+        self._kf_autoqueued.add(scan_job_id)
+        clip_ids = self._repository.clip_ids_without_keyframes()
+        if clip_ids:
+            logger.info("Auto-queueing keyframes for %d clip(s) after scan #%s", len(clip_ids), scan_job_id)
+            await self.enqueue_keyframes(clip_ids)
 
     def _update_job_after_item(
         self,
@@ -474,9 +533,10 @@ class WorkerQueue:
             self._repository.update_job(
                 job_id, done=job.done + 1, failed=job.failed + 1,
             )
-            if kind == "reanalyze":
+            if kind in ("reanalyze", "keyframes"):
+                # payload is a clip_id (int) for these kinds.
                 self._repository.record_failed_item(JobFailedItem(
-                    job_id=job_id, kind="reanalyze", clip_id=payload, error=error,
+                    job_id=job_id, kind=kind, clip_id=payload, error=error,
                 ))
             else:
                 self._repository.record_failed_item(JobFailedItem(
@@ -565,6 +625,29 @@ class WorkerQueue:
                 "clip_id": clip_id,
                 "error": str(exc),
             })
+            return False, str(exc)
+
+    async def _process_keyframes(self, clip_id: int) -> tuple[bool, str | None]:
+        """Generate keyframe suggestions for a single clip.
+
+        Returns ``(success, error)`` — counters are updated by the caller.
+        """
+        logger.info("▶ Suggesting keyframes for clip #%s", clip_id)
+        self._emit({"type": "keyframes_started", "clip_id": clip_id})
+        try:
+            ok = (
+                await asyncio.to_thread(self._orchestrator.recommend_keyframes, clip_id)
+                if self._orchestrator else True
+            )
+            if ok:
+                logger.info("✓ Keyframes ready for clip #%s", clip_id)
+                self._emit({"type": "keyframes_done", "clip_id": clip_id})
+                return True, None
+            logger.warning("✗ Keyframes returned False for clip #%s", clip_id)
+            self._emit({"type": "keyframes_error", "clip_id": clip_id})
+            return False, "keyframes returned False"
+        except Exception as exc:  # noqa: BLE001 — error isolation
+            self._emit({"type": "keyframes_error", "clip_id": clip_id, "error": str(exc)})
             return False, str(exc)
 
 

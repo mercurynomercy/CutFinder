@@ -146,6 +146,8 @@ class PrefsOut(BaseModel):
     extensions: list[str] = [".mp4", ".mov"]
     broll_frame_count: int = 5
     vad_threshold: float = 0.4
+    keyframe_count: int = 3
+    keyframe_auto: bool = True
 
 
 class SettingsOut(BaseModel):
@@ -164,6 +166,8 @@ class SettingsUpdate(BaseModel):
     extensions: Optional[list[str]] = None
     broll_frame_count: Optional[int] = None
     vad_threshold: Optional[float] = None
+    keyframe_count: Optional[int] = None
+    keyframe_auto: Optional[bool] = None
 
 
 # ── SSE event types (internal helper schemas) ───────────────────

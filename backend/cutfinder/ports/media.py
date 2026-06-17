@@ -24,3 +24,10 @@ class FrameExtractor(Protocol):
 
         Returns a list of paths to the written frame images (PNG).
         """
+
+    def grab_at(self, path: Path, seconds: float, out_path: Path) -> Path:
+        """Grab a single frame at *seconds* into *path*, writing it to *out_path*.
+
+        Used to capture a representative frame for a keyframe suggestion.
+        Returns the absolute path of the written image.
+        """

@@ -24,7 +24,7 @@ from pathlib import Path
 from typing import Any
 
 from ..config import AppConfig
-from ..domain.models import VisionResult
+from ..domain.models import CutSuggestion, VisionResult
 from ..ports.ai import VisionTagger
 
 # ── prompt template ────────────────────────────────────────────────
@@ -57,6 +57,33 @@ The frames below are in chronological order:
 """
 
 _VISION_PROMPTS = {"zh": _VISION_PROMPT_ZH, "en": _VISION_PROMPT_EN}
+
+_KEYFRAMES_PROMPT_ZH = """\
+你是专业的视频剪辑助手。下面按时间顺序给出从一段 B-roll（无解说）视频采样的若干帧，\
+每帧标注了编号和时间戳。请挑出画面最好、最适合做封面或剪辑代表的最多 {n} 帧，按好坏排序。
+
+只能使用下面列出的帧编号。请仅以如下 JSON 回复（不要其他内容）：
+{{"keyframes": [{{"index": 帧编号, "reason": "一句话理由"}}, ...]}}
+
+帧清单（编号 / 时间）：
+{frames}
+"""
+
+_KEYFRAMES_PROMPT_EN = """\
+You are a professional video editing assistant. Below are frames sampled in \
+chronological order from a B-roll (no narration) video, each labeled with an \
+index and timestamp. Pick up to {n} best frames — most striking / best as a \
+cover or edit representative — ranked best first.
+
+Use only the frame indices listed below. Reply ONLY as the following JSON \
+(no extra content):
+{{"keyframes": [{{"index": frame_index, "reason": "one-line reason"}}, ...]}}
+
+Frames (index / time):
+{frames}
+"""
+
+_KEYFRAMES_PROMPTS = {"zh": _KEYFRAMES_PROMPT_ZH, "en": _KEYFRAMES_PROMPT_EN}
 
 
 # ── OmlxVisionTagger ─────────────────────────────────────────────
@@ -196,3 +223,118 @@ class OmlxVisionTagger(VisionTagger):
         raise RuntimeError(
             "OMLX vision tagger returned no valid result after retries"
         )
+
+    def recommend_keyframes(
+        self, frames: list[tuple[Path, float]], n: int,
+    ) -> list[CutSuggestion]:
+        """Pick up to *n* best frames from sampled ``(frame, timestamp_s)`` pairs (B-roll).
+
+        Sends all frames (chronological), asks the vision model for the best frame
+        indices, and maps each pick to a CutSuggestion whose ``frame_path`` is the
+        chosen frame and whose cut window spans roughly one sampling gap around it.
+        """
+        if not frames or n <= 0:
+            return []
+
+        from openai import OpenAI, APIConnectionError
+
+        from ._jsonparse import parse_json_object
+
+        ordered = sorted(frames, key=lambda fp: fp[1])
+        timestamps = [ts for _, ts in ordered]
+        half = self._window_half(timestamps)
+
+        def _encode(path: Path) -> dict[str, Any]:
+            raw = path.read_bytes()
+            b64 = base64.b64encode(raw).decode("ascii")
+            mime = "image/jpeg" if path.suffix.lower() in (".jpg", ".jpeg") else "image/png"
+            return {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{b64}"}}
+
+        listing = "\n".join(f"[{i}] {ts:.1f}s" for i, ts in enumerate(timestamps))
+        prompt = _KEYFRAMES_PROMPTS.get(
+            self._config.prefs.output_language, _KEYFRAMES_PROMPT_ZH,
+        ).format(n=n, frames=listing)
+        content: list[dict[str, Any]] = [{"type": "text", "text": prompt}]
+        content += [_encode(p) for p, _ in ordered]
+
+        client = OpenAI(
+            base_url=self._config.env.OMLX_BASE_URL,
+            api_key=self._config.env.OMLX_API_KEY,
+        )
+        max_retries = 2
+        for attempt in range(1 + max_retries):
+            try:
+                response = client.chat.completions.create(
+                    model=self._model,
+                    messages=[{"role": "user", "content": content}],  # type: ignore[list-item,misc]
+                    max_tokens=512,
+                    temperature=0.4,
+                )
+            except APIConnectionError as e:
+                if attempt == max_retries:
+                    raise RuntimeError(f"OMLX vision connection failed after {1 + max_retries} attempt(s): {e}") from e
+                continue
+            except Exception as e:  # noqa: BLE001
+                if attempt == max_retries:
+                    raise RuntimeError(f"OMLX vision request failed after {1 + max_retries} attempt(s): {e}") from e
+                continue
+
+            raw = response.choices[0].message.content
+            data = parse_json_object(raw) if raw else None
+            if data is None:
+                continue
+            picks = data.get("keyframes")
+            if not isinstance(picks, list):
+                continue
+            suggestions = self._build_keyframes(picks, ordered, timestamps, half, n)
+            return suggestions  # valid JSON → accept (even if empty)
+
+        raise RuntimeError("OMLX keyframe recommender returned no valid result after retries")
+
+    @staticmethod
+    def _window_half(timestamps: list[float]) -> float:
+        """Half-width (seconds) of the cut window around a chosen frame."""
+        if len(timestamps) < 2:
+            return 1.0
+        gaps = [b - a for a, b in zip(timestamps, timestamps[1:]) if b > a]
+        avg = sum(gaps) / len(gaps) if gaps else 2.0
+        return max(0.5, avg / 2.0)
+
+    @staticmethod
+    def _build_keyframes(
+        picks: list[Any],
+        ordered: list[tuple[Path, float]],
+        timestamps: list[float],
+        half: float,
+        n: int,
+    ) -> list[CutSuggestion]:
+        last = len(ordered) - 1
+        out: list[CutSuggestion] = []
+        seen: set[int] = set()
+        for item in picks:
+            if not isinstance(item, dict):
+                continue
+            raw_idx = item.get("index")
+            if raw_idx is None:
+                continue
+            try:
+                idx = int(raw_idx)
+            except (TypeError, ValueError):
+                continue
+            idx = max(0, min(idx, last))
+            if idx in seen:
+                continue
+            seen.add(idx)
+            ts = timestamps[idx]
+            reason = item.get("reason") or ""
+            out.append(CutSuggestion(
+                rank=len(out) + 1,
+                start_s=max(0.0, ts - half),
+                end_s=ts + half,
+                reason=reason if isinstance(reason, str) else "",
+                frame_path=str(ordered[idx][0]),
+                source="vision",
+            ))
+            if len(out) >= n:
+                break
+        return out

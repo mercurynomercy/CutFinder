@@ -1187,6 +1187,75 @@ class TestLogs:
         assert all("older-line-xyz" not in m for m in messages)
 
 
+class TestKeyframesEndpoint:
+    """POST /clips/{id}/keyframes, detail keyframes, and the image endpoint."""
+
+    def _app(self, repo: Any, queue: Any = None) -> Any:
+        from fastapi import FastAPI
+
+        from cutfinder.api.routes import _build_router as main_router
+
+        app = FastAPI()
+        app.include_router(main_router(_ctx(repository=repo, worker_queue=queue)))
+        return TestClient(app, raise_server_exceptions=False)
+
+    def test_enqueue_keyframes(self) -> None:
+        class FakeQueue:
+            async def enqueue_keyframes(self, clip_ids: list[int]) -> int:
+                self.ids = clip_ids
+                return 77
+
+        repo = FakeCatalogRepository()
+        repo.upsert_clip(_make_clip(id=1, source_path="/tmp/k.mp4"))
+        resp = self._app(repo, FakeQueue()).post("/api/clips/1/keyframes")
+        assert resp.status_code == 200
+        assert resp.json()["job_id"] == 77
+
+    def test_detail_includes_keyframes(self) -> None:
+        from cutfinder.domain.models import CutSuggestion
+
+        repo = FakeCatalogRepository()
+        repo.upsert_clip(_make_clip(id=1, source_path="/tmp/k.mp4"))
+        repo.save_keyframes(1, [
+            CutSuggestion(rank=1, start_s=0.0, end_s=3.0, reason="best", frame_path="/k/1.jpg", source="text"),
+        ])
+        resp = self._app(repo).get("/api/clips/1")
+        data = resp.json()
+        assert resp.status_code == 200
+        assert data["has_keyframes"] is True
+        assert data["keyframes"][0]["rank"] == 1
+        assert data["keyframes"][0]["has_frame"] is True
+
+    def test_list_has_keyframes_flag(self) -> None:
+        from cutfinder.domain.models import CutSuggestion
+
+        repo = FakeCatalogRepository()
+        repo.upsert_clip(_make_clip(id=1, source_path="/tmp/k.mp4"))
+        repo.save_keyframes(1, [CutSuggestion(rank=1, start_s=0, end_s=1, source="vision")])
+        data = self._app(repo).get("/api/clips").json()
+        assert data[0]["has_keyframes"] is True
+
+    def test_keyframe_image_no_store(self, tmp_path: Any) -> None:
+        from cutfinder.domain.models import CutSuggestion
+
+        frame = tmp_path / "k1.jpg"
+        frame.write_bytes(b"\xff\xd8\xff\xd9")
+        repo = FakeCatalogRepository()
+        repo.upsert_clip(_make_clip(id=1, source_path="/tmp/k.mp4"))
+        repo.save_keyframes(1, [
+            CutSuggestion(rank=1, start_s=0, end_s=1, frame_path=str(frame), source="vision"),
+        ])
+        resp = self._app(repo).get("/api/clips/1/keyframes/1/image")
+        assert resp.status_code == 200
+        assert "no-store" in resp.headers.get("cache-control", "").lower()
+
+    def test_keyframe_image_missing_404(self) -> None:
+        repo = FakeCatalogRepository()
+        repo.upsert_clip(_make_clip(id=1, source_path="/tmp/k.mp4"))
+        resp = self._app(repo).get("/api/clips/1/keyframes/1/image")
+        assert resp.status_code == 404
+
+
 class TestThumbnailCaching:
     """The thumbnail endpoint must not be cached (it can change in place)."""
 

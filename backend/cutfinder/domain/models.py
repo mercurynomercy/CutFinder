@@ -97,6 +97,7 @@ class ClipSummary(BaseModel):
     error: str | None = None
     capture_time: _dt.datetime | None = None
     date_source: str  # DateSource
+    has_keyframes: bool = False  # True if the clip has keyframe suggestions
 
 
 # ── Tag (per-clip) ───────────────────────────────────────────────
@@ -133,6 +134,24 @@ class SummaryResult(BaseModel, frozen=True):
 class VisionResult(BaseModel, frozen=True):
     description: str  # Chinese visual description
     tags: list[str]
+
+
+# ── CutSuggestion (keyframe recommendation) ─────────────────────
+
+class CutSuggestion(BaseModel, frozen=True):
+    """A recommended edit cut window + representative frame for a clip.
+
+    Produced by the keyframe-recommendation step: A-roll suggestions come from
+    the text model reasoning over transcript segments (``source="text"``),
+    B-roll from the vision model judging sampled frames (``source="vision"``).
+    """
+
+    rank: int                       # 1 = best
+    start_s: float                  # in-point (seconds)
+    end_s: float                    # out-point (seconds)
+    reason: str = ""                # one-line rationale (AI output language)
+    frame_path: str | None = None   # representative frame image (absolute path)
+    source: str = "vision"          # "text" (A-roll) | "vision" (B-roll)
 
 
 # ── AnalysisResult (combined AI output) ─────────────────────────

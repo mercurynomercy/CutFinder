@@ -625,3 +625,53 @@ class TestKindMigration:
         new_job = repo.create_job(1, kind="reanalyze")
         assert repo.get_job(new_job.id).kind == "reanalyze"
         repo.close()
+
+
+# ── Keyframe suggestions (req 8) ──────────────────────────────────
+
+class TestKeyframes:
+    """save/get/clear keyframes, has_keyframes flag, and lacking-keyframes query."""
+
+    def test_save_get_clear_roundtrip(self, repo):
+        from cutfinder.domain.models import CutSuggestion
+        cid = repo.upsert_clip(_make_clip("fp-kf"))
+        repo.save_keyframes(cid, [
+            CutSuggestion(rank=1, start_s=0.0, end_s=3.0, reason="best", frame_path="/k/1.jpg", source="text"),
+            CutSuggestion(rank=2, start_s=5.0, end_s=8.0, reason="next", frame_path=None, source="text"),
+        ])
+        got = repo.get_keyframes(cid)
+        assert [k.rank for k in got] == [1, 2]
+        assert got[0].frame_path == "/k/1.jpg" and got[0].source == "text"
+
+        # Re-save replaces.
+        repo.save_keyframes(cid, [CutSuggestion(rank=1, start_s=1.0, end_s=2.0, source="vision")])
+        assert len(repo.get_keyframes(cid)) == 1
+
+        repo.clear_keyframes(cid)
+        assert repo.get_keyframes(cid) == []
+
+    def test_has_keyframes_in_query(self, repo):
+        from cutfinder.domain.models import CutSuggestion
+        a = repo.upsert_clip(_make_clip("fp-with"))
+        repo.upsert_clip(_make_clip("fp-without"))
+        repo.save_keyframes(a, [CutSuggestion(rank=1, start_s=0, end_s=1, source="vision")])
+
+        from cutfinder.domain.models import ClipFilter
+        by_id = {c.id: c for c in repo.query_clips(ClipFilter())}
+        assert by_id[a].has_keyframes is True
+        other = next(c for cid, c in by_id.items() if cid != a)
+        assert other.has_keyframes is False
+
+    def test_clip_ids_without_keyframes(self, repo):
+        from cutfinder.domain.models import CutSuggestion
+        a = repo.upsert_clip(_make_clip("fp-a", status="done"))
+        b = repo.upsert_clip(_make_clip("fp-b", status="done"))
+        repo.save_keyframes(a, [CutSuggestion(rank=1, start_s=0, end_s=1, source="vision")])
+        assert repo.clip_ids_without_keyframes() == [b]
+
+    def test_delete_clip_clears_keyframes(self, repo):
+        from cutfinder.domain.models import CutSuggestion
+        cid = repo.upsert_clip(_make_clip("fp-del"))
+        repo.save_keyframes(cid, [CutSuggestion(rank=1, start_s=0, end_s=1, source="vision")])
+        repo.delete_clip(cid)
+        assert repo.get_keyframes(cid) == []
