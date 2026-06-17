@@ -14,6 +14,7 @@ import { useCallback, useEffect, useState } from 'react'
 import type { JobStatus } from '@/api/client'
 import { api } from '@/api/client'
 import { useJobEvents, type JobEvent } from '@/api/sse'
+import { useI18n } from '@/i18n'
 
 // ── Toast notifications ─────────────────────────────────────────────
 
@@ -48,6 +49,7 @@ interface ScanProgressProps {
 }
 
 function ScanProgress({ jobId, events }: ScanProgressProps) {
+  const { t } = useI18n()
   const [job, setJob] = useState<JobStatus | null>(null)
 
   // Poll job status for the determinate counter (SSE drives the live filename).
@@ -106,7 +108,7 @@ function ScanProgress({ jobId, events }: ScanProgressProps) {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2 text-sm font-medium text-[--text-primary]">
             <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-[1.5px] border-[--primary] border-t-transparent" />
-            扫描中…
+            {t('jobs.scanning')}
           </div>
           {pct !== null && (
             <span className="text-xs tabular-nums text-[--text-secondary]">{done}/{total}</span>
@@ -139,6 +141,7 @@ export interface JobsPanelProps {
 }
 
 export function JobsPanel({ activeJobId }: JobsPanelProps) {
+  const { t } = useI18n()
   const { toasts, addToast } = useToast()
   const { events } = useJobEvents(activeJobId)
 
@@ -147,13 +150,13 @@ export function JobsPanel({ activeJobId }: JobsPanelProps) {
     if (events.length === 0) return
     const last = events[events.length - 1] as JobEvent | undefined
     if (last?.type === 'job_started') {
-      addToast('info', `Scan started — processing clips`)
+      addToast('info', t('jobs.toastStarted'))
     } else if (last?.type === 'job_completed') {
-      addToast('success', `Scan completed — ${last.done} clips processed`)
+      addToast('success', t('jobs.toastCompleted', { n: last.done as number }))
     } else if (last?.type === 'job_failed') {
-      addToast('error', `Scan failed — check logs for details`)
+      addToast('error', t('jobs.toastFailed'))
     }
-  }, [events, addToast])
+  }, [events, addToast, t])
 
   if (!activeJobId && toasts.length === 0) return null
 

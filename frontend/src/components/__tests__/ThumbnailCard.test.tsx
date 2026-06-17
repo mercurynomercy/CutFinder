@@ -24,13 +24,13 @@ describe('ThumbnailCard', () => {
 
   it('shows a "partial" marker when status is partial', () => {
     render(<ThumbnailCard {...baseProps} status="partial" />)
-    expect(screen.getByText('部分')).toBeInTheDocument()
-    expect(screen.getByTitle('AI 分析未完成，可重新分析')).toBeInTheDocument()
+    expect(screen.getByText('Partial')).toBeInTheDocument()
+    expect(screen.getByTitle('AI analysis incomplete — re-analyze')).toBeInTheDocument()
   })
 
   it('does not show the partial marker for a done clip', () => {
     render(<ThumbnailCard {...baseProps} status="done" />)
-    expect(screen.queryByText('部分')).not.toBeInTheDocument()
+    expect(screen.queryByText('Partial')).not.toBeInTheDocument()
   })
 
   it('shows truncated file name from sourcePath in the info row', () => {

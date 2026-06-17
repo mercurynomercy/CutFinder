@@ -13,21 +13,32 @@ import { useCallback, useEffect, useState } from 'react'
 import type { JobStatus } from '@/api/client'
 import { api } from '@/api/client'
 import { Button } from '@/components/Button'
+import { useI18n, type I18n } from '@/i18n'
 
 // ── Label / badge maps ────────────────────────────────────────────
 
-const KIND_LABELS: Record<string, string> = {
-  scan: '扫描',
-  reanalyze: '重新分析',
+function kindLabel(t: I18n['t'], kind?: string): string {
+  if (kind === 'scan') return t('jobs.kindScan')
+  if (kind === 'reanalyze') return t('jobs.kindReanalyze')
+  return kind || '—'
 }
 
-const STATUS_LABELS: Record<string, string> = {
-  queued: '排队中',
-  pending: '排队中',
-  running: '进行中',
-  done: '已完成',
-  failed: '失败',
-  cancelled: '已取消',
+function statusLabel(t: I18n['t'], status: string): string {
+  switch (status) {
+    case 'queued':
+    case 'pending':
+      return t('jobs.statusQueued')
+    case 'running':
+      return t('jobs.statusRunning')
+    case 'done':
+      return t('jobs.statusDone')
+    case 'failed':
+      return t('jobs.statusFailed')
+    case 'cancelled':
+      return t('jobs.statusCancelled')
+    default:
+      return status
+  }
 }
 
 const STATUS_BADGE: Record<string, string> = {
@@ -49,12 +60,13 @@ function formatTime(value: string | null): string {
 // ── Single job row ────────────────────────────────────────────────
 
 function JobRow({ job, paused, onChanged }: { job: JobStatus; paused: boolean; onChanged: () => void }) {
+  const { t } = useI18n()
   const [busy, setBusy] = useState(false)
 
   // A queued job can't progress while the whole worker is paused — say so
-  // explicitly instead of leaving it as an indefinite "排队中".
+  // explicitly instead of leaving it as an indefinite "queued".
   const isPausedQueued = paused && (job.status === 'queued' || job.status === 'pending')
-  const statusLabel = isPausedQueued ? '已暂停' : (STATUS_LABELS[job.status] ?? job.status)
+  const statusText = isPausedQueued ? t('jobs.statusPaused') : statusLabel(t, job.status)
   const statusBadge = isPausedQueued
     ? 'bg-[--warning]/15 text-[--warning]'
     : (STATUS_BADGE[job.status] ?? 'bg-[--surface-3] text-[--text-secondary]')
@@ -89,21 +101,21 @@ function JobRow({ job, paused, onChanged }: { job: JobStatus; paused: boolean; o
         #{job.id}
       </td>
       <td className="px-4 py-3 text-sm text-[--text-primary]">
-        {KIND_LABELS[job.kind ?? ''] ?? job.kind ?? '—'}
+        {kindLabel(t, job.kind)}
       </td>
       <td className="px-4 py-3">
         <span className={`inline-flex rounded px-2 py-0.5 text-xs font-medium ${statusBadge}`}>
-          {statusLabel}
+          {statusText}
         </span>
       </td>
       <td className="px-4 py-3 text-sm tabular-nums text-[--text-secondary]">
         {job.total === 0 && job.status === 'done' ? (
-          <span className="text-[--text-muted]">无新文件</span>
+          <span className="text-[--text-muted]">{t('jobs.noNewFiles')}</span>
         ) : (
           <>
             {job.done}/{job.total}
             {job.failed > 0 && (
-              <span className="ml-2 text-[--error]">失败 {job.failed}</span>
+              <span className="ml-2 text-[--error]">{t('jobs.failedN', { n: job.failed })}</span>
             )}
           </>
         )}
@@ -113,11 +125,11 @@ function JobRow({ job, paused, onChanged }: { job: JobStatus; paused: boolean; o
         <div className="flex justify-end gap-2">
           {job.failed > 0 && (
             <Button size="sm" variant="secondary" onClick={handleRetry} disabled={busy}>
-              重试失败项
+              {t('jobs.retryFailed')}
             </Button>
           )}
           <Button size="sm" variant="danger" onClick={handleDelete} disabled={busy}>
-            删除
+            {t('jobs.delete')}
           </Button>
         </div>
       </td>
@@ -133,6 +145,7 @@ export interface JobsQueuePageProps {
 }
 
 export function JobsQueuePage({ onClose }: JobsQueuePageProps) {
+  const { t } = useI18n()
   const [jobs, setJobs] = useState<JobStatus[]>([])
   const [paused, setPaused] = useState(false)
 
@@ -168,15 +181,15 @@ export function JobsQueuePage({ onClose }: JobsQueuePageProps) {
   return (
     <div className="flex h-screen w-full flex-col bg-[--bg-canvas] text-[--text-primary]">
       <header className="flex h-14 shrink-0 items-center justify-between border-b border-[--border] bg-[--surface-1] px-6">
-        <h1 className="text-lg font-semibold tracking-tight">任务队列</h1>
+        <h1 className="text-lg font-semibold tracking-tight">{t('jobs.title')}</h1>
         <div className="flex items-center gap-3">
           <Button variant="secondary" size="sm" onClick={handleTogglePause}>
-            {paused ? '恢复' : '暂停'}
+            {paused ? t('jobs.resume') : t('jobs.pause')}
           </Button>
           <button
             onClick={onClose}
             className="rounded-md p-1.5 text-[--text-secondary] hover:bg-[--surface-3] transition-colors"
-            aria-label="关闭"
+            aria-label={t('jobs.close')}
           >
             <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24">
               <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M6 18L18 6M6 6l12 12" />
@@ -192,27 +205,27 @@ export function JobsQueuePage({ onClose }: JobsQueuePageProps) {
               <svg className="h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24">
                 <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15.75 5.25v13.5m-7.5-13.5v13.5" />
               </svg>
-              <span>队列已暂停 — 排队中的任务不会被处理。点击「恢复」继续。</span>
+              <span>{t('jobs.pausedBanner')}</span>
             </div>
             <Button size="sm" variant="secondary" onClick={handleTogglePause}>
-              恢复处理
+              {t('jobs.resumeProcessing')}
             </Button>
           </div>
         )}
         {jobs.length === 0 ? (
           <div className="flex h-full items-center justify-center text-sm text-[--text-muted]">
-            暂无任务
+            {t('jobs.empty')}
           </div>
         ) : (
           <table className="w-full border-collapse overflow-hidden rounded-lg border border-[--border] bg-[--surface-1]">
             <thead>
               <tr className="border-b border-[--border] text-left text-xs font-medium text-[--text-secondary]">
-                <th className="px-4 py-2 w-16">ID</th>
-                <th className="px-4 py-2">类型</th>
-                <th className="px-4 py-2">状态</th>
-                <th className="px-4 py-2">进度</th>
-                <th className="px-4 py-2">开始时间</th>
-                <th className="px-4 py-2 text-right">操作</th>
+                <th className="px-4 py-2 w-16">{t('jobs.colId')}</th>
+                <th className="px-4 py-2">{t('jobs.colType')}</th>
+                <th className="px-4 py-2">{t('jobs.colStatus')}</th>
+                <th className="px-4 py-2">{t('jobs.colProgress')}</th>
+                <th className="px-4 py-2">{t('jobs.colStartTime')}</th>
+                <th className="px-4 py-2 text-right">{t('jobs.colActions')}</th>
               </tr>
             </thead>
             <tbody>

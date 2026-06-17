@@ -38,7 +38,7 @@ describe('DetailPanel', () => {
     // Compact segmented A/B toggle
     expect(await screen.findByRole('button', { name: 'A-roll' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'B-roll' })).toBeInTheDocument()
-    // Re-analyze action (Chinese label, icon button)
-    expect(screen.getByRole('button', { name: '重新分析' })).toBeInTheDocument()
+    // Re-analyze action (icon button)
+    expect(screen.getByRole('button', { name: 'Re-analyze' })).toBeInTheDocument()
   })
 })

@@ -48,7 +48,7 @@ describe('SettingsPage', () => {
 
   it('defaults the AI output language to the saved preference', async () => {
     render(<SettingsPage />)
-    const select = await screen.findByRole('combobox')
+    const select = await screen.findByRole('combobox', { name: 'AI output language' })
     expect((select as HTMLSelectElement).value).toBe('zh')
   })
 
@@ -62,7 +62,7 @@ describe('SettingsPage', () => {
     )
 
     render(<SettingsPage />)
-    const select = await screen.findByRole('combobox')
+    const select = await screen.findByRole('combobox', { name: 'AI output language' })
     await userEvent.selectOptions(select, 'en')
     await userEvent.click(screen.getByRole('button', { name: /save settings/i }))
 

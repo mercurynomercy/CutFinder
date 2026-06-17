@@ -9,6 +9,8 @@ Usage:
 
 import { useEffect, useState } from 'react'
 
+import { useI18n } from '@/i18n'
+
 // ── Search bar component ────────────────────────────────────────
 
 export interface SearchProps {
@@ -35,6 +37,7 @@ export function useDebounce<A extends unknown[]>(
 }
 
 export function Search({ onSearch }: SearchProps) {
+  const { t } = useI18n()
   const [query, setQuery] = useState('')
 
   // Debounced search — fires 300ms after the user stops typing
@@ -64,7 +67,7 @@ export function Search({ onSearch }: SearchProps) {
         type="text"
         value={query}
         onChange={handleChange}
-        placeholder="Search clips…"
+        placeholder={t('app.searchPlaceholder')}
         className="w-full rounded-md border border-[--border] bg-[--surface-2] pl-10 pr-9 py-2 text-sm text-[--text-primary] placeholder:text-[--text-muted] outline-none transition-colors focus:border-[--primary]"
       />
 
@@ -73,7 +76,7 @@ export function Search({ onSearch }: SearchProps) {
         <button
           onClick={handleClear}
           className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded p-0.5 text-[--text-muted] hover:text-[--text-primary]"
-          aria-label="Clear search"
+          aria-label={t('app.clearSearch')}
         >
           <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24">
             <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />

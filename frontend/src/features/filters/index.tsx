@@ -10,6 +10,8 @@ Usage:
 import { useEffect, useState } from 'react'
 
 import { api } from '@/api/client'
+import { Search } from '@/features/search'
+import { useI18n } from '@/i18n'
 
 /** Extract the YYYY-MM-DD date for a clip (embedded capture time preferred). */
 function clipDate(c: { capture_time?: string | null; created_at?: string }): string | null {
@@ -34,9 +36,12 @@ const DEFAULT_FILTERS: FiltersState = { date: null, roll_type: null, tag: null }
 export interface FiltersProps {
   /** Called whenever any filter changes; receives the full filters object. */
   onFilterChange: (filters: FiltersState) => void
+  /** Called with the current search query (the search box lives in the sidebar). */
+  onSearch?: (query: string) => void
 }
 
-export function Filters({ onFilterChange }: FiltersProps) {
+export function Filters({ onFilterChange, onSearch }: FiltersProps) {
+  const { t } = useI18n()
   const [filters, setFilters] = useState<FiltersState>(DEFAULT_FILTERS)
   const [collapsed, setCollapsed] = useState(false)
 
@@ -104,8 +109,8 @@ export function Filters({ onFilterChange }: FiltersProps) {
       <div className="flex h-full w-11 shrink-0 flex-col items-center border-r border-[--border] bg-[--surface-1] py-4">
         <button
           onClick={() => setCollapsed(false)}
-          title="展开筛选"
-          aria-label="展开筛选"
+          title={t('filters.expand')}
+          aria-label={t('filters.expand')}
           className="relative rounded p-2 text-[--text-secondary] hover:bg-[--surface-2] hover:text-[--text-primary]"
         >
           <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24">
@@ -122,11 +127,11 @@ export function Filters({ onFilterChange }: FiltersProps) {
   return (
     <div className="flex h-full w-64 shrink-0 flex-col gap-5 overflow-y-auto border-r border-[--border] bg-[--surface-1] p-4">
       <div className="flex items-center justify-between">
-        <h2 className="text-sm font-semibold tracking-tight text-[--text-primary]">Filters</h2>
+        <h2 className="text-sm font-semibold tracking-tight text-[--text-primary]">{t('filters.title')}</h2>
         <button
           onClick={() => setCollapsed(true)}
-          title="收起筛选"
-          aria-label="收起筛选"
+          title={t('filters.collapse')}
+          aria-label={t('filters.collapse')}
           className="rounded p-1 text-[--text-muted] hover:bg-[--surface-2] hover:text-[--text-primary]"
         >
           <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24">
@@ -135,13 +140,16 @@ export function Filters({ onFilterChange }: FiltersProps) {
         </button>
       </div>
 
+      {/* ── Search box ───────────────────────────────────── */}
+      {onSearch && <Search onSearch={onSearch} />}
+
       {/* ── Roll type filter ─────────────────────────────── */}
       <div>
         <label className="mb-2 block text-xs font-medium uppercase tracking-wider text-[--text-muted]">
-          Type
+          {t('filters.type')}
         </label>
         <div className="flex gap-1.5">
-          {([['all', 'All'], ['a', 'A-roll'], ['b', 'B-roll']] as const).map(([value, label]) => {
+          {([['all', t('filters.all')], ['a', 'A-roll'], ['b', 'B-roll']] as const).map(([value, label]) => {
             const isActive = value === 'all' ? filters.roll_type === null : filters.roll_type === value
             return (
               <button
@@ -163,14 +171,14 @@ export function Filters({ onFilterChange }: FiltersProps) {
       {/* ── Date filter (accordion) ─────────────────────── */}
       <div>
         <label className="mb-2 block text-xs font-medium uppercase tracking-wider text-[--text-muted]">
-          Date
+          {t('filters.date')}
         </label>
         <select
           value={filters.date ?? ''}
           onChange={(e) => updateFilter('date', e.target.value || null)}
           className="w-full rounded-md border border-[--border] bg-[--surface-2] px-3 py-1.5 text-xs text-[--text-primary] outline-none transition-colors focus:border-[--primary]"
         >
-          <option value="">All dates</option>
+          <option value="">{t('filters.allDates')}</option>
           {allDates.map((d) => (
             <option key={d} value={d}>{d}</option>
           ))}
@@ -181,7 +189,7 @@ export function Filters({ onFilterChange }: FiltersProps) {
       <div>
         <div className="mb-2 flex items-baseline justify-between">
           <label className="text-xs font-medium uppercase tracking-wider text-[--text-muted]">
-            Tags
+            {t('filters.tags')}
           </label>
           {allTags.length > 0 && (
             <span className="text-[10px] text-[--text-muted]">{allTags.length}</span>
@@ -189,7 +197,7 @@ export function Filters({ onFilterChange }: FiltersProps) {
         </div>
 
         {allTags.length === 0 ? (
-          <p className="text-xs text-[--text-muted]">No tags yet</p>
+          <p className="text-xs text-[--text-muted]">{t('filters.noTags')}</p>
         ) : (
           <>
             {/* Search — only worth showing once the list is long. */}
@@ -198,7 +206,7 @@ export function Filters({ onFilterChange }: FiltersProps) {
                 type="text"
                 value={tagQuery}
                 onChange={(e) => setTagQuery(e.target.value)}
-                placeholder="Search tags…"
+                placeholder={t('filters.searchTags')}
                 className="mb-2 w-full rounded-md border border-[--border] bg-[--surface-2] px-2.5 py-1 text-xs text-[--text-primary] placeholder:text-[--text-muted] outline-none transition-colors focus:border-[--primary]"
               />
             )}
@@ -221,7 +229,7 @@ export function Filters({ onFilterChange }: FiltersProps) {
                 ))}
               </div>
             ) : (
-              <p className="text-xs text-[--text-muted]">No matching tags</p>
+              <p className="text-xs text-[--text-muted]">{t('filters.noMatchingTags')}</p>
             )}
 
             {/* Show more / less — hidden while searching (search already trims). */}
@@ -230,7 +238,7 @@ export function Filters({ onFilterChange }: FiltersProps) {
                 onClick={() => setShowAllTags((v) => !v)}
                 className="mt-2 text-xs font-medium text-[--text-muted] hover:text-[--primary]"
               >
-                {showAllTags ? 'Show less' : `Show all ${matchedTags.length}`}
+                {showAllTags ? t('filters.showLess') : t('filters.showAll', { n: matchedTags.length })}
               </button>
             )}
           </>
@@ -243,7 +251,7 @@ export function Filters({ onFilterChange }: FiltersProps) {
           onClick={clearAll}
           className="mt-auto text-xs font-medium text-[--text-muted] underline hover:text-[--primary]"
         >
-          Clear all filters
+          {t('filters.clearAll')}
         </button>
       )}
     </div>

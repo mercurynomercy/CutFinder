@@ -8,6 +8,7 @@ import * as React from 'react'
 
 import { Badge } from '@/components/ChipBadge'
 import { cn } from '@/lib/cn'
+import { useI18n } from '@/i18n'
 
 export interface ThumbnailCardProps extends React.HTMLAttributes<HTMLDivElement> {
   /** Thumbnail image URL or path */
@@ -45,6 +46,7 @@ const ThumbnailCard = React.forwardRef<HTMLDivElement, ThumbnailCardProps>(
     { thumbnailUrl, sourcePath, libraryPath, clipId, rollType, duration, captureTime, isSelected = false, status, summary, tags, onReanalyze, reanalyzing = false, onOpen, className, ...props },
     ref,
   ) => {
+    const { t } = useI18n()
     // Prefer the renamed library copy's filename; fall back to the source name.
     const displayName = (libraryPath || sourcePath).split('/').pop() || sourcePath
 
@@ -101,8 +103,8 @@ const ThumbnailCard = React.forwardRef<HTMLDivElement, ThumbnailCardProps>(
             <button
               onClick={(e) => { e.stopPropagation(); onReanalyze() }}
               disabled={reanalyzing}
-              title={reanalyzing ? '重新分析中…' : '重新分析'}
-              aria-label="重新分析"
+              title={reanalyzing ? t('card.reanalyzing') : t('card.reanalyze')}
+              aria-label={t('card.reanalyze')}
               className={cn(
                 'absolute left-2 top-2 rounded-md bg-black/60 p-1.5 text-white backdrop-blur-sm transition-opacity hover:bg-black/80 disabled:opacity-60',
                 reanalyzing || status === 'partial' ? 'opacity-100' : 'opacity-0 group-hover:opacity-100',
@@ -118,8 +120,8 @@ const ThumbnailCard = React.forwardRef<HTMLDivElement, ThumbnailCardProps>(
           {onOpen && (
             <button
               onClick={(e) => { e.stopPropagation(); onOpen() }}
-              title="打开视频"
-              aria-label="打开视频"
+              title={t('card.openVideo')}
+              aria-label={t('card.openVideo')}
               className="absolute inset-0 m-auto flex h-11 w-11 items-center justify-center rounded-full bg-black/60 text-white opacity-0 backdrop-blur-sm transition-opacity hover:bg-black/80 group-hover:opacity-100"
             >
               <svg className="h-5 w-5 translate-x-px" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
@@ -132,12 +134,12 @@ const ThumbnailCard = React.forwardRef<HTMLDivElement, ThumbnailCardProps>(
           {status === 'partial' && (
             <div
               className="absolute bottom-2 left-2 flex items-center gap-1 rounded bg-[--warning] px-1.5 py-0.5 text-[10px] font-semibold text-black"
-              title="AI 分析未完成，可重新分析"
+              title={t('card.partialTitle')}
             >
               <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" aria-hidden="true">
                 <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 9v3.75m0 3.75h.008M10.34 3.94l-7.6 13.16A1.5 1.5 0 004.04 19.5h15.92a1.5 1.5 0 001.3-2.4L13.66 3.94a1.5 1.5 0 00-2.6 0z" />
               </svg>
-              部分
+              {t('card.partial')}
             </div>
           )}
 

@@ -705,11 +705,11 @@ test.describe('Search', () => {
     await page.goto('/')
   })
 
-  // All search tests are skipped — handleSearch in App.tsx is a placeholder:
-  //   const handleSearch = (_query: string) => { /* no-op */ }
-  // Search filtering is deferred to v1 (server-side full-text search via API).
+  // Search filters the gallery client-side (App.handleSearch sets a query that
+  // matches filename, summary, description, and tags). The box lives in the
+  // left filter sidebar.
 
-  test.skip('searching by keyword in summary finds matching clips', async ({ page }) => {
+  test('searching by keyword in summary finds matching clips', async ({ page }) => {
     // Type "mountain"  should match clip 1 (summary: "...trip to the mountains.")
     const searchInput = page.locator('input[placeholder*="Search clips"]')
     await expect(searchInput).toBeVisible()
@@ -728,7 +728,7 @@ test.describe('Search', () => {
     await expect(page.locator('[data-clip-id="1"]')).toBeVisible()
   })
 
-  test.skip('searching by keyword in description finds matching clips', async ({ page }) => {
+  test('searching by keyword in description finds matching clips', async ({ page }) => {
     // Type "sunset"  should match clip 2 (description: "...sunset over the ocean.")
     const searchInput = page.locator('input[placeholder*="Search clips"]')
     await searchInput.fill('sunset')
@@ -744,7 +744,7 @@ test.describe('Search', () => {
     await expect(page.locator('[data-clip-id="2"]')).toBeVisible()
   })
 
-  test.skip('searching by filename finds matching clips', async ({ page }) => {
+  test('searching by filename finds matching clips', async ({ page }) => {
     // Type "5368"  should match clip 2 (source_path: "...DJI_5368.MP4")
     const searchInput = page.locator('input[placeholder*="Search clips"]')
     await searchInput.fill('5368')
@@ -760,7 +760,7 @@ test.describe('Search', () => {
     await expect(page.locator('[data-clip-id="2"]')).toBeVisible()
   })
 
-  test.skip('clearing search shows all clips again', async ({ page }) => {
+  test('clearing search shows all clips again', async ({ page }) => {
     // Search for something first
     const searchInput = page.locator('input[placeholder*="Search clips"]')
     await searchInput.fill('mountain')

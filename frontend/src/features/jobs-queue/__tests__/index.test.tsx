@@ -61,7 +61,7 @@ function installQueue(initial: JobStatus[], opts: { paused?: boolean } = {}) {
 }
 
 describe('JobsQueuePage', () => {
-  it('renders jobs with Chinese status labels', async () => {
+  it('renders jobs with status labels', async () => {
     installQueue([
       job({ id: 1, kind: 'scan', status: 'running', total: 10, done: 4 }),
       job({ id: 2, kind: 'reanalyze', status: 'failed', total: 5, done: 3, failed: 2 }),
@@ -69,16 +69,16 @@ describe('JobsQueuePage', () => {
 
     render(<JobsQueuePage onClose={() => {}} />)
 
-    expect(await screen.findByText('进行中')).toBeInTheDocument()
-    expect(screen.getByText('失败')).toBeInTheDocument()
-    expect(screen.getByText('扫描')).toBeInTheDocument()
-    expect(screen.getByText('重新分析')).toBeInTheDocument()
+    expect(await screen.findByText('Running')).toBeInTheDocument()
+    expect(screen.getByText('Failed')).toBeInTheDocument()
+    expect(screen.getByText('Scan')).toBeInTheDocument()
+    expect(screen.getByText('Re-analyze')).toBeInTheDocument()
   })
 
   it('renders the empty state when there are no jobs', async () => {
     installQueue([])
     render(<JobsQueuePage onClose={() => {}} />)
-    expect(await screen.findByText('暂无任务')).toBeInTheDocument()
+    expect(await screen.findByText('No tasks')).toBeInTheDocument()
   })
 
   it('deletes a job and removes its row', async () => {
@@ -88,25 +88,25 @@ describe('JobsQueuePage', () => {
     ])
 
     render(<JobsQueuePage onClose={() => {}} />)
-    expect(await screen.findByText('重新分析')).toBeInTheDocument()
+    expect(await screen.findByText('Re-analyze')).toBeInTheDocument()
 
-    const deleteButtons = screen.getAllByRole('button', { name: '删除' })
+    const deleteButtons = screen.getAllByRole('button', { name: 'Delete' })
     await userEvent.click(deleteButtons[1])
 
     await waitFor(() => expect(del).toHaveBeenCalledWith(2))
-    await waitFor(() => expect(screen.queryByText('重新分析')).not.toBeInTheDocument())
+    await waitFor(() => expect(screen.queryByText('Re-analyze')).not.toBeInTheDocument())
   })
 
-  it('only shows 重试失败项 for jobs with failed>0 and calls retryJob', async () => {
+  it('only shows Retry failed for jobs with failed>0 and calls retryJob', async () => {
     const { retry } = installQueue([
       job({ id: 1, kind: 'scan', status: 'done', failed: 0 }),
       job({ id: 2, kind: 'reanalyze', status: 'failed', total: 5, done: 3, failed: 2 }),
     ])
 
     render(<JobsQueuePage onClose={() => {}} />)
-    await screen.findByText('重新分析')
+    await screen.findByText('Re-analyze')
 
-    const retryButtons = screen.getAllByRole('button', { name: '重试失败项' })
+    const retryButtons = screen.getAllByRole('button', { name: 'Retry failed' })
     expect(retryButtons).toHaveLength(1)
 
     await userEvent.click(retryButtons[0])
@@ -118,12 +118,12 @@ describe('JobsQueuePage', () => {
 
     render(<JobsQueuePage onClose={() => {}} />)
 
-    const pauseBtn = await screen.findByRole('button', { name: '暂停' })
+    const pauseBtn = await screen.findByRole('button', { name: 'Pause' })
     await userEvent.click(pauseBtn)
 
-    expect(await screen.findByRole('button', { name: '恢复' })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'Resume' })).toBeInTheDocument()
 
-    await userEvent.click(screen.getByRole('button', { name: '恢复' }))
-    expect(await screen.findByRole('button', { name: '暂停' })).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Resume' }))
+    expect(await screen.findByRole('button', { name: 'Pause' })).toBeInTheDocument()
   })
 })

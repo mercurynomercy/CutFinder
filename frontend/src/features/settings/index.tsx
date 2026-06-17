@@ -13,12 +13,13 @@ import { useCallback, useEffect, useState } from 'react'
 import type { UpdateSettingsBody } from '@/api/client'
 import { api } from '@/api/client'
 import { Button } from '@/components/Button'
+import { useI18n } from '@/i18n'
 
 // ── Validation helpers ────────────────────────────────────────────
 
 interface FieldError {
   field: string
-  message: string
+  messageKey: 'settings.validationInt' | 'settings.validationNum'
 }
 
 function validatePrefs(prefs: UpdateSettingsBody): FieldError[] {
@@ -27,14 +28,14 @@ function validatePrefs(prefs: UpdateSettingsBody): FieldError[] {
   if (prefs.broll_frame_count !== undefined) {
     const v = prefs.broll_frame_count as number
     if (!Number.isInteger(v) || v < 1) {
-      errors.push({ field: 'broll_frame_count', message: 'Must be an integer >= 1' })
+      errors.push({ field: 'broll_frame_count', messageKey: 'settings.validationInt' })
     }
   }
 
   if (prefs.vad_threshold !== undefined) {
     const v = prefs.vad_threshold as number
     if (typeof v !== 'number' || isNaN(v) || v <= 0 || v > 1) {
-      errors.push({ field: 'vad_threshold', message: 'Must be a number between 0 and 1' })
+      errors.push({ field: 'vad_threshold', messageKey: 'settings.validationNum' })
     }
   }
 
@@ -54,6 +55,7 @@ interface FolderPickerButtonProps {
 }
 
 function FolderPickerButton({ label, icon = null, onChange }: FolderPickerButtonProps) {
+  const { t } = useI18n()
   const [picking, setPicking] = useState(false)
 
   const handlePick = async () => {
@@ -76,7 +78,7 @@ function FolderPickerButton({ label, icon = null, onChange }: FolderPickerButton
       className="mt-2 inline-flex items-center gap-1.5 rounded-md bg-[--surface-2] px-3 py-1.5 text-xs font-medium text-[--text-secondary] hover:bg-[--surface-3] disabled:opacity-50"
     >
       {icon}
-      {picking ? '选择中…' : label}
+      {picking ? t('settings.selecting') : label}
     </button>
   )
 }
@@ -84,10 +86,11 @@ function FolderPickerButton({ label, icon = null, onChange }: FolderPickerButton
 // ── Extension tag (for the whitelist) ────────────────────────────
 
 function ExtensionTag({ value, onRemove }: { value: string; onRemove: () => void }) {
+  const { t } = useI18n()
   return (
     <span className="inline-flex items-center gap-1 rounded bg-[--surface-3] px-2 py-0.5 text-xs font-mono">
       {value}
-      <button onClick={onRemove} className="text-[--text-muted] hover:text-[--error]" aria-label={`Remove ${value}`}>
+      <button onClick={onRemove} className="text-[--text-muted] hover:text-[--error]" aria-label={t('settings.remove', { name: value })}>
         <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24">
           <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
         </svg>
@@ -104,6 +107,7 @@ export interface SettingsPageProps {
 }
 
 export function SettingsPage({ onSave }: SettingsPageProps) {
+  const { t, lang, setLang } = useI18n()
   const [prefs, setPrefs] = useState<UpdateSettingsBody | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -171,9 +175,7 @@ export function SettingsPage({ onSave }: SettingsPageProps) {
   const handleSwitchLibrary = async (path: string) => {
     const p = path.trim()
     if (!p || p === libraryPath) return
-    const ok = window.confirm(
-      `切换素材库到:\n${p}\n\n应用将改用这个目录的目录数据库、缩略图和设置（每个库各自独立）。当前库不会被修改。是否继续？`,
-    )
+    const ok = window.confirm(t('settings.switchLibraryConfirm', { path: p }))
     if (!ok) return
     setSaving(true)
     setError(null)
@@ -247,16 +249,15 @@ export function SettingsPage({ onSave }: SettingsPageProps) {
     }
   }
 
-  if (loading) return <div className="p-6 text-[--text-muted]">Loading settings…</div>
+  if (loading) return <div className="p-6 text-[--text-muted]">{t('settings.loading')}</div>
 
   // No library bound yet — prompt the user to set one (binds at runtime).
   if (libraryPath === null) {
     return (
       <div className="p-6">
-        <h2 className="mb-2 text-lg font-medium text-[--text-primary]">Set up your library</h2>
+        <h2 className="mb-2 text-lg font-medium text-[--text-primary]">{t('settings.setupTitle')}</h2>
         <p className="mb-4 max-w-prose text-sm text-[--text-secondary]">
-          No library is configured yet. Enter an absolute path where CutFinder should
-          store organized copies, thumbnails, and its catalog.
+          {t('settings.setupDesc')}
         </p>
         <div className="flex gap-2">
           <input
@@ -264,12 +265,12 @@ export function SettingsPage({ onSave }: SettingsPageProps) {
             value={newLibraryPath}
             onChange={(e) => setNewLibraryPath(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') void handleSetLibrary() }}
-            placeholder="/Users/you/Movies/CutFinder Library"
+            placeholder={t('settings.newLibraryPlaceholder')}
             className="flex-1 rounded-md border border-[--border] bg-[--surface-2] px-3 py-1.5 text-sm outline-none focus:border-[--primary]"
           />
-          <FolderPickerButton label="Choose…" icon={null} onChange={(folder) => setNewLibraryPath(folder)} />
+          <FolderPickerButton label={t('settings.choose')} icon={null} onChange={(folder) => setNewLibraryPath(folder)} />
           <Button onClick={handleSetLibrary} disabled={saving || !newLibraryPath.trim()}>
-            {saving ? 'Setting…' : 'Set library'}
+            {saving ? t('settings.setting') : t('settings.setLibrary')}
           </Button>
         </div>
         {error && <p className="mt-2 text-xs text-[--error]">{error.message}</p>}
@@ -277,7 +278,7 @@ export function SettingsPage({ onSave }: SettingsPageProps) {
     )
   }
 
-  if (error) return <div className="p-6 text-[--error]">Failed to load settings: {error.message}</div>
+  if (error) return <div className="p-6 text-[--error]">{t('settings.failedLoad', { message: error.message })}</div>
   if (!prefs) return null
 
   // Prepend dot to extensions for display, ensure they start with a dot
@@ -288,11 +289,26 @@ export function SettingsPage({ onSave }: SettingsPageProps) {
       {/* Title + Back button — full width at top */}
       <div className="mx-auto w-full max-w-5xl space-y-6">
         <div className="flex items-center justify-between gap-4">
-          <h1 className="text-xl font-semibold tracking-tight text-[--text-primary]">Settings</h1>
+          <h1 className="text-xl font-semibold tracking-tight text-[--text-primary]">{t('settings.title')}</h1>
           <Button variant="ghost" size="sm" onClick={() => onSave?.()}>
-            Back to gallery
+            {t('settings.backToGallery')}
           </Button>
         </div>
+
+        {/* ── Interface language (per-device UI pref, applies instantly) ─── */}
+        <fieldset className="rounded-lg border border-[--border] bg-[--surface-1] p-4">
+          <legend className="text-sm font-medium text-[--text-primary]">{t('settings.uiLanguage')}</legend>
+          <p className="mt-1 text-xs leading-relaxed text-[--text-secondary]">{t('settings.uiLanguageDesc')}</p>
+          <select
+            value={lang}
+            onChange={(e) => setLang(e.target.value as 'zh' | 'en')}
+            aria-label={t('settings.uiLanguage')}
+            className="mt-2 w-full max-w-xs rounded-md border border-[--border] bg-[--surface-2] px-3 py-1.5 text-sm outline-none focus:border-[--primary]"
+          >
+            <option value="en">{t('settings.langEn')}</option>
+            <option value="zh">{t('settings.langZh')}</option>
+          </select>
+        </fieldset>
 
         {/* Responsive two-column grid — single column on narrow screens */}
         <form onSubmit={(e) => { e.preventDefault(); handleSave() }} className="grid grid-cols-1 gap-6 lg:grid-cols-2">
@@ -302,10 +318,9 @@ export function SettingsPage({ onSave }: SettingsPageProps) {
 
             {/* ── Source folders ─────────────────────── */}
             <fieldset className="rounded-lg border border-[--border] bg-[--surface-1] p-4">
-              <legend className="text-sm font-medium text-[--text-primary]">Source folders</legend>
+              <legend className="text-sm font-medium text-[--text-primary]">{t('settings.sourceFolders')}</legend>
               <p className="mt-1 text-xs leading-relaxed text-[--text-secondary]">
-                这些文件夹是你的原始视频素材（只读，不会被修改或移动）。扫描时 CutFinder
-                只会读取这些文件夹里的文件。
+                {t('settings.sourceFoldersDesc')}
               </p>
               <div className="mt-3 space-y-2">
                 {(prefs.source_folders || []).map((folder: string, i: number) => (
@@ -320,7 +335,7 @@ export function SettingsPage({ onSave }: SettingsPageProps) {
                       type="button"
                       onClick={() => handleRemoveSourceFolder(folder)}
                       className="shrink-0 rounded-md p-1 text-[--text-muted] hover:bg-[--surface-3] hover:text-[--error]"
-                      aria-label={`Remove ${folder}`}
+                      aria-label={t('settings.remove', { name: folder })}
                     >
                       <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24">
                         <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -332,7 +347,7 @@ export function SettingsPage({ onSave }: SettingsPageProps) {
 
               {/* Hidden file input for folder picker — macOS only (webkitdirectory) */}
               <FolderPickerButton
-                label="Add folder"
+                label={t('settings.addFolder')}
                 icon={
                   <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24">
                     <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 10.5v6m3-3H9m4.06-7.19-2.12-2.12a1.5 1.5 0 0 0-1.061-.44H4.5A2.25 2.25 0 0 0 2.25 6v12a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9a2.25 2.25 0 0 0-2.25-2.25h-5.379a1.5 1.5 0 0 1-1.06-.44Z" />
@@ -347,9 +362,9 @@ export function SettingsPage({ onSave }: SettingsPageProps) {
 
             {/* ── Library path ─────────────────────── */}
             <fieldset className="rounded-lg border border-[--border] bg-[--surface-1] p-4">
-              <legend className="text-sm font-medium text-[--text-primary]">Library path</legend>
+              <legend className="text-sm font-medium text-[--text-primary]">{t('settings.libraryPath')}</legend>
               <p className="mt-1 text-xs leading-relaxed text-[--text-secondary]">
-                组织后的素材副本、缩略图和目录数据库会存储在这里。切换到其他目录会改用那个库（每个库各自独立，当前库不会被修改）。
+                {t('settings.libraryPathDesc')}
               </p>
               <div className="mt-2 flex gap-2">
                 <input
@@ -359,7 +374,7 @@ export function SettingsPage({ onSave }: SettingsPageProps) {
                   className="flex-1 rounded-md border border-[--border] bg-[--surface-3] px-3 py-1.5 text-sm outline-none opacity-70"
                 />
                 <FolderPickerButton
-                  label="Choose…"
+                  label={t('settings.choose')}
                   icon={
                     <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24">
                       <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3.75 9.776c.112-.017.227-.026.344-.026h15.812c.117 0 .232.009.344.026m-16.5 0a2.25 2.25 0 0 0-1.883 2.542l.857 6a2.25 2.25 0 0 0 2.227 1.932H19.05a2.25 2.25 0 0 0 2.227-1.932l.857-6a2.25 2.25 0 0 0-1.883-2.542m-16.5 0V6A2.25 2.25 0 0 1 6 3.75h3.879a1.5 1.5 0 0 1 1.06.44l2.122 2.12a1.5 1.5 0 0 0 1.06.44H18A2.25 2.25 0 0 1 20.25 9v.776" />
@@ -372,12 +387,12 @@ export function SettingsPage({ onSave }: SettingsPageProps) {
 
             {/* ── OMLX connection (machine-global) ─────── */}
             <fieldset className="rounded-lg border border-[--border] bg-[--surface-1] p-4">
-              <legend className="text-sm font-medium text-[--text-primary]">OMLX connection</legend>
+              <legend className="text-sm font-medium text-[--text-primary]">{t('settings.omlxConnection')}</legend>
               <p className="mt-1 text-xs leading-relaxed text-[--text-secondary]">
-                本地 OMLX 推理服务的地址和密钥（全机共用，存储在 ~/.cutfinder/config.json，无需 .env 文件）。这里保存的值优先生效，会覆盖 .env / 环境变量。
+                {t('settings.omlxConnectionDesc')}
               </p>
 
-              <label className="mt-3 block text-sm text-[--text-secondary]">Base URL</label>
+              <label className="mt-3 block text-sm text-[--text-secondary]">{t('settings.baseUrl')}</label>
               <input
                 type="text" value={omlxBaseUrl}
                 onChange={(e) => setOmlxBaseUrl(e.target.value)}
@@ -385,20 +400,20 @@ export function SettingsPage({ onSave }: SettingsPageProps) {
                 className="mt-1 w-full rounded-md border border-[--border] bg-[--surface-2] px-3 py-1.5 text-sm font-mono outline-none focus:border-[--primary]"
               />
 
-              <label className="mt-3 block text-sm text-[--text-secondary]">API key</label>
+              <label className="mt-3 block text-sm text-[--text-secondary]">{t('settings.apiKey')}</label>
               <p className="mb-1 text-xs text-[--text-muted]">
-                {apiKeyConfigured ? '已配置 — 留空则保持不变，输入新值则覆盖' : '尚未配置'}
+                {apiKeyConfigured ? t('settings.apiKeyConfigured') : t('settings.apiKeyNotConfigured')}
               </p>
               <input
                 type="password" value={apiKeyInput}
                 onChange={(e) => setApiKeyInput(e.target.value)}
-                placeholder={apiKeyConfigured ? '••••••••（留空不修改）' : 'omlx-…'}
+                placeholder={apiKeyConfigured ? t('settings.apiKeyPlaceholder') : 'omlx-…'}
                 autoComplete="new-password"
                 className="w-full rounded-md border border-[--border] bg-[--surface-2] px-3 py-1.5 text-sm font-mono outline-none focus:border-[--primary]"
               />
 
-              <label className="mt-3 block text-sm text-[--text-secondary]">Text model</label>
-              <p className="mb-1 text-xs text-[--text-muted]">用于 A-roll 的中文摘要 + 标签生成（通过 OMLX，纯文本模型）。留空则用默认 Qwen3.6-35B-A3B。</p>
+              <label className="mt-3 block text-sm text-[--text-secondary]">{t('settings.textModel')}</label>
+              <p className="mb-1 text-xs text-[--text-muted]">{t('settings.textModelDesc')}</p>
               <input
                 type="text" value={prefs.text_model}
                 onChange={(e) => updateField('text_model', e.target.value)}
@@ -406,8 +421,8 @@ export function SettingsPage({ onSave }: SettingsPageProps) {
                 className="w-full rounded-md border border-[--border] bg-[--surface-2] px-3 py-1.5 text-sm font-mono outline-none focus:border-[--primary]"
               />
 
-              <label className="mt-3 block text-sm text-[--text-secondary]">Vision model</label>
-              <p className="mb-1 text-xs text-[--text-muted]">用于 B-roll 的视觉标签 + 描述生成（通过 OMLX，多模态模型）。留空则用默认 Qwen3-VL-8B。</p>
+              <label className="mt-3 block text-sm text-[--text-secondary]">{t('settings.visionModel')}</label>
+              <p className="mb-1 text-xs text-[--text-muted]">{t('settings.visionModelDesc')}</p>
               <input
                 type="text" value={prefs.vision_model}
                 onChange={(e) => updateField('vision_model', e.target.value)}
@@ -423,24 +438,24 @@ export function SettingsPage({ onSave }: SettingsPageProps) {
 
             {/* ── Whisper (speech-to-text) ─────────────── */}
             <fieldset className="rounded-lg border border-[--border] bg-[--surface-1] p-4">
-              <legend className="text-sm font-medium text-[--text-primary]">Whisper（语音转写）</legend>
+              <legend className="text-sm font-medium text-[--text-primary]">{t('settings.whisperTitle')}</legend>
               <p className="mt-1 text-xs leading-relaxed text-[--text-secondary]">
-                A-roll 中文语音转文字（独立本地进程，不经过 OMLX）。
+                {t('settings.whisperDesc')}
               </p>
               <div className="mt-3 space-y-4">
-                <label className="block text-sm text-[--text-secondary]">Whisper model</label>
-                <p className="mb-1 text-xs text-[--text-muted]">HuggingFace 模型 id；若下方填了本地路径则以本地路径为准</p>
+                <label className="block text-sm text-[--text-secondary]">{t('settings.whisperModel')}</label>
+                <p className="mb-1 text-xs text-[--text-muted]">{t('settings.whisperModelDesc')}</p>
                 <input
                   type="text" value={prefs.whisper_model} readOnly
                   className="w-full rounded-md border border-[--border] bg-[--surface-2] px-3 py-1.5 text-sm"
                 />
 
-                <label className="mt-2 block text-sm text-[--text-secondary]">Whisper model path（本地覆盖，可选）</label>
-                <p className="mb-1 text-xs text-[--text-muted]">本地 mlx-whisper 模型目录；填了则离线加载并覆盖上面的模型 id，留空则用 HuggingFace 缓存</p>
+                <label className="mt-2 block text-sm text-[--text-secondary]">{t('settings.whisperModelPath')}</label>
+                <p className="mb-1 text-xs text-[--text-muted]">{t('settings.whisperModelPathDesc')}</p>
                 <input
                   type="text" value={whisperPath}
                   onChange={(e) => setWhisperPath(e.target.value)}
-                  placeholder="（可选）/path/to/whisper-large-v3-mlx"
+                  placeholder={t('settings.whisperPathPlaceholder')}
                   className="w-full rounded-md border border-[--border] bg-[--surface-2] px-3 py-1.5 text-sm font-mono outline-none focus:border-[--primary]"
                 />
               </div>
@@ -448,12 +463,12 @@ export function SettingsPage({ onSave }: SettingsPageProps) {
 
             {/* ── Processing options ─────────────────── */}
             <fieldset className="rounded-lg border border-[--border] bg-[--surface-1] p-4">
-              <legend className="text-sm font-medium text-[--text-primary]">Processing options</legend>
+              <legend className="text-sm font-medium text-[--text-primary]">{t('settings.processingOptions')}</legend>
 
               {/* Extensions */}
               <div className="mt-3">
-                <label className="mb-1 block text-sm text-[--text-secondary]">Supported extensions</label>
-                <p className="mb-1 text-xs text-[--text-muted]">扫描时只处理这些后缀的视频文件</p>
+                <label className="mb-1 block text-sm text-[--text-secondary]">{t('settings.supportedExtensions')}</label>
+                <p className="mb-1 text-xs text-[--text-muted]">{t('settings.supportedExtensionsDesc')}</p>
                 <div className="mb-2 flex gap-1.5">
                   {extDisplay.map((ext, i) => (
                     <ExtensionTag key={i} value={ext} onRemove={() => handleRemoveExtension(ext)} />
@@ -471,8 +486,8 @@ export function SettingsPage({ onSave }: SettingsPageProps) {
               </div>
 
               {/* B-roll frame count */}
-              <label className="mt-4 block text-sm text-[--text-secondary]">B-roll frame count</label>
-              <p className="mb-1 text-xs text-[--text-muted]">B-roll 视觉分析时提取的视频帧数，越多越准确但处理更慢</p>
+              <label className="mt-4 block text-sm text-[--text-secondary]">{t('settings.brollFrameCount')}</label>
+              <p className="mb-1 text-xs text-[--text-muted]">{t('settings.brollFrameCountDesc')}</p>
               <input
                 type="number" min={1} step={1} value={prefs.broll_frame_count}
                 onChange={(e) => updateField('broll_frame_count', parseInt(e.target.value, 10))}
@@ -480,8 +495,8 @@ export function SettingsPage({ onSave }: SettingsPageProps) {
               />
 
               {/* VAD threshold */}
-              <label className="mt-4 block text-sm text-[--text-secondary]">VAD threshold (0–1)</label>
-              <p className="mb-1 text-xs text-[--text-muted]">语音检测灵敏度阈值，越高越严格（只标记有明显人声的片段为 A-roll）</p>
+              <label className="mt-4 block text-sm text-[--text-secondary]">{t('settings.vadThreshold')}</label>
+              <p className="mb-1 text-xs text-[--text-muted]">{t('settings.vadThresholdDesc')}</p>
               <input
                 type="number" min={0} max={1} step={0.05} value={prefs.vad_threshold}
                 onChange={(e) => updateField('vad_threshold', parseFloat(e.target.value))}
@@ -489,20 +504,21 @@ export function SettingsPage({ onSave }: SettingsPageProps) {
               />
 
               {/* AI output language */}
-              <label className="mt-4 block text-sm text-[--text-secondary]">AI output language</label>
-              <p className="mb-1 text-xs text-[--text-muted]">AI 生成的摘要、标签等文字输出的语言</p>
+              <label className="mt-4 block text-sm text-[--text-secondary]">{t('settings.aiOutputLanguage')}</label>
+              <p className="mb-1 text-xs text-[--text-muted]">{t('settings.aiOutputLanguageDesc')}</p>
               <select
                 value={prefs.output_language}
                 onChange={(e) => updateField('output_language', e.target.value as 'zh' | 'en')}
+                aria-label={t('settings.aiOutputLanguage')}
                 className="w-full rounded-md border border-[--border] bg-[--surface-2] px-3 py-1.5 text-sm outline-none focus:border-[--primary]"
               >
-                <option value="zh">中文</option>
-                <option value="en">English</option>
+                <option value="zh">{t('settings.langZh')}</option>
+                <option value="en">{t('settings.langEn')}</option>
               </select>
 
               {/* Field errors */}
               {fieldErrors.map((err) => (
-                <p key={err.field} className="mt-1 text-xs text-[--error]">{err.message}</p>
+                <p key={err.field} className="mt-1 text-xs text-[--error]">{t(err.messageKey)}</p>
               ))}
             </fieldset>
 
@@ -513,7 +529,7 @@ export function SettingsPage({ onSave }: SettingsPageProps) {
         {/* ── Save button — full width, below grid ─────────── */}
         <div className="flex justify-end pt-4">
           <Button type="submit" onClick={handleSave} disabled={saving}>
-            {saving ? 'Saving…' : 'Save settings'}
+            {saving ? t('settings.saving') : t('settings.save')}
           </Button>
         </div>
 

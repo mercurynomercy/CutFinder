@@ -14,6 +14,7 @@ import type { ClipDetail, TagItem, TranscriptData } from '@/api/client'
 import { api } from '@/api/client'
 import { Badge, Chip } from '@/components/ChipBadge'
 import { Button } from '@/components/Button'
+import { useI18n } from '@/i18n'
 
 // ── Tag editor component (add/delete) ────────────────────────────
 
@@ -23,6 +24,7 @@ interface TagEditorProps {
 }
 
 function TagEditor({ tags, onUpdate }: TagEditorProps) {
+  const { t } = useI18n()
   const [newTag, setNewTag] = useState('')
 
   const handleAdd = async () => {
@@ -60,7 +62,7 @@ function TagEditor({ tags, onUpdate }: TagEditorProps) {
               <button
                 onClick={() => handleDelete(i, tag.name)}
                 className="ml-1 inline-flex text-[--text-muted] hover:text-[--error]"
-                aria-label={`Remove tag ${tag.name}`}
+                aria-label={t('detail.removeTag', { name: tag.name })}
               >
                 <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24">
                   <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -78,11 +80,11 @@ function TagEditor({ tags, onUpdate }: TagEditorProps) {
           value={newTag}
           onChange={(e) => setNewTag(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="Add tag…"
+          placeholder={t('detail.addTag')}
           className="flex-1 rounded-md border border-[--border] bg-[--surface-3] px-3 py-1.5 text-sm text-[--text-primary] placeholder:text-[--text-muted] outline-none transition-colors focus:border-[--primary]"
         />
         <Button size="sm" onClick={handleAdd} disabled={!newTag.trim()}>
-          Add
+          {t('detail.add')}
         </Button>
       </div>
     </div>
@@ -117,10 +119,11 @@ interface TranscriptSectionProps {
 }
 
 function TranscriptSection({ data }: TranscriptSectionProps) {
+  const { t } = useI18n()
   if (!data || !data.full_text.trim()) return null
 
   return (
-    <Accordion title="Transcript">
+    <Accordion title={t('detail.transcript')}>
       <div className="text-sm leading-relaxed text-[--text-secondary]">
         {data.full_text}
 
@@ -152,6 +155,7 @@ export interface DetailPanelProps {
 }
 
 export function DetailPanel({ clipId, onClose, onOpenPath }: DetailPanelProps) {
+  const { t } = useI18n()
   const [clip, setClip] = useState<ClipDetail | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<Error | null>(null)
@@ -281,7 +285,7 @@ export function DetailPanel({ clipId, onClose, onOpenPath }: DetailPanelProps) {
         <div className="flex h-full w-full flex-col overflow-y-auto">
           {loading ? (
             <div className="flex items-center justify-center p-8">
-              <p className="text-[--text-muted]">Loading clip…</p>
+              <p className="text-[--text-muted]">{t('detail.loadingClip')}</p>
             </div>
           ) : error ? (
             <div className="flex items-center justify-center p-8">
@@ -297,7 +301,7 @@ export function DetailPanel({ clipId, onClose, onOpenPath }: DetailPanelProps) {
                 <button
                   onClick={onClose}
                   className="rounded p-1 text-[--text-muted] hover:text-[--text-primary]"
-                  aria-label="Close panel"
+                  aria-label={t('detail.closePanel')}
                 >
                   <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24">
                     <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -312,7 +316,7 @@ export function DetailPanel({ clipId, onClose, onOpenPath }: DetailPanelProps) {
                 {clip.library_path && (
                   <div>
                     <p className="text-xs font-medium uppercase tracking-wider text-[--text-muted]">
-                      File destination
+                      {t('detail.fileDestination')}
                     </p>
                     <p className="mt-0.5 break-all text-sm text-[--text-primary]">{clip.library_path}</p>
                   </div>
@@ -322,7 +326,7 @@ export function DetailPanel({ clipId, onClose, onOpenPath }: DetailPanelProps) {
                 {captureDate && (
                   <div>
                     <p className="text-xs font-medium uppercase tracking-wider text-[--text-muted]">
-                      Capture date{clip.date_source === 'file' ? ' (from file time)' : ''}
+                      {clip.date_source === 'file' ? t('detail.captureDateFromFile') : t('detail.captureDate')}
                     </p>
                     <p className="mt-0.5 text-sm tabular-nums text-[--text-primary]">{captureDate}</p>
                   </div>
@@ -342,8 +346,8 @@ export function DetailPanel({ clipId, onClose, onOpenPath }: DetailPanelProps) {
                   {onOpenPath && (
                     <button
                       onClick={() => onOpenPath(clip.library_path || clip.source_path)}
-                      title="打开视频"
-                      aria-label="打开视频"
+                      title={t('detail.openVideo')}
+                      aria-label={t('detail.openVideo')}
                       className="absolute inset-0 m-auto flex h-12 w-12 items-center justify-center rounded-full bg-black/60 text-white opacity-0 backdrop-blur-sm transition-opacity hover:bg-black/80 group-hover:opacity-100"
                     >
                       <svg className="h-6 w-6 translate-x-px" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
@@ -357,7 +361,7 @@ export function DetailPanel({ clipId, onClose, onOpenPath }: DetailPanelProps) {
                 {clip.roll_type === 'a' && (
                   <div>
                     <label className="mb-1 block text-xs font-medium uppercase tracking-wider text-[--text-muted]">
-                      Summary (A-roll)
+                      {t('detail.summaryARoll')}
                     </label>
                     <textarea
                       value={editSummary}
@@ -367,7 +371,7 @@ export function DetailPanel({ clipId, onClose, onOpenPath }: DetailPanelProps) {
                     />
                     <div className="mt-1 flex justify-end">
                       <Button size="sm" variant="secondary" onClick={handleSave} disabled={saving}>
-                        {saving ? 'Saving…' : 'Save'}
+                        {saving ? t('detail.saving') : t('detail.save')}
                       </Button>
                     </div>
                   </div>
@@ -377,7 +381,7 @@ export function DetailPanel({ clipId, onClose, onOpenPath }: DetailPanelProps) {
                 {clip.roll_type === 'b' && (
                   <div>
                     <label className="mb-1 block text-xs font-medium uppercase tracking-wider text-[--text-muted]">
-                      Description (B-roll)
+                      {t('detail.descriptionBRoll')}
                     </label>
                     <textarea
                       value={clip.description || ''}
@@ -391,7 +395,7 @@ export function DetailPanel({ clipId, onClose, onOpenPath }: DetailPanelProps) {
                 {/* ── Tags (add/delete) ─────────────────── */}
                 <div>
                   <label className="mb-1 block text-xs font-medium uppercase tracking-wider text-[--text-muted]">
-                    Tags
+                    {t('filters.tags')}
                   </label>
                   <TagEditor tags={clip.tags} onUpdate={async (next) => {
                     if (!clip) return
@@ -407,31 +411,31 @@ export function DetailPanel({ clipId, onClose, onOpenPath }: DetailPanelProps) {
 
                 {/* ── Source file + Metadata (grouped, same style) ─ */}
                 <div className="space-y-3 border-t border-[--border] pt-4">
-                  <Accordion title="Source file">
+                  <Accordion title={t('detail.sourceFile')}>
                     <p className="break-all text-sm text-[--text-primary]">{clip.source_path}</p>
                   </Accordion>
 
-                  <Accordion title="Metadata">
+                  <Accordion title={t('detail.metadata')}>
                     <div className="space-y-1.5 text-xs">
                       <div className="flex justify-between gap-4">
-                        <span className="text-[--text-muted]">Duration</span>
-                        <span>{clip.duration_s !== null ? `${(clip.duration_s / 60).toFixed(1)} min` : '—'}</span>
+                        <span className="text-[--text-muted]">{t('detail.duration')}</span>
+                        <span>{clip.duration_s !== null ? `${(clip.duration_s / 60).toFixed(1)} ${t('detail.minutes')}` : '—'}</span>
                       </div>
                       {clip.width && (
                         <div className="flex justify-between gap-4">
-                          <span className="text-[--text-muted]">Resolution</span>
+                          <span className="text-[--text-muted]">{t('detail.resolution')}</span>
                           <span>{clip.width}×{clip.height}</span>
                         </div>
                       )}
                       {clip.fps && (
                         <div className="flex justify-between gap-4">
-                          <span className="text-[--text-muted]">Frame rate</span>
-                          <span>{clip.fps} fps</span>
+                          <span className="text-[--text-muted]">{t('detail.frameRate')}</span>
+                          <span>{clip.fps} {t('detail.fps')}</span>
                         </div>
                       )}
                       {clip.codec && (
                         <div className="flex justify-between gap-4">
-                          <span className="text-[--text-muted]">Codec</span>
+                          <span className="text-[--text-muted]">{t('detail.codec')}</span>
                           <span>{clip.codec}</span>
                         </div>
                       )}
@@ -465,14 +469,14 @@ export function DetailPanel({ clipId, onClose, onOpenPath }: DetailPanelProps) {
                 <button
                   onClick={handleReanalyze}
                   disabled={reanalyzing}
-                  title={reanalyzing ? '重新分析中…' : '重新分析'}
-                  aria-label="重新分析"
+                  title={reanalyzing ? t('detail.reanalyzing') : t('detail.reanalyze')}
+                  aria-label={t('detail.reanalyze')}
                   className="inline-flex items-center gap-1.5 rounded-md border border-[--border] px-3 py-1.5 text-xs font-medium text-[--text-secondary] transition-colors hover:text-[--text-primary] disabled:opacity-50"
                 >
                   <svg className={`h-4 w-4 ${reanalyzing ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24">
                     <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
                   </svg>
-                  重新分析
+                  {t('detail.reanalyze')}
                 </button>
               </div>
 

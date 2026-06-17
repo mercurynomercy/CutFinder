@@ -13,10 +13,12 @@ Usage:
 
 import type { ClipSummary } from '@/api/client'
 import { ThumbnailCard } from '@/components/ThumbnailCard'
+import { useI18n } from '@/i18n'
 
 // ── Empty state component ───────────────────────────────────────
 
 function EmptyState() {
+  const { t } = useI18n()
   return (
     <div className="flex flex-1 items-center justify-center">
       <div className="text-center">
@@ -27,9 +29,9 @@ function EmptyState() {
             d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z"
           />
         </svg>
-        <h3 className="mt-4 text-lg font-medium text-[--text-primary]">No clips yet</h3>
+        <h3 className="mt-4 text-lg font-medium text-[--text-primary]">{t('gallery.emptyTitle')}</h3>
         <p className="mt-1 text-sm text-[--text-muted]">
-          Add source folders and run a scan to see your footage here.
+          {t('gallery.emptyDesc')}
         </p>
       </div>
     </div>
@@ -96,6 +98,7 @@ function groupByDate(clips: ClipSummary[]): { key: string; label: string; items:
 }
 
 export function Gallery({ clips, selectedClipId, onSelect, onReanalyze, reanalyzingIds, onOpenPath }: GalleryProps) {
+  const { t } = useI18n()
   if (clips.length === 0) return <EmptyState />
 
   const groups = groupByDate(clips)
@@ -107,13 +110,13 @@ export function Gallery({ clips, selectedClipId, onSelect, onReanalyze, reanalyz
         return (
         <section key={key}>
           <h2 className="sticky top-0 z-10 mb-3 flex items-baseline gap-2 bg-[--bg-canvas]/95 py-1 backdrop-blur-sm">
-            <span className="text-sm font-semibold text-[--text-primary]">{label}</span>
+            <span className="text-sm font-semibold text-[--text-primary]">{key === UNKNOWN_DATE ? t('gallery.unknownDate') : label}</span>
             <span className="text-xs text-[--text-muted]">{items.length}</span>
             {onOpenPath && folder && (
               <button
                 onClick={() => onOpenPath(folder)}
-                title="在 Finder 中打开"
-                aria-label="在 Finder 中打开"
+                title={t('gallery.openFolder')}
+                aria-label={t('gallery.openFolder')}
                 className="ml-1 inline-flex items-center self-center rounded p-1 text-[--text-muted] transition-colors hover:bg-[--surface-2] hover:text-[--text-primary]"
               >
                 <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" aria-hidden="true">
