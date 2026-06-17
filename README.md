@@ -4,7 +4,7 @@
 
 把一堆 A-roll（有中文解说）和 B-roll（纯空镜）自动**分类、打标签、生成简介与缩略图**，让你之后能按日期 / 类型 / 标签 / 台词快速找回任意一段素材。面向 macOS（Apple Silicon）+ Final Cut Pro 工作流，**全程离线、AI 全本地**。
 
-> **状态：核心功能已打通并可端到端运行。** 后端适配器、编排层、API 装配层（`create_app`）、前端均已实现并接通；`make test-unit`（350 单元测试）、前端 `vitest`（187 项）、`npm run build`（类型干净）、`make check-omlx`、`make dev` 均可跑通。模型推理链路（文本/视觉/转写/VAD）通过真实 OMLX + 本地集成测试验证（见[测试](#测试)）。
+> **状态：核心功能已打通并可端到端运行。** 后端适配器、编排层、API 装配层（`create_app`）、前端均已实现并接通；`make test-unit`（367 单元测试）、前端 `vitest`（190 项）、`npm run build`（类型干净）、`make check-omlx`、`make dev` 均可跑通。模型推理链路（文本/视觉/转写/VAD）通过真实 OMLX + 本地集成测试验证（见[测试](#测试)）。
 
 ---
 
@@ -19,6 +19,7 @@
 - **缩略图墙 + 多维检索**：按拍摄日期**分组展示**（每个日期一个区块，带粘性日期标题），左侧侧栏内置搜索框（按文件名 / 简介 / 描述 / 标签即时过滤），并支持按日期 / 类型 / 标签筛选（可折叠过滤面板）与按拍摄日期的新/旧排序；标签过滤按使用频率排序、可搜索、超量折叠。分析未完成的片段（`partial`）在缩略图上有「部分」标记，一眼可辨。
 - **一键打开 / 在 Finder 中查看**：缩略图与详情面板可一键用默认播放器打开视频；日期分组标题可一键在 Finder 中打开该日期文件夹（macOS `open`）。
 - **重新分析单个片段**：换模型或结果不佳时一键重跑 AI，保留你的手动纠正与标签。分类判错时，可在详情面板切换 A/B 类型——副本会自动**移动**到正确的 A-roll/B-roll 目录并重命名，`library_path` 同步更新。
+- **关键帧推荐（剪辑切点 + 精选帧）**：为每段素材给出最多 N 条（默认 3，可配置）排序的剪辑建议——**A-roll 由文本模型基于转写选段**、**B-roll 由 Qwen3-VL 基于采样帧挑选**，每条含 in/out 时码、代表帧与一句理由。扫描完成后可自动排队（设置开关），也可在详情面板按需生成；画廊卡片有「已有建议」角标。
 - **片段拍摄日期显示**：缩略图卡片和详情面板均展示片段的拍摄时间（优先使用嵌入 capture time，回退到文件创建时间）。
 - **任务队列管理**：单独的「任务队列」页可查看所有扫描/重分析任务，支持删除、重试失败项、全局暂停/恢复；队列暂停时扫描会自动提示并可选恢复。
 - **原生文件夹选择**：设置页选「素材文件夹 / 素材库」时弹出 macOS 原生选择框，返回真实绝对路径（浏览器选择器拿不到绝对路径）。
@@ -185,7 +186,7 @@ WHISPER_MODEL_PATH=/Users/you/AI/Models/ASRs/mlx-community/whisper-large-v3-mlx
 ```bash
 cd backend
 
-uv run pytest tests/unit             # 仅单元测试（350 项，无需外部服务，秒级）
+uv run pytest tests/unit             # 仅单元测试（367 项，无需外部服务，秒级）
 uv run pytest -m integration         # 集成测试（需真实 OMLX / ffmpeg / 样片）
 uv run mypy cutfinder/               # 类型检查（strict，clean）
 uv run ruff check cutfinder/         # linting（clean）
@@ -241,6 +242,7 @@ make e2e               # Playwright e2e
 ### 2026-06-18
 
 **功能：**
+- **关键帧推荐（需求 8）**：新增「剪辑切点 + 精选帧」推荐——A-roll 文本模型按 transcript **句子序号**选段（杜绝幻觉时间码）、B-roll 视觉模型按采样帧挑选；每段最多 N 条（默认 3，可配置）排序建议，含 in/out 时码 / 代表帧 / 理由。独立 `keyframes` 队列任务：扫描后自动排队（设置开关）+ 详情面板按需。新增 `keyframes` 表、`POST /api/clips/{id}/keyframes`、帧图片端点、列表 `has_keyframes`；前端详情建议列表 + 画廊角标 + 设置项（设计见 [`doc/tasks/16-keyframes.md`](./doc/tasks/16-keyframes.md)）。
 - **打包为自安装 `CutFinder.app`**（`make app` → `dist/CutFinder.app` + `.dmg`）：拖入「应用程序」双击即用；首次启动用 `uv` 自建 Python 环境、检测/装 ffmpeg，再由单进程同时提供 UI + API（后端新增可选静态托管 `CUTFINDER_STATIC_DIR`，前端生产构建走同源 `/api`）。运行环境放在 `~/Library/Application Support/CutFinder/`，不写进 .app 包内。
 - **Dock 退出修复**：启动器不再 `exec` 进 venv 的 Python（那会让 macOS 撤掉 Dock 图标、服务器变孤儿进程无法退出）；改为保持脚本为前台进程、把 uvicorn 作为子进程并转发 Dock 的「退出」信号（SIGTERM，`--timeout-graceful-shutdown 5`），图标常驻、可从 Dock 正常关闭。
 
