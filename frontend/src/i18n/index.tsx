@@ -31,6 +31,7 @@ const en = {
   'app.taskQueue': 'Task queue',
   'app.settings': 'Settings',
   'app.logs': 'Backend logs',
+  'app.keyframes': 'Keyframes',
 
   // Backend logs modal
   'logs.title': 'Backend logs',
@@ -143,6 +144,8 @@ const en = {
 
   // Scan progress + toasts
   'jobs.scanning': 'Scanning…',
+  'jobs.suggestingKeyframes': 'Suggesting keyframes…',
+  'jobs.reanalyzing': 'Re-analyzing…',
   'jobs.toastStarted': 'Scan started — processing clips',
   'jobs.toastCompleted': 'Scan completed — {n} clips processed',
   'jobs.toastFailed': 'Scan failed — check logs for details',
@@ -230,6 +233,7 @@ const zh: Record<Key, string> = {
   'app.taskQueue': '任务队列',
   'app.settings': '设置',
   'app.logs': '后端日志',
+  'app.keyframes': '关键帧',
 
   'logs.title': '后端日志',
   'logs.empty': '暂无日志',
@@ -332,6 +336,8 @@ const zh: Record<Key, string> = {
   'jobs.statusPaused': '已暂停',
 
   'jobs.scanning': '扫描中…',
+  'jobs.suggestingKeyframes': '生成关键帧中…',
+  'jobs.reanalyzing': '重新分析中…',
   'jobs.toastStarted': '扫描开始 — 正在处理片段',
   'jobs.toastCompleted': '扫描完成 — 已处理 {n} 个片段',
   'jobs.toastFailed': '扫描失败 — 请查看日志了解详情',

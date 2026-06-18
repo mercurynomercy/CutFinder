@@ -37,7 +37,7 @@ def _log_progress_event(evt: Any) -> None:
     step = getattr(evt, "step", "") or "?"
     detail = getattr(evt, "detail", None)
     if getattr(evt, "ok", True):
-        extra = f" — {detail}" if detail and step in ("vad", "copy") else ""
+        extra = f" — {detail}" if detail and step in ("vad", "copy", "keyframes") else ""
         _progress_logger.info("  · %s%s", step, extra)
     else:
         _progress_logger.warning("  · %s failed%s", step, f" — {detail}" if detail else "")

@@ -1211,6 +1211,21 @@ class TestKeyframesEndpoint:
         assert resp.status_code == 200
         assert resp.json()["job_id"] == 77
 
+    def test_suggest_all_enqueues_lacking_clips(self) -> None:
+        class FakeQueue:
+            async def enqueue_keyframes(self, clip_ids: list[int]) -> int:
+                self.ids = clip_ids
+                return 88
+
+        repo = FakeCatalogRepository()
+        repo.upsert_clip(_make_clip(id=1, source_path="/a.mp4", status="done"))
+        repo.upsert_clip(_make_clip(id=2, source_path="/b.mp4", status="done"))
+        q = FakeQueue()
+        resp = self._app(repo, q).post("/api/keyframes")
+        assert resp.status_code == 200
+        assert resp.json() == {"job_id": 88, "count": 2}
+        assert sorted(q.ids) == [1, 2]
+
     def test_detail_includes_keyframes(self) -> None:
         from cutfinder.domain.models import CutSuggestion
 

@@ -108,7 +108,9 @@ function ScanProgress({ jobId, events }: ScanProgressProps) {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2 text-sm font-medium text-[--text-primary]">
             <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-[1.5px] border-[--primary] border-t-transparent" />
-            {t('jobs.scanning')}
+            {job?.kind === 'keyframes' ? t('jobs.suggestingKeyframes')
+              : job?.kind === 'reanalyze' ? t('jobs.reanalyzing')
+              : t('jobs.scanning')}
           </div>
           {pct !== null && (
             <span className="text-xs tabular-nums text-[--text-secondary]">{done}/{total}</span>

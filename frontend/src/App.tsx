@@ -17,6 +17,20 @@ import { SettingsPage } from '@/features/settings'
 import { LogModal } from '@/features/logs'
 import { useI18n } from '@/i18n'
 
+// Poll a job until it reaches a terminal state (or the timeout elapses).
+async function waitForJob(jobId: number, timeoutMs = 30 * 60_000): Promise<void> {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 1500))
+    try {
+      const job = await api.getJob(jobId)
+      if (['done', 'failed', 'cancelled'].includes(job.status)) return
+    } catch {
+      // transient error — keep polling
+    }
+  }
+}
+
 // ── App state ────────────────────────────────────────
 
 export default function App() {
@@ -129,6 +143,20 @@ export default function App() {
           }
         }
         await refreshClips()
+
+        // A scan auto-queues a keyframes job (when enabled). Adopt it as the
+        // active job so its progress bar keeps showing after the scan ends.
+        try {
+          const { jobs } = await api.listJobs()
+          const kf = jobs.find((j) => j.kind === 'keyframes' && ['queued', 'running'].includes(j.status))
+          if (kf) {
+            setActiveJobId(kf.id)
+            await waitForJob(kf.id)
+            await refreshClips()
+          }
+        } catch {
+          // best effort — no auto keyframes follow-up
+        }
       }
     } catch (err) {
       console.error('Scan failed:', err)
@@ -169,6 +197,20 @@ export default function App() {
         next.delete(clipId)
         return next
       })
+    }
+  }
+
+  // One-click: generate keyframe suggestions for all clips that lack them.
+  const handleSuggestAllKeyframes = async () => {
+    try {
+      const { job_id, count } = await api.suggestAllKeyframes()
+      if (count === 0) return  // nothing to do — every clip already has suggestions
+      setActiveJobId(job_id)
+      setShowJobs(true)
+      await waitForJob(job_id)
+      await refreshClips()
+    } catch (err) {
+      console.error('Failed to suggest keyframes:', err)
     }
   }
 
@@ -228,6 +270,16 @@ export default function App() {
               <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M3.75 7.5V6A2.25 2.25 0 016 3.75h1.5m9 0H18A2.25 2.25 0 0120.25 6v1.5m0 9V18A2.25 2.25 0 0118 20.25h-1.5m-9 0H6A2.25 2.25 0 013.75 18v-1.5M3 12h18" />
             </svg>
             {t('app.scan')}
+          </button>
+          <button
+            onClick={handleSuggestAllKeyframes}
+            className="rounded-md p-1.5 text-[--text-secondary] hover:bg-[--surface-3] transition-colors"
+            aria-label={t('app.keyframes')}
+            title={t('app.keyframes')}
+          >
+            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24">
+              <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7.848 8.25l1.536.887M7.848 8.25a3 3 0 11-5.196-3 3 3 0 015.196 3zm1.536.887a2.165 2.165 0 011.083 1.839c.005.351.054.695.14 1.024M9.384 9.137l10.962 6.331M7.848 15.75l1.536-.887m-1.536.887a3 3 0 11-5.196 3 3 3 0 015.196-3zm1.536-.887a2.165 2.165 0 001.083-1.838c.005-.352.054-.695.14-1.025m0 0l10.962-6.33m0 0l1.536-.887m-1.536.887l1.536.887" />
+            </svg>
           </button>
           <button
             onClick={() => setShowLogs(true)}

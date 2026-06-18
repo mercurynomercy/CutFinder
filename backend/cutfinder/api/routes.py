@@ -485,6 +485,17 @@ def _build_router(ctx: Any) -> Any:
         job_id = await ctx.worker_queue.enqueue_keyframes([clip_id])
         return {"job_id": job_id}
 
+    # ── Keyframe suggestions for all clips lacking them (POST /keyframes) ─
+    @router.post("/keyframes")
+    async def suggest_all_keyframes() -> dict[str, Any]:
+        """Enqueue keyframe suggestion for every processed clip without it."""
+        if ctx.worker_queue is None or ctx.repository is None:
+            raise HTTPException(status_code=503, detail="Worker queue not available")
+
+        clip_ids = ctx.repository.clip_ids_without_keyframes()
+        job_id = await ctx.worker_queue.enqueue_keyframes(clip_ids)
+        return {"job_id": job_id, "count": len(clip_ids)}
+
     # ── Keyframe image (GET /clips/{id}/keyframes/{rank}/image) ─
     @router.get("/clips/{clip_id}/keyframes/{rank}/image")
     async def get_keyframe_image(

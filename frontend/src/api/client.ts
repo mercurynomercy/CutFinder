@@ -33,7 +33,7 @@ export interface JobStatus {
   failed: number
   started_at: string | null
   finished_at?: string | null
-  kind?: 'scan' | 'reanalyze'
+  kind?: 'scan' | 'reanalyze' | 'keyframes'
 }
 
 export interface JobsQueueResponse {
@@ -247,6 +247,11 @@ export const api = {
   /** POST /api/clips/{id}/keyframes — generate keyframe (cut/frame) suggestions. */
   suggestKeyframes(id: number): Promise<{ job_id: number }> {
     return _fetch(`/api/clips/${id}/keyframes`, { method: 'POST' })
+  },
+
+  /** POST /api/keyframes — generate keyframes for all clips that lack them. */
+  suggestAllKeyframes(): Promise<{ job_id: number; count: number }> {
+    return _fetch('/api/keyframes', { method: 'POST' })
   },
 
   /** GET /api/search?q= — full-text search. */
