@@ -1,198 +1,200 @@
 # CutFinder
 
-> 本地运行的 Vlog 视频素材（footage）智能分类与检索工具。灵感来自 [Argus](https://github.com/discoposse/argus)。
+> A local, offline tool that automatically classifies, tags, summarizes, and organizes your Vlog footage. Inspired by [Argus](https://github.com/discoposse/argus).
 
-把一堆 A-roll（有中文解说）和 B-roll（纯空镜）自动**分类、打标签、生成简介与缩略图**，让你之后能按日期 / 类型 / 标签 / 台词快速找回任意一段素材。面向 macOS（Apple Silicon）+ Final Cut Pro 工作流，**全程离线、AI 全本地**。
+**中文文档 → [README-zh.md](./README-zh.md)**
 
-> **状态：核心功能已打通并可端到端运行。** 后端适配器、编排层、API 装配层（`create_app`）、前端均已实现并接通；`make test-unit`（367 单元测试）、前端 `vitest`（190 项）、`npm run build`（类型干净）、`make check-omlx`、`make dev` 均可跑通。模型推理链路（文本/视觉/转写/VAD）通过真实 OMLX + 本地集成测试验证（见[测试](#测试)）。
+CutFinder takes a pile of **A-roll** (clips with spoken narration — Chinese by default) and **B-roll** (pure visuals, no narration) and automatically **classifies, tags, summarizes, and thumbnails** every clip, so you can later find any shot by date, type, tag, or spoken line. Built for macOS (Apple Silicon) + Final Cut Pro workflows — **fully offline, all AI runs on your own machine.**
 
----
-
-## 它能做什么
-
-- **自动区分 A-roll / B-roll**：检测有无人声解说（Silero VAD），可手动纠正且会被记住。
-- **A-roll 简介 + 标签**：`mlx-whisper` 转写中文解说 → Qwen 文本模型总结，转写全文一并保存可搜索。
-- **B-roll 画面标签 + 描述**：抽帧交给视觉模型识别画面内容。
-- **界面语言可选（中 / 英）**：整套 UI 文案可在「设置」页切换**英文 / 中文**（默认英文，按设备记忆），与下面的 **AI 输出语言**相互独立、互不影响。
-- **AI 输出语言可选**：简介/画面描述可在「设置」页切换**中文 / 英文**（默认中文）。
-- **按拍摄日期 + 类型自动归档并重命名**：复制到 `库/YYYY-MM-DD/A-roll(或 B-roll)/`，并按类型顺序重命名为 `A-0001.ext` / `B-0001.ext`（每个日期/类型目录各自计数）。即使 AI 分析失败，原文件仍按日期+类型归档（状态标为 `partial`），AI 简介/标签为尽力而为。详情面板显示新副本路径（File destination），原始源路径折叠在 Source file 里。
-- **缩略图墙 + 多维检索**：按拍摄日期**分组展示**（每个日期一个区块，带粘性日期标题），左侧侧栏内置搜索框（按文件名 / 简介 / 描述 / 标签即时过滤），并支持按日期 / 类型 / 标签筛选（可折叠过滤面板）与按拍摄日期的新/旧排序；标签过滤按使用频率排序、可搜索、超量折叠。分析未完成的片段（`partial`）在缩略图上有「部分」标记，一眼可辨。
-- **一键打开 / 在 Finder 中查看**：缩略图与详情面板可一键用默认播放器打开视频；日期分组标题可一键在 Finder 中打开该日期文件夹（macOS `open`）。
-- **重新分析单个片段**：换模型或结果不佳时一键重跑 AI，保留你的手动纠正与标签。分类判错时，可在详情面板切换 A/B 类型——副本会自动**移动**到正确的 A-roll/B-roll 目录并重命名，`library_path` 同步更新。
-- **关键帧推荐（剪辑切点 + 精选帧）**：为每段素材给出最多 N 条（默认 3，可配置）排序的剪辑建议——**A-roll 由文本模型基于转写选段**、**B-roll 由 Qwen3-VL 基于采样帧挑选**，每条含 in/out 时码、代表帧与一句理由。扫描完成后可自动排队（设置开关），也可在详情面板按需生成；画廊卡片有「已有建议」角标。
-- **片段拍摄日期显示**：缩略图卡片和详情面板均展示片段的拍摄时间（优先使用嵌入 capture time，回退到文件创建时间）。
-- **任务队列管理**：单独的「任务队列」页可查看所有扫描/重分析任务，支持删除、重试失败项、全局暂停/恢复；队列暂停时扫描会自动提示并可选恢复。
-- **原生文件夹选择**：设置页选「素材文件夹 / 素材库」时弹出 macOS 原生选择框，返回真实绝对路径（浏览器选择器拿不到绝对路径）。
-- **设置页绑定素材库**：首次使用选/填一个绝对路径即可绑定库，**运行时热生效、无需重启**（也支持 `CUTFINDER_LIBRARY` 环境变量）。设置页每项选项均有中文说明文字。
-- **扫描后自动刷新**：Scan 完成后自动轮询任务状态并刷新缩略图墙，无需手动操作。
-- **深色专业界面**：近黑面板让缩略图突出，A-roll/B-roll 以颜色+图标区分，贴近 FCP 调性（见 [`doc/ui-design.md`](./doc/ui-design.md)）。
-
-### 不破坏原素材（核心约束）
-
-- **原文件只读**，所有整理只发生在复制出来的新素材库里。
-- **拍摄时间永不改变**（内嵌 QuickTime/EXIF 时间不被写）。复制保留文件的修改/访问时间，并在 macOS 上额外保留**创建时间**（birth time），重命名/重定位均为同卷 rename，不改任何时间戳。
-- **离线**，素材不出本机。
-- **幂等**，重扫只处理新文件（指纹去重），不重复复制。
+> **Status: core functionality is complete and runs end-to-end.** Backend adapters, the orchestration layer, the API wiring layer (`create_app`), and the frontend are all implemented and connected. `make test-unit` (367 unit tests), frontend `vitest` (190 tests), `npm run build` (type-clean), `make check-omlx`, and `make dev` all pass. The model inference chain (text / vision / transcription / VAD) is verified against a real OMLX server plus local integration tests (see [Testing](#testing)).
 
 ---
 
-## 架构概览
+## What it does
+
+- **Automatic A-roll / B-roll classification** — detects the presence of spoken narration (Silero VAD). The verdict is correctable by hand, and corrections are remembered.
+- **A-roll summary + tags** — `mlx-whisper` transcribes the Chinese narration → a Qwen text model summarizes it. The full transcript is stored and searchable.
+- **B-roll visual tags + description** — extracted frames are sent to a vision model that describes what's on screen.
+- **Switchable interface language (EN / ZH)** — the entire UI can be flipped between **English and Chinese** in Settings (defaults to English, remembered per device), fully independent of the AI output language below.
+- **Switchable AI output language** — summaries / visual descriptions can be generated in **Chinese or English** (defaults to Chinese), chosen in Settings.
+- **Auto-organize and rename by capture date + type** — copies land in `<library>/YYYY-MM-DD/A-roll(or B-roll)/` and are renamed in order as `A-0001.ext` / `B-0001.ext` (counted per date/type folder). Even when AI analysis fails, the original is still filed by date + type (status flagged `partial`); the AI summary/tags are best-effort. The detail panel shows the new copy path (File destination); the original source path is collapsed under Source file.
+- **Thumbnail wall + multi-dimensional search** — clips are **grouped by capture date** (one block per date with a sticky date header). A search box in the left sidebar filters live by filename / summary / description / tags, plus filters by date / type / tag (collapsible filter panel) and newest/oldest sort. The tag filter is sorted by frequency, searchable, and collapses when there are many tags. Clips with incomplete analysis (`partial`) carry a "partial" badge on the thumbnail.
+- **One-click Open / Reveal in Finder** — thumbnails and the detail panel open the video in the default player; date-group headers open that date's folder in Finder (macOS `open`).
+- **Re-analyze a single clip** — re-run the AI with one click (when changing models or unhappy with the result), preserving your manual corrections and tags. If the A/B verdict was wrong, toggle the type in the detail panel — the copy is **moved** to the correct A-roll/B-roll folder and renamed, and `library_path` is updated.
+- **Keyframe suggestions (cut points + highlight frames)** — for each clip, up to N ranked editing suggestions (default 3, configurable): **A-roll uses the text model over the transcript**, **B-roll uses Qwen3-VL over sampled frames**. Each suggestion carries in/out timecodes, a representative frame, and a one-line rationale. Suggestions can auto-queue after a scan (a Settings toggle) or be generated on demand in the detail panel; gallery cards show a "has suggestions" badge.
+- **Capture-date display** — both thumbnail cards and the detail panel show each clip's capture time (embedded capture time preferred, falling back to file creation time).
+- **Task queue management** — a dedicated Task Queue page lists every scan / re-analyze job, with delete, retry-failed, and global pause/resume; scanning prompts you when the queue is paused.
+- **Native folder picker** — choosing the footage folder / library in Settings opens the macOS native picker and returns a real absolute path (browser pickers can't).
+- **Bind your library in Settings** — pick or type one absolute path on first use; it takes effect **at runtime with no restart** (a `CUTFINDER_LIBRARY` env var also works).
+- **Auto-refresh after scan** — when a scan finishes, the app polls job status and refreshes the thumbnail wall automatically.
+- **Dark professional UI** — near-black panels make thumbnails pop; A-roll/B-roll are distinguished by color + icon, close to FCP's feel (see [`doc/ui-design.md`](./doc/ui-design.md)).
+
+### Never touch the originals (core constraints)
+
+- **Originals are read-only** — all organizing happens on copies in a separate library.
+- **Capture time never changes** — embedded QuickTime/EXIF capture time is never written. Copies preserve filesystem modified/accessed times, and additionally preserve the **creation (birth) time** on macOS. Renames/relocations are same-volume renames and touch no timestamps.
+- **Offline** — footage never leaves your machine.
+- **Idempotent** — re-scans only process new files (dedup by fingerprint); nothing is copied twice.
+
+---
+
+## Architecture overview
 
 ```
-前端 (Vite + React + Tailwind，深色优先)  :5080
-   │ HTTP (REST + SSE)，经 Vite dev proxy → :5081
-API 层 (FastAPI，薄)                       :5081
-   │  create_app() 把真实适配器装配到可变 LibraryContext（库可运行时热绑定）
-编排层 (Pipeline Orchestrator + 后台队列/SSE 进度)
-   │  只依赖接口(Protocol)
-适配器层 ── ffmpeg/ffprobe · Silero VAD · mlx-whisper · OMLX(文本+视觉) · SQLite
+Frontend (Vite + React + Tailwind, dark-first)   :5080
+   │ HTTP (REST + SSE), via Vite dev proxy → :5081
+API layer (FastAPI, thin)                          :5081
+   │  create_app() wires real adapters into a mutable LibraryContext (library bound at runtime)
+Orchestration (Pipeline Orchestrator + background queue/SSE progress)
+   │  depends only on interfaces (Protocols)
+Adapters ── ffmpeg/ffprobe · Silero VAD · mlx-whisper · OMLX (text + vision) · SQLite
 ```
 
-每个外部依赖都藏在接口后面，业务逻辑只依赖接口 → 模块可独立替换与测试。详见 [`doc/detailed-design.md`](./doc/detailed-design.md)。
+Every external dependency hides behind an interface; business logic depends only on those interfaces, so modules are independently swappable and testable. See [`doc/detailed-design.md`](./doc/detailed-design.md).
 
-### 模型服务
+### Model serving
 
-| 用途 | 模型（OMLX 上的 id） | 运行方式 |
+| Purpose | Model (id on OMLX) | How it runs |
 |---|---|---|
-| A-roll 简介/标签（文本） | `Qwen3.6-35B-A3B` | OMLX（OpenAI 兼容接口） |
-| B-roll 画面识别（视觉） | `Qwen3-VL-8B` | OMLX（同接口，base64 传帧） |
-| A-roll 语音转写 | `mlx-whisper`（默认 `mlx-community/whisper-large-v3-mlx`） | 独立进程（OMLX 不托管音频） |
-| A/B 人声检测 | Silero VAD | 本地 |
+| A-roll summary/tags (text) | `Qwen3.6-35B-A3B` | OMLX (OpenAI-compatible API) |
+| B-roll visual recognition (vision) | `Qwen3-VL-8B` | OMLX (same API, frames sent as base64) |
+| A-roll speech transcription | `mlx-whisper` (default `mlx-community/whisper-large-v3-mlx`) | Separate process (OMLX does not serve audio) |
+| A/B speech detection | Silero VAD | Local |
 
-文本与视觉模型都由 [OMLX](https://github.com/jundot/omlx)（Apple Silicon 本地推理服务器，菜单栏 App）托管。
+The text and vision models are both served by [OMLX](https://github.com/jundot/omlx), a local Apple-Silicon inference server (menu-bar app).
 
-> ⚠️ 模型名必须与你的 OMLX 实际加载的 id 完全一致。默认视觉模型为 `Qwen3-VL-8B`；如你的 OMLX 暴露的是带后缀的 id，请在「设置」页或 `<库>/.cutfinder/config.json` 里改 `vision_model` / `text_model`。
+> ⚠️ The model names must match exactly the ids your OMLX has loaded. The default vision model is `Qwen3-VL-8B`; if your OMLX exposes a suffixed id, change `vision_model` / `text_model` in Settings or in `<library>/.cutfinder/config.json`.
 
 ---
 
-## 要求 (Requirements)
+## Requirements
 
-### 必需
+### Required
 
-| 依赖 | 说明 |
+| Dependency | Notes |
 |------|------|
-| **macOS + Apple Silicon** | AI 推理依赖 Metal GPU，无法在 Docker / x86_macOS 上运行 |
-| [OMLX](https://github.com/jundot/omlx) ≥ 0.1 | Apple Silicon 本地模型服务器（菜单栏 App），需预加载 `Qwen3.6-35B-A3B`（文本）和 `Qwen3-VL-8B`（视觉）两个模型 |
-| [uv](https://docs.astral.sh/uv/) | Python 依赖管理（`pip install uv`） |
-| **Python ≥ 3.12** | uv 会自动按 `mise.toml` 拉取 3.12 虚拟环境 |
-| **Node.js ≥ 20** + `npm` | 前端开发服务器与构建工具 |
-| [ffmpeg](https://ffmpeg.org/) (`ffprobe` + `ffmpeg`) | 视频元数据提取与缩略图生成（Homebrew: `brew install ffmpeg`） |
+| **macOS + Apple Silicon** | AI inference needs the Metal GPU — cannot run in Docker / x86 macOS |
+| [OMLX](https://github.com/jundot/omlx) ≥ 0.1 | Local Apple-Silicon model server (menu-bar app); preload `Qwen3.6-35B-A3B` (text) and `Qwen3-VL-8B` (vision) |
+| [uv](https://docs.astral.sh/uv/) | Python dependency management (`pip install uv`) |
+| **Python ≥ 3.12** | uv provisions a 3.12 venv per `mise.toml` |
+| **Node.js ≥ 20** + `npm` | Frontend dev server and build tooling |
+| [ffmpeg](https://ffmpeg.org/) (`ffprobe` + `ffmpeg`) | Video metadata extraction and thumbnail generation (`brew install ffmpeg`) |
 
-### 可选
+### Optional
 
-- [mise](https://mise.jdx.dev/) — 自动管理 Python / Node 版本（`mise.toml`）
-- [Homebrew](https://brew.sh/) — 用于安装 ffmpeg / OMLX
+- [mise](https://mise.jdx.dev/) — auto-manages Python / Node versions (`mise.toml`)
+- [Homebrew](https://brew.sh/) — to install ffmpeg / OMLX
 
-> ⚠️ **AI 推理必须原生运行**，不能跑在 Docker 容器里。
+> ⚠️ **AI inference must run natively** — it cannot run inside a Docker container.
 
 ---
 
-## 安装与启动 (Setup & Run)
+## Setup & Run
 
-### 1. 安装依赖
+### 1. Install dependencies
 
 ```bash
 git clone <repo> && cd CutFinder
 make setup                      # mise install + brew bundle + uv sync + npm install
 ```
 
-> OMLX 配置可在**设置页**里填（见步骤 2），无需 `.env`。若你偏好用 `.env`，再 `cp .env.example .env` 并填值。
+> OMLX can be configured in the **Settings page** (step 2) — no `.env` required. If you prefer a `.env`, run `cp .env.example .env` and fill in the values.
 
-> 没有 mise？先 `brew install mise`，或手动执行：
+> No mise? Run `brew install mise` first, or do it manually:
 > ```bash
-> cd backend && uv sync           # Python 依赖（含 pytest / mypy / ruff，已随 uv sync 安装）
+> cd backend && uv sync           # Python deps (pytest / mypy / ruff included via uv sync)
 > cd ../frontend && npm install   # Vite + React + Tailwind
 > ```
 
-### 2. 配置 OMLX 连接
+### 2. Configure the OMLX connection
 
-需要配置三项：OMLX 地址、API key、（可选）Whisper 模型路径。两种方式，任选其一：
+Three things to configure: OMLX URL, API key, and (optional) Whisper model path. Either way works:
 
-- **设置页（推荐，无需 `.env`）**：启动后打开 http://localhost:5080 → 「设置」→ **OMLX connection** 填写 Base URL / API key / Whisper 路径 → 保存。这些值存到 `~/.cutfinder/config.json`（**全机共用**，换素材库不用重填），保存即生效。
+- **Settings page (recommended, no `.env`)** — after launching, open http://localhost:5080 → **Settings** → **OMLX connection** → fill in Base URL / API key / Whisper path → Save. These are stored in `~/.cutfinder/config.json` (**shared machine-wide**, no need to re-enter per library) and take effect immediately.
 
-- **`.env`（可选，用于临时覆盖）**：在**仓库根目录**放一个 `.env`：
+- **`.env` (optional, for temporary overrides)** — place a `.env` in the **repo root**:
 
   ```ini
-  # OMLX 本地推理服务器（OpenAI 兼容）。默认假设 :8000；按你的实际端口改。
+  # OMLX local inference server (OpenAI-compatible). Defaults to :8000; change to match your port.
   OMLX_BASE_URL=http://localhost:8000/v1
   OMLX_API_KEY=your-omlx-key
   ```
 
-  `make dev` / `make check-omlx` / `make test-integration` 会自动加载它；手动用 `uvicorn` 起后端则先 `set -a; source .env; set +a` 导出。
+  `make dev` / `make check-omlx` / `make test-integration` load it automatically; if you start the backend manually with `uvicorn`, export it first with `set -a; source .env; set +a`.
 
-> **优先级**（高→低）：**设置页全局配置**（`~/.cutfinder/config.json`）> **环境变量 / `.env`**。设置页是权威来源——存进去的值始终生效，即使 `.env` 设了同一个键也不会被它盖掉（注意 `make dev` 会把 `.env` 导出成环境变量，所以两者属于同一层「兜底」）。`.env` / 环境变量只用于填设置页尚未配置的键。
+> **Priority** (high → low): **Settings global config** (`~/.cutfinder/config.json`) > **env vars / `.env`**. The Settings page is authoritative — values saved there always win, even if `.env` sets the same key (note `make dev` exports `.env` into the environment, so both belong to the same "fallback" layer). `.env` / env vars only fill keys the Settings page hasn't set.
 
-### 3. 验证 OMLX 就绪
+### 3. Verify OMLX is ready
 
 ```bash
-make check-omlx                 # 校验文本/视觉模型是否已加载
+make check-omlx                 # checks that the text/vision models are loaded
 # → OMLX OK — models: [...]
 #   All required text/vision models are present.
 ```
 
-> `make check-omlx` 只读 `.env` / 环境变量，**不读**设置页存的全局配置。若你走 UI 配置（无 `.env`），可跳过这步，直接在应用里扫描时验证；或临时 `OMLX_BASE_URL=... OMLX_API_KEY=... make check-omlx`。
+> `make check-omlx` reads only `.env` / env vars, **not** the Settings global config. If you configure via the UI (no `.env`), skip this and verify in-app on your first scan, or run it ad-hoc: `OMLX_BASE_URL=... OMLX_API_KEY=... make check-omlx`.
 
-### 4. 启动开发服务器（推荐：一条命令同时起前后端）
+### 4. Start the dev servers (recommended: one command for both)
 
 ```bash
 make dev
-# 后端 → http://localhost:5081 （FastAPI）
-# 前端 → http://localhost:5080 （Vite，/api 已代理到后端 5081）
+# Backend → http://localhost:5081 (FastAPI)
+# Frontend → http://localhost:5080 (Vite, /api proxied to backend 5081)
 ```
 
-打开 **http://localhost:5080**，按 `Ctrl+C` 同时停止两个服务。
+Open **http://localhost:5080**. `Ctrl+C` stops both servers.
 
-### 5. 绑定素材库（首次使用）
+### 5. Bind your library (first run)
 
-素材库目录用于存放整理后的副本、缩略图与 SQLite 目录（都在 `<库>/.cutfinder/`）。两种方式：
+The library directory holds the organized copies, thumbnails, and the SQLite catalog (all under `<library>/.cutfinder/`). Two ways:
 
-- **设置页（推荐）**：打开 http://localhost:5080 → 「设置」→ **Set up your library** → 点 **Choose…** 用 macOS 原生选择框选目录（或手填绝对路径）→ **运行时热生效、无需重启**，且选择会被记住（持久化到 `~/.cutfinder`）。
-- **环境变量**：在根 `.env` 里加 `CUTFINDER_LIBRARY=/path/to/library`，再 `make dev`。
+- **Settings page (recommended)** — open http://localhost:5080 → **Settings** → **Set up your library** → click **Choose…** to pick a directory with the macOS native picker (or type an absolute path). It takes effect **at runtime with no restart**, and the choice is remembered (persisted to `~/.cutfinder`).
+- **Env var** — add `CUTFINDER_LIBRARY=/path/to/library` to the root `.env`, then `make dev`.
 
-> 未绑定库时后端正常启动，但目录类接口返回 503、「设置」页显示绑定向导，直到你绑定一个库。
+> Without a bound library the backend still starts, but directory-type endpoints return 503 and the Settings page shows the binding wizard until you bind one.
 
-### 手动分起（调试用）
+### Manual split start (for debugging)
 
 ```bash
-# 终端 1 — 后端（先导出 .env）
+# Terminal 1 — backend (export .env first)
 cd backend
 set -a; source ../.env; set +a
 CUTFINDER_LIBRARY=/path/to/library uv run uvicorn cutfinder.api.app:app --reload --port 5081
 
-# 终端 2 — 前端
+# Terminal 2 — frontend
 cd frontend && npx vite        # http://localhost:5080
 ```
 
-### 下载 Whisper 模型（首次转写前，可选预热）
+### Download the Whisper model (optional pre-warm before first transcription)
 
 ```bash
-make models                     # 预下载 mlx-whisper large-v3-mlx
+make models                     # pre-download mlx-whisper large-v3-mlx
 ```
 
-默认下载到 HuggingFace 缓存（`~/.cache/huggingface`）。若想把模型放到自定义目录，在**设置页 → OMLX connection → Whisper model path** 填该目录，或在根 `.env` 里设置：
+Downloads into the HuggingFace cache (`~/.cache/huggingface`) by default. To place it in a custom directory, set **Settings → OMLX connection → Whisper model path** to that directory, or set it in the root `.env`:
 
 ```ini
 WHISPER_MODEL_PATH=/Users/you/AI/Models/ASRs/mlx-community/whisper-large-v3-mlx
 ```
 
-设置后：`make models` 会把模型下载到该目录；运行时 CutFinder 直接从此路径离线加载（覆盖 `whisper_model` 偏好），不再用 HF 缓存。
+Once set: `make models` downloads into that directory, and at runtime CutFinder loads the model offline from there (overriding the `whisper_model` preference) instead of the HF cache.
 
 ---
 
-## 测试
+## Testing
 
-### 后端（pytest）
+### Backend (pytest)
 
 ```bash
 cd backend
 
-uv run pytest tests/unit             # 仅单元测试（367 项，无需外部服务，秒级）
-uv run pytest -m integration         # 集成测试（需真实 OMLX / ffmpeg / 样片）
-uv run mypy cutfinder/               # 类型检查（strict，clean）
-uv run ruff check cutfinder/         # linting（clean）
+uv run pytest tests/unit             # unit tests only (367, no external services, seconds)
+uv run pytest -m integration         # integration tests (need a real OMLX / ffmpeg / sample clips)
+uv run mypy cutfinder/               # type check (strict, clean)
+uv run ruff check cutfinder/         # linting (clean)
 ```
 
-集成测试在缺少 `.env` / OMLX / 样片时会**自动 skip**，不会误报失败。要真正跑 OMLX 链路：
+Integration tests **auto-skip** when `.env` / OMLX / sample clips are missing — no false failures. To actually exercise the OMLX chain:
 
 ```bash
 cd backend
@@ -200,131 +202,71 @@ set -a; source ../.env; set +a
 uv run pytest -m integration
 ```
 
-### 前端（Vitest + Playwright）
+### Frontend (Vitest + Playwright)
 
 ```bash
 cd frontend
 
-npx vitest run                  # 单元/组件测试
-npx playwright test             # e2e（自动起 Vite dev server）
+npx vitest run                  # unit / component tests
+npx playwright test             # e2e (auto-starts the Vite dev server)
 ```
 
-### Makefile 快捷命令
+### Makefile shortcuts
 
 ```bash
-make test-unit         # 后端单元测试（快，tests/unit，无外部依赖）—— 日常用这个
-make test              # 后端全量（含 -m integration；本机有 OMLX/.env 时会真跑，可能慢/挂起）
-make test-integration  # 仅跑 -m integration（自动加载 .env；需 ffmpeg/OMLX）
+make test-unit         # backend unit tests (fast, tests/unit, no external deps) — use this day to day
+make test              # full backend (incl. -m integration; runs for real if OMLX/.env are present, may be slow)
+make test-integration  # only -m integration (auto-loads .env; needs ffmpeg/OMLX)
 make e2e               # Playwright e2e
 ```
 
-> Vitest 仍需手动进入 frontend/: `cd frontend && npx vitest run`
+> Vitest is still run from frontend/: `cd frontend && npx vitest run`
 
-### 已知遗留项（不影响运行）
+### Known leftovers (don't affect running)
 
-- 真实集成测试中**视觉/文本打标的输出文本可能中英混杂**（Qwen3-VL-8B / 文本模型的模型/prompt 表现，非适配器 bug）；结构化结果（description/summary + tags）始终有效。
-- **AI 简介为非确定性**：OMLX 调用使用 `temperature=0.7`（并已去掉会让量化模型陷入复读循环的严格 `json_schema`，改为宽松解析），对清晰素材稳定，对**噪声/含糊音轨**的边缘片段可能无法生成简介 —— 此时片段仍会被归档（状态 `partial`），可手动重分析。
-
----
-
-## 文档
-
-- [需求文档 `doc/proposal.md`](./doc/proposal.md) —— 目标、需求、范围、技术选型
-- [详细设计 `doc/detailed-design.md`](./doc/detailed-design.md) —— 模块、接口、数据模型、API、测试与部署
-- [UI 设计系统 `doc/ui-design.md`](./doc/ui-design.md) —— 配色/字体/间距 token、组件规范、页面布局（深色优先）
-- [任务清单 `doc/tasks/`](./doc/tasks/progress.md) —— 各模块最小任务与总体进度
-- [`CLAUDE.md`](./CLAUDE.md) —— 给 AI 协作者的项目约束与架构速览
+- In real integration runs, **visual/text tag text may mix Chinese and English** (a model/prompt characteristic of Qwen3-VL-8B / the text model, not an adapter bug); the structured result (description/summary + tags) is always valid.
+- **AI summaries are non-deterministic** — OMLX calls use `temperature=0.7` (and the strict `json_schema` that made quantized models loop was dropped in favor of lenient parsing). Stable on clear footage; on edge clips with noisy/vague audio a summary may not be produced — the clip is still filed (status `partial`) and can be re-analyzed by hand.
 
 ---
 
-## 更新日志 (Changelog)
+## Docs
 
-### 2026-06-18
-
-**功能：**
-- **关键帧推荐（需求 8）**：新增「剪辑切点 + 精选帧」推荐——A-roll 文本模型按 transcript **句子序号**选段（杜绝幻觉时间码）、B-roll 视觉模型按采样帧挑选；每段最多 N 条（默认 3，可配置）排序建议，含 in/out 时码 / 代表帧 / 理由。独立 `keyframes` 队列任务：扫描后自动排队（设置开关）+ 详情面板按需。新增 `keyframes` 表、`POST /api/clips/{id}/keyframes`、帧图片端点、列表 `has_keyframes`；前端详情建议列表 + 画廊角标 + 设置项（设计见 [`doc/tasks/16-keyframes.md`](./doc/tasks/16-keyframes.md)）。
-- **打包为自安装 `CutFinder.app`**（`make app` → `dist/CutFinder.app` + `.dmg`）：拖入「应用程序」双击即用；首次启动用 `uv` 自建 Python 环境、检测/装 ffmpeg，再由单进程同时提供 UI + API（后端新增可选静态托管 `CUTFINDER_STATIC_DIR`，前端生产构建走同源 `/api`）。运行环境放在 `~/Library/Application Support/CutFinder/`，不写进 .app 包内。
-- **Dock 退出修复**：启动器不再 `exec` 进 venv 的 Python（那会让 macOS 撤掉 Dock 图标、服务器变孤儿进程无法退出）；改为保持脚本为前台进程、把 uvicorn 作为子进程并转发 Dock 的「退出」信号（SIGTERM，`--timeout-graceful-shutdown 5`），图标常驻、可从 Dock 正常关闭。
-
-### 2026-06-17
-
-**功能：**
-- **界面语言可切换（英 / 中）**：新增轻量 i18n 层（`src/i18n`），整套 UI 文案默认英文、可在「设置 → Interface language」切到中文，按设备记忆（localStorage）；与 AI 输出语言完全解耦。
-- **库副本重命名**：复制进库时按类型顺序重命名为 `A-0001.ext` / `B-0001.ext`（每个日期/类型目录各自计数、可重扫续号），`library_path` 落库；缩略图与详情面板显示新文件名/路径，源路径折叠在 Source file。
-- **保留创建时间**：`shutil.copy2` 之外，在 macOS 上用 `setattrlist` 把副本的创建时间（birth time）设回原文件，使「创建/修改」时间与原素材一致。
-- **A/B 纠正会重定位副本**：在详情面板切换 A/B 时，库副本会**移动**到正确的 A-roll/B-roll 目录并重命名（同卷 rename，保留时间戳），`library_path` 同步更新。
-- **打开 / 在 Finder 查看**：新增 `POST /api/open`（仅限库/源目录内的路径），缩略图与详情面板可一键播放视频，日期分组可一键在 Finder 中打开该日期文件夹。
-- **搜索可用并移入侧栏**：搜索框从顶部 Header 移到左侧过滤侧栏，并真正生效——按文件名 / 简介 / 描述 / 标签客户端即时过滤。
-- **后端日志查看器**：Header 新增日志按钮，弹出 modal 实时查看后端日志（`GET /api/logs` 内存环形缓冲，轮询增量拉取），按级别着色、可暂停/清空——无需再盯终端。日志现包含每个片段的处理步骤（`▶ Processing …` / probe / vad / analysis / copy / `✓ Finished`），不再只有 OMLX 的 HTTP 调用。
-
-**UI / UX：**
-- 详情面板的折叠区（Transcript / Source file / Metadata）统一为同一风格，Source file 与 Metadata 归并到底部。
-- 标签过滤优化：按使用频率排序、可搜索、超过 24 个折叠为「Show all N」。
-- 「Interface language」独立成区（设置页顶部），不再混在 Processing options 里。
-- Scan 按钮改为图标 + 文字，修复中文「扫描」换行问题。
-- 新增品牌 Logo：Header 左上角换成 CutFinder 标志（深色头部下 invert + 混合模式渲染为白色），浏览器标签页 favicon 改为方形「CF」场记板图标（`frontend/public/`）。
-
-**修复：**
-- `correct_roll` 之前只改数据库类型、不移动实体副本，导致 B-roll 仍留在 A-roll 目录——现已修正。
-- 缩略图接口改为 `no-store`（原本缓存一天），片段重分析/改类型后不再显示旧的错误缩略图。
-
-### 2026-06-16
-
-**UI / UX：**
-- 缩略图墙按拍摄日期**分组展示**（每组一个区块 + 粘性日期标题）
-- 缩略图卡片日期对齐到卡片底部（不受标签行数影响）；时长标签去掉小数（`0:06`）
-- 缩略图卡片与详情面板新增拍摄日期显示（`capture_time` / `created_at`）
-- 排序控件精简为按日期新/旧两种选项；过滤面板支持折叠收起
-- 设置页可在 UI 内编辑 OMLX 地址/密钥、Text/Vision/Whisper 模型，无需 `.env`
-- 扫描进度条更精细（含浮动卡片 + 顶部细条），显示当前处理文件
-- 详情面板头部重设计（A/B label + 关闭按钮置顶，缩略图更紧凑）
-- clip 卡片新增底部重新分析按钮（图标 + loading spinner）
-- 设置页改为响应式双列布局，每项选项附中文说明文字
-
-**功能：**
-- OMLX 配置改为 UI 管理（存 `~/.cutfinder/config.json`，全机共用），优先级高于 `.env`/环境变量；`.env` 现为可选兜底，`make dev` 不再强制生成它
-- 保存设置后即时重建 pipeline，模型 / 语言 / VAD / OMLX 改动**无需重启**即可生效
-- Text / Vision 模型可在设置页修改（留空回退默认 `Qwen3.6-35B-A3B` / `Qwen3-VL-8B`）
-- 扫描队列暂停时点击 Scan 会提示用户并可选恢复后继续
-- Scan 完成后自动轮询任务状态，结束后即时刷新缩略图墙（无需手动操作）
-- 重新分析后清除 `partial` 状态；扫描期间不再阻塞事件循环
-
-**修复：**
-- B-roll 抽帧临时目录确保清理，无残留
-- 扫描进度从 `0/0` 修复为正确总数；缩略图 URL 解析修正
-- Ctrl+C 在 macOS 上可同时停止前后端开发服务器
+- [Proposal `doc/proposal.md`](./doc/proposal.md) — goals, requirements, scope, tech choices
+- [Detailed design `doc/detailed-design.md`](./doc/detailed-design.md) — modules, interfaces, data model, API, testing & deployment
+- [UI design system `doc/ui-design.md`](./doc/ui-design.md) — color/font/spacing tokens, component specs, page layouts (dark-first)
+- [Task list `doc/tasks/`](./doc/tasks/progress.md) — per-module tasks and overall progress
+- [`CLAUDE.md`](./CLAUDE.md) — project constraints and architecture cheat-sheet for AI collaborators
 
 ---
 
-## 打包为 macOS App（CutFinder.app）
+## Package as a macOS App (CutFinder.app)
 
-把整个应用打包成一个可拖入「应用程序」文件夹的 `CutFinder.app`（自安装启动器）：
+Bundle the whole app into a `CutFinder.app` you can drag into Applications (a self-installing launcher):
 
 ```bash
-make app          # → dist/CutFinder.app（以及 dist/CutFinder.dmg）
+make app          # → dist/CutFinder.app (and dist/CutFinder.dmg)
 ```
 
-把 `dist/CutFinder.app` 拖到 `/Applications`，双击即可：
+Drag `dist/CutFinder.app` to `/Applications` and double-click:
 
-- 首次启动会**自建运行环境**——用 `uv` 安装 Python 依赖、检测/安装 ffmpeg（有 Homebrew 时自动 `brew install ffmpeg`），随后启动本地服务并在浏览器打开（默认 `http://127.0.0.1:5080`）。之后启动是秒开。
-- 运行环境写在 `~/Library/Application Support/CutFinder/`（**不写进 .app 包内**，便于更新/签名）；日志在同目录 `launch.log`。
-- `.app` 内置了**预构建的前端**与后端源码，由同一个服务同时提供 UI 与 API（运行时**不需要 Node**）。
+- First launch **builds its own runtime** — installs Python deps with `uv`, detects/installs ffmpeg (auto `brew install ffmpeg` if Homebrew is present), then starts the local service and opens the browser (default `http://127.0.0.1:5080`). Later launches open in a second.
+- The runtime lives in `~/Library/Application Support/CutFinder/` (**not inside the .app bundle**, for easy updates/signing); logs are at `launch.log` in that directory.
+- The `.app` bundles a **prebuilt frontend** and the backend source; one service serves both the UI and the API (**no Node needed at runtime**).
 
-> ⚠️ 两件事仍需另行准备（无法塞进我们的 .app）：
-> 1. **OMLX** 是独立的第三方菜单栏 App（本地模型服务器），需自行安装并加载 `Qwen` 模型；
-> 2. **Whisper 模型**首次转写时从 HuggingFace 下载（约 3GB），或按上文 `WHISPER_MODEL_PATH` 预置。
+> ⚠️ Two things still need to be set up separately (they can't go inside our .app):
+> 1. **OMLX** is a separate third-party menu-bar app (the local model server) — install it and load the `Qwen` models yourself.
+> 2. The **Whisper model** downloads from HuggingFace on first transcription (~3GB), or pre-place it via `WHISPER_MODEL_PATH` above.
 >
-> 该 .app 未做 Apple 代码签名/公证，首次打开可能需「右键 → 打开」放行。品牌图源在 `branding/`。
+> The .app is not Apple code-signed/notarized; first open may require "right-click → Open". Brand art sources are in `branding/`.
 
 ---
 
-## 路线图
+## Roadmap
 
-- **v1**：需求 0–7（自定义文件夹、保留拍摄时间、A/B 判定、A-roll 简介、日期+类型归档、标签、缩略图、接 OMLX）
-- **已完成（v1 之外）**：打包为自安装 `CutFinder.app`（`make app`）
-- **进行中**：关键帧（剪辑切点）建议（需求 8）
-- **后续 / TODO**：
-  - **原生 .app 外壳（Swift/ObjC 包装器）**：当前是 shell 脚本 .app，Dock 退出靠 SIGTERM。换成最小原生壳可获得标准应用菜单、稳定的 Dock 生命周期、点击 Dock 图标重开 UI、以及未来代码签名/公证。
-  - **导出 transcript 为 Final Cut Pro 可导入的字幕**（A-roll 已有带时间轴的 `Segment`，纯文本格式化即可导出 iTT / SRT；后端可加 `GET /api/clips/{id}/transcript.srt|.itt` + 详情面板「导出字幕」按钮，无需再调模型）
-  - Final Cut Pro 深度集成（FCPXML / 关键词导出；可与上一条合并：把字幕作为 caption 轨道随片段灌入 FCP）
-  - PyInstaller 全离线包 / Tauri 原生窗口
+- **v1**: requirements 0–7 (custom folders, preserve capture time, A/B detection, A-roll summary, date+type organization, tags, thumbnails, OMLX integration) — **done**.
+- **Beyond v1, done**: keyframe suggestions / cut points (requirement 8); self-installing `CutFinder.app` (`make app`).
+- **Next / TODO**:
+  - **Native .app shell (Swift/ObjC wrapper)** — the current .app is a shell-script launcher that relies on SIGTERM for Dock quit. A minimal native shell would give a standard app menu, a stable Dock lifecycle, reopening the UI on Dock-icon click, and future code signing/notarization.
+  - **Export transcript as Final Cut Pro-importable subtitles** — A-roll already has time-coded `Segment`s, so iTT / SRT export is just timecode formatting (no model call). A backend `GET /api/clips/{id}/transcript.srt|.itt` + a detail-panel "Export subtitles" button would do it.
+  - **Final Cut Pro deep integration** (FCPXML / Keywords export; can merge with the above: subtitles as a caption track loaded into FCP with each clip).
+  - PyInstaller fully-offline bundle / Tauri native window.

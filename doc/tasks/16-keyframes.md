@@ -40,29 +40,29 @@ CutSuggestion(rank:int, start_s:float, end_s:float, reason:str,
 ## 子任务
 
 ### 后端
-- [ ] `domain/models.py`：新增 `CutSuggestion`（frozen）。
-- [ ] `config.py` / prefs：新增 `keyframe_count:int=3`、`keyframe_auto:bool=True`。（B-roll 采样密度先用内部默认 ~12，暂不暴露为设置。）
-- [ ] `ports/media.py`：`FrameExtractor` 增加 `grab_at(path, seconds, out_path) -> Path`（ffmpeg seek 抓单帧）。
-- [ ] `ports/ai.py`：新增关键帧推荐能力——
+- [x] `domain/models.py`：新增 `CutSuggestion`（frozen）。
+- [x] `config.py` / prefs：新增 `keyframe_count:int=3`、`keyframe_auto:bool=True`。（B-roll 采样密度先用内部默认 ~12，暂不暴露为设置。）
+- [x] `ports/media.py`：`FrameExtractor` 增加 `grab_at(path, seconds, out_path) -> Path`（ffmpeg seek 抓单帧）。
+- [x] `ports/ai.py`：新增关键帧推荐能力——
   - 文本：`recommend_cuts_from_segments(segments, n) -> list[CutSuggestion]`（仅 start/end/reason/rank，frame 后填）。
   - 视觉：`recommend_keyframes(frames_with_ts, n) -> list[CutSuggestion]`。
-- [ ] `adapters/`：在 `omlx_text.py` / `omlx_vision.py` 实现上述方法（复用现有 OMLX client、宽松 JSON 解析）；`ffmpeg_media.py` 实现 `grab_at`。
-- [ ] `pipeline/orchestrator.py`：`recommend_keyframes(clip_id) -> bool`——按 A/B 分流→生成建议→抓帧→持久化；逐步错误隔离（失败不抛、记 status）。
-- [ ] `adapters/sqlite_repo.py` + `ports/repository.py`：`keyframes` 表 + `save_keyframes / get_keyframes / clear_keyframes`；随 clip 级联删除；删除 clip 时一并清理帧文件目录。
-- [ ] `pipeline/worker.py`：新增 `enqueue_keyframes(clip_ids, job_id?)` 与 `_process_keyframes`；job kind `keyframes`。scan job 终态完成后，若 `keyframe_auto` 则对新片段入队 keyframes job。
-- [ ] `api/routes.py`：
+- [x] `adapters/`：在 `omlx_text.py` / `omlx_vision.py` 实现上述方法（复用现有 OMLX client、宽松 JSON 解析）；`ffmpeg_media.py` 实现 `grab_at`。
+- [x] `pipeline/orchestrator.py`：`recommend_keyframes(clip_id) -> bool`——按 A/B 分流→生成建议→抓帧→持久化；逐步错误隔离（失败不抛、记 status）。
+- [x] `adapters/sqlite_repo.py` + `ports/repository.py`：`keyframes` 表 + `save_keyframes / get_keyframes / clear_keyframes`；随 clip 级联删除；删除 clip 时一并清理帧文件目录。
+- [x] `pipeline/worker.py`：新增 `enqueue_keyframes(clip_ids, job_id?)` 与 `_process_keyframes`；job kind `keyframes`。scan job 终态完成后，若 `keyframe_auto` 则对新片段入队 keyframes job。
+- [x] `api/routes.py`：
   - `POST /api/clips/{id}/keyframes` → 入队单片段 keyframes job（返回 `{job_id}`）。
   - `GET /api/clips/{id}` 详情响应增加 `keyframes: [...]`。
   - `GET /api/clips/{id}/keyframes/{rank}/image` → 返回帧 JPEG，`Cache-Control: no-store`。
-- [ ] `api/schemas.py`：`CutSuggestionOut`；并入 `ClipDetailResponse`。
-- [ ] 列表/搜索响应增加 `has_keyframes: bool`（供画廊卡片角标）：`query_clips`/`search` 用 `EXISTS(SELECT 1 FROM keyframes WHERE clip_id=…)` 计算；`ClipSummary` / `ClipListItem` 增加该字段（默认 false）。
+- [x] `api/schemas.py`：`CutSuggestionOut`；并入 `ClipDetailResponse`。
+- [x] 列表/搜索响应增加 `has_keyframes: bool`（供画廊卡片角标）：`query_clips`/`search` 用 `EXISTS(SELECT 1 FROM keyframes WHERE clip_id=…)` 计算；`ClipSummary` / `ClipListItem` 增加该字段（默认 false）。
 
 ### 前端
-- [ ] `api/client.ts`：类型 `CutSuggestion`；`suggestKeyframes(id)`；详情含 `keyframes`；`ClipSummary` 增加 `has_keyframes?`。
-- [ ] `features/detail`：新增「Suggested cuts / 剪辑建议」区——每条 = 帧缩略图 + `mm:ss–mm:ss` + 理由；点击帧用默认播放器打开视频。新增「推荐关键帧」按钮 + loading 态；重跑后刷新。
-- [ ] `components/ThumbnailCard` + `features/gallery`：当 `has_keyframes` 为真时，在卡片角落显示一个小角标（剪刀/胶片图标，复用现有「部分」角标的样式语言），一眼可辨哪些片段已有建议。
-- [ ] `features/settings`：关键帧数量（可配置上限）+「扫描后自动推荐」开关。
-- [ ] `i18n`：EN/ZH 文案。
+- [x] `api/client.ts`：类型 `CutSuggestion`；`suggestKeyframes(id)`；详情含 `keyframes`；`ClipSummary` 增加 `has_keyframes?`。
+- [x] `features/detail`：新增「Suggested cuts / 剪辑建议」区——每条 = 帧缩略图 + `mm:ss–mm:ss` + 理由；点击帧用默认播放器打开视频。新增「推荐关键帧」按钮 + loading 态；重跑后刷新。
+- [x] `components/ThumbnailCard` + `features/gallery`：当 `has_keyframes` 为真时，在卡片角落显示一个小角标（剪刀/胶片图标，复用现有「部分」角标的样式语言），一眼可辨哪些片段已有建议。
+- [x] `features/settings`：关键帧数量（可配置上限）+「扫描后自动推荐」开关。
+- [x] `i18n`：EN/ZH 文案。
 
 ---
 

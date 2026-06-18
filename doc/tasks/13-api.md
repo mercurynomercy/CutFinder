@@ -4,17 +4,17 @@
 > **依赖**：09、11、12。 **位置**：`api/`。 **详见** detailed-design §6。
 
 ## 子任务
-- [ ] `api/app.py`：FastAPI 应用 + 依赖注入装配真实适配器
-- [ ] pydantic 请求/响应 schema
-- [ ] 路由：
+- [x] `api/app.py`：FastAPI 应用 + 依赖注入装配真实适配器
+- [x] pydantic 请求/响应 schema
+- [x] 路由：
   - [x] `POST /api/scan` → 入队、返回 `job_id`
   - [x] `GET /api/jobs/{id}`、`GET /api/jobs/{id}/events`（SSE）
   - [x] `GET /api/clips`（query：date/type/tag/q）、`GET /api/clips/{id}`
   - [x] `PATCH /api/clips/{id}`（纠正 roll/改 summary）
   - [x] `PUT /api/clips/{id}/tags`
   - [x] `POST /api/clips/{id}/reanalyze`
-  - [ ] `GET /api/search?q=`、`GET /api/clips/{id}/thumbnail`
-  - [ ] `GET /api/settings`、`PUT /api/settings`
+  - [x] `GET /api/search?q=`、`GET /api/clips/{id}/thumbnail`
+  - [x] `GET /api/settings`、`PUT /api/settings`
 
 ## 完成标准（DoD）—— TestClient + 假仓储/假编排
 - [x] 单测：各路由状态码与响应 schema（27/27 passing）

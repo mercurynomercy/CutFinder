@@ -11,8 +11,8 @@
 - [x] Playwright e2e：扫描 → 缩略图 → 按类型/标签筛选 → 编辑标签/纠正 A/B → 搜索命中（后端用假适配器 + 预置 DB）
 
 ## 完成标准（DoD）
-- [ ] 单测：`check-omlx` 解析逻辑（假 HTTP 响应）
-- [ ] `make test-integration` 在本机（OMLX 开启）跑通
-- [ ] `make e2e` 通过
+- [x] 单测：`check-omlx` 解析逻辑（假 HTTP 响应）
+- [x] `make test-integration` 在本机（OMLX 开启）跑通
+- [x] `make e2e` 通过
 - [x] Playwright e2e 测试用例编写完成（18 tests, 6 suites）
-- [ ] 按 README 流程在干净环境实测：`mise install && make setup` → `make check-omlx` → `make dev` 可用
+- [x] 按 README 流程在干净环境实测：`mise install && make setup` → `make check-omlx` → `make dev` 可用
