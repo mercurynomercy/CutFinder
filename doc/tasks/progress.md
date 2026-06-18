@@ -51,4 +51,5 @@
 ### 待办 (TODO)
 - [ ] **原生 macOS .app 外壳**：现为 shell 脚本启动器（`packaging/launcher.sh` + `scripts/build-app.sh`），Dock 退出依赖 SIGTERM 转发。后续用最小 Swift/ObjC 包装器替代，获得标准应用菜单、稳定的 Dock 生命周期、点击 Dock 图标重开 UI，以及代码签名/公证能力。
 - [x] [**16 关键帧推荐（剪辑切点 + 精选帧，需求 8）**](./16-keyframes.md) — 已实现：A-roll 文本/transcript、B-roll 视觉；扫描后自动排队 + 按需；详情面板建议列表 + 画廊角标 + 设置项。后端 +17 单测、前端 +3 测试，mypy/ruff/tsc 干净。
-- [ ] **导出 transcript 为 Final Cut Pro 支持的字幕**：A-roll 转写已按 `Segment(start_s, end_s, text)` 存好（带时间轴），导出 iTT（FCP 原生）/ SRT 只需格式化时间码、无需调模型。建议后端 `GET /api/clips/{id}/transcript.srt|.itt` + 详情面板「导出字幕」按钮；进阶可并入 FCPXML 深度集成（字幕作为 caption 轨道随片段灌入 FCP）。
+- [ ] [**17 字幕导出（独立成片 → FCP iTT/SRT）**](./17-subtitle-export.md) — 已设计、待实现。**独立工具**：选一段已剪辑成片 → `mlx-whisper` 重新转写（语言跟随 `output_language`，只转写不翻译）→ 导出 iTT + SRT 到用户选定文件夹；不入库、不分类、源视频只读。设计见 `17-subtitle-export.md` 与 `detailed-design.md` §3.13。
+  - 进阶（更后）：FCPXML 深度集成（字幕作为 caption 轨道随片段灌入 FCP）。

@@ -2,8 +2,8 @@
 
 > 配套需求文档：[`doc/proposal.md`](./proposal.md)。本文件把需求拆成可独立开发、独立测试的模块，给出每个模块的职责、接口、输入输出、依赖与测试方式。
 >
-> - **日期**：2026-06-13
-> - **范围**：proposal v1（需求 0–7）。需求 8（关键帧建议）与 FCP 集成不在本设计内，但接口预留扩展点。
+> - **日期**：2026-06-13（v1）；2026-06-18 增补 §3.13 字幕导出（独立成片 → FCP iTT/SRT）。
+> - **范围**：proposal v1（需求 0–7）。需求 8（关键帧建议）已实现（见 `tasks/16-keyframes.md`）。**字幕导出**为 v1 之外的独立工具（见 §3.13、`tasks/17-subtitle-export.md`），不改动 v1 流水线接口。
 
 ---
 
@@ -241,6 +241,29 @@ cutfinder/
 - **实现**：`asyncio.Queue` + 后台 task；进度用 `asyncio` 事件广播给 SSE 连接。Job 状态（total/done/error）持久化到仓储，便于刷新页面后恢复。
 - **独立测**：注入假编排器，验证队列顺序、进度事件序列、job 状态推进；SSE 用 FastAPI TestClient 断言事件流。
 
+### 3.13 SubtitleExporter（字幕导出，独立工具——v1 之外）
+
+> 与 per-clip 流水线**完全解耦**：输入是一段**已剪辑完成的成片**（不一定在素材库里），**重新转写**对齐成片自己的时间轴，导出 **iTT（FCP 原生）+ SRT**，**不入库、不分类、不复制源视频**。任务清单见 `tasks/17-subtitle-export.md`。
+
+- **职责**：成片 → `mlx-whisper` **转写**（按成片口语语言）→ 格式化为 iTT/SRT → 写入用户选定的输出文件夹。
+- **复用**：`MetadataProbe`（`fps`/`duration`）、`Transcriber`（`Transcript{full_text, segments:[Segment]}`）、Worker 队列 + SSE、`output_language` 配置、`/api/open`。
+- **语言：只转写、不翻译**。`output_language` 表示**成片本身的口语语言**（用户自知）；`Transcriber.transcribe` 增 `language: str | None=None`，把它作为 `mlx_whisper` 的 `language` 提示传入（`zh`→中文、`en`→英文），并写入字幕 `xml:lang`。不引入任何翻译（中文成片导出英文字幕等需求留作将来）。
+- **纯逻辑格式化**（`subtitle/format.py`，无 IO，本模块测试金矿）：
+  ```python
+  def to_srt(segments: list[Segment]) -> str: ...                       # HH:MM:SS,mmm
+  def to_itt(segments: list[Segment], *, language: str, fps: float) -> str: ...  # TTML, ttp:timeBase="media", HH:MM:SS.mmm
+  ```
+- **服务**（`pipeline/subtitle_exporter.py`，注入接口）：
+  ```python
+  def export(self, video_path: Path, out_dir: Path, formats: list[str], language: str) -> list[Path]:
+      # probe(fps) → transcribe(language) → 写 <名>.<lang>.{itt,srt}（同名不覆盖）→ 返回路径
+  ```
+  逐步错误隔离（失败记错误不抛）。`language` 缺省取 `output_language`，同时作为 Whisper 提示与字幕 `xml:lang`。
+- **Worker**：新增 job kind `subtitle`，payload `SubtitleRequest{video_path, out_dir, formats, language}`；`enqueue_subtitle / _process_subtitle`；产出路径放**内存结果存储**（避免改 DB schema），由 `GET /api/subtitles/{job_id}` 读取。
+- **硬约束**：源视频**只读**（绝不改名/改写）；只在选定文件夹**新建**字幕文件；转写**全本地离线**。
+- **iTT 决策**：TTML + `ttp:timeBase="media"` + `HH:MM:SS.mmm` 时钟码 + `xml:lang`；`fps` 读取备用。**验收须真机导入 Final Cut Pro 验证**。
+- **独立测**：格式化用黄金串（时码边界/转义/空分段）；服务注入假 probe/transcriber，断言把 `language`（zh/en）透传给 transcribe、按 formats 产出、命名不覆盖、`xml:lang` 正确。
+
 ---
 
 ## 4. 外部依赖与 Mock 策略（独立测试的关键）
@@ -328,6 +351,9 @@ CREATE VIRTUAL TABLE clips_fts USING fts5(
 | GET | `/api/search?q=` | 跨简介/描述/转写全文搜索(FTS5) |
 | GET | `/api/clips/{id}/thumbnail` | 缩略图图片 |
 | GET / PUT | `/api/settings` | 读/写配置 |
+| POST | `/api/subtitles/export` | 字幕导出(§3.13)：body `{video_path, out_dir, formats?, language?}`；返回 `job_id`（复用 `/api/jobs/{id}` + SSE） |
+| GET | `/api/subtitles/{job_id}` | 取该导出 job 的产出文件路径(完成后) |
+| POST | `/api/pick-file` | 原生选**文件**(macOS `choose file`，视频过滤)；对齐已有 `/api/pick-folder` |
 
 - API 层**薄**：只做参数校验(pydantic)、调用编排/仓储、序列化。便于用 FastAPI `TestClient` 配合假仓储/假编排器做接口测试。
 - 纠正 `roll_type` 写入 `roll_source='manual'`，重扫不被自动判定覆盖（“记住纠正”）。
@@ -347,6 +373,7 @@ CREATE VIRTUAL TABLE clips_fts USING fts5(
 | `features/detail` | 详情面板：简介、可编辑标签、转写、改 A/B、**重新分析按钮** | 断言编辑触发 PATCH/PUT、重分析触发 POST reanalyze、乐观更新 |
 | `features/settings` | 源/库文件夹、OMLX 配置 | 表单校验与保存 |
 | `features/jobs` | SSE 进度条、逐个完成提示 | mock SSE 事件流断言进度更新 |
+| `features/subtitles` (§3.13) | 选成片/选输出文件夹/勾选 iTT·SRT/进度/产出列表 + Reveal | mock pick/export/SSE，断言请求参数与产出渲染 |
 
 - **前后端契约**：以 §6 的请求/响应 schema 为准；前端类型从后端 pydantic 模型生成或手写对齐，降低漂移。
 
@@ -392,6 +419,8 @@ CREATE VIRTUAL TABLE clips_fts USING fts5(
 | `broll_frame_count` | `3` | B-roll 均匀抽帧数 |
 | `vad_threshold` | `0.15` | speech_ratio ≥ 阈值判 A-roll |
 | `worker_concurrency` | `1` | 顺序处理，尊重模型显存 |
+| `output_language` | `zh` | AI 简介/描述语言；字幕导出(§3.13)也沿用 |
+| `subtitle_default_formats` | `["itt","srt"]` | 字幕导出 UI 默认格式（可选项） |
 
 ---
 
@@ -447,7 +476,7 @@ OMLX_API_KEY=your-omlx-key
 - **测试边界**：单元测试一律 mock 外部依赖（仓储用内存 SQLite、LibraryWriter 用临时真文件，因其轻）；真实模型/视频只在带标记的集成测试出现。
 - **进度**：单 worker 顺序处理 + SSE 实时推进度；job 状态持久化以便刷新恢复。
 - **幂等与纠正**：指纹去重；手动纠正的 A/B 标 `manual`，重扫不被覆盖。
-- **预留扩展点**：需求 8 关键帧建议可复用 `FrameExtractor` + `VisionTagger`；FCP 集成可在仓储之上加一个导出器，均不影响现有接口。
+- **预留扩展点**：需求 8 关键帧建议可复用 `FrameExtractor` + `VisionTagger`；FCP 字幕导出（§3.13）复用 `Transcriber`（加 `language` 提示）+ 纯逻辑格式化器，作为独立工具挂在 Worker/SSE 上，**不改动 per-clip 流水线接口**。
 
 ---
 
