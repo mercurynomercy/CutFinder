@@ -90,26 +90,6 @@ class TestEnvSettings:
         assert env.OMLX_BASE_URL == ""
         assert env.OMLX_API_KEY == ""
 
-    def test_whisper_model_path_defaults_empty(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """WHISPER_MODEL_PATH is optional and defaults to empty."""
-        monkeypatch.setenv("OMLX_BASE_URL", "http://localhost:8000/v1")
-        monkeypatch.setenv("OMLX_API_KEY", "test-key-123")
-        monkeypatch.delenv("WHISPER_MODEL_PATH", raising=False)
-
-        assert EnvSettings(_env_file=None).WHISPER_MODEL_PATH == ""
-
-    def test_whisper_model_path_from_env(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """WHISPER_MODEL_PATH is read from the environment when set."""
-        monkeypatch.setenv("OMLX_BASE_URL", "http://localhost:8000/v1")
-        monkeypatch.setenv("OMLX_API_KEY", "test-key-123")
-        monkeypatch.setenv("WHISPER_MODEL_PATH", "/models/whisper-large-v3-mlx")
-
-        assert EnvSettings().WHISPER_MODEL_PATH == "/models/whisper-large-v3-mlx"
-
 
 # ── Global settings store (~/.cutfinder/config.json) ─────────────────
 

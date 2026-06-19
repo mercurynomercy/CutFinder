@@ -112,9 +112,9 @@ make setup                      # mise install + brew bundle + uv sync + npm ins
 
 ### 2. Configure the OMLX connection
 
-Three things to configure: OMLX URL, API key, and (optional) Whisper model path. Either way works:
+Two things to configure: OMLX URL and API key. Either way works:
 
-- **Settings page (recommended, no `.env`)** — after launching, open http://localhost:5080 → **Settings** → **OMLX connection** → fill in Base URL / API key / Whisper path → Save. These are stored in `~/.cutfinder/config.json` (**shared machine-wide**, no need to re-enter per library) and take effect immediately.
+- **Settings page (recommended, no `.env`)** — after launching, open http://localhost:5080 → **Settings** → **OMLX connection** → fill in Base URL / API key → Save. These are stored in `~/.cutfinder/config.json` (**shared machine-wide**, no need to re-enter per library) and take effect immediately.
 
 - **`.env` (optional, for temporary overrides)** — place a `.env` in the **repo root**:
 
@@ -175,15 +175,9 @@ cd frontend && npx vite        # http://localhost:5080
 make models                     # pre-download mlx-whisper large-v3-mlx + Demucs htdemucs
 ```
 
-This pre-downloads both the Whisper model and the Demucs `htdemucs` vocal-separation model (~80 MB, fetched once via `scripts/download_demucs.py`) so the first transcription / subtitle export runs fully offline.
+This pre-downloads both the Whisper model and the Demucs `htdemucs` vocal-separation model into the project's **`models/` folder** (gitignored). After that, transcription / subtitle export runs fully offline.
 
-Whisper downloads into the HuggingFace cache (`~/.cache/huggingface`) by default. To place it in a custom directory, set **Settings → OMLX connection → Whisper model path** to that directory, or set it in the root `.env`:
-
-```ini
-WHISPER_MODEL_PATH=/Users/you/AI/Models/ASRs/mlx-community/whisper-large-v3-mlx
-```
-
-Once set: `make models` downloads into that directory, and at runtime CutFinder loads the model offline from there (overriding the `whisper_model` preference) instead of the HF cache.
+You don't have to run this — both models are **downloaded automatically on first use** into `models/whisper/` and `models/demucs/`. `make models` just warms them ahead of time so the first run isn't slowed by a download. No path configuration needed.
 
 ---
 
@@ -261,7 +255,7 @@ Drag `dist/CutFinder.app` to `/Applications` and double-click:
 
 > ⚠️ Two things still need to be set up separately (they can't go inside our .app):
 > 1. **OMLX** is a separate third-party menu-bar app (the local model server) — install it and load the `Qwen` models yourself.
-> 2. The **Whisper model** downloads from HuggingFace on first transcription (~3GB), or pre-place it via `WHISPER_MODEL_PATH` above.
+> 2. The **Whisper model** (~3GB) and the **Demucs htdemucs** model download automatically into the project `models/` folder on first use (or pre-warm with `make models`).
 >
 > The .app is not Apple code-signed/notarized; first open may require "right-click → Open". Brand art sources are in `branding/`.
 

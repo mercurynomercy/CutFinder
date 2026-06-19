@@ -1,6 +1,9 @@
 # 本地测试素材（大文件，不入库）
 testVideo/
 
+# 本地模型缓存（Whisper / Demucs，按需联网下载，不入库）
+models/
+
 # 密钥/端点（只提交 .env.example）
 .env
 .env.local

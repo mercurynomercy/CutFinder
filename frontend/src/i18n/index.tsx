@@ -216,11 +216,7 @@ const en = {
   'settings.whisperTitle': 'Whisper (speech-to-text)',
   'settings.whisperDesc': 'A-roll Chinese speech-to-text (separate local process, not via OMLX).',
   'settings.whisperModel': 'Whisper model',
-  'settings.whisperModelDesc': 'HuggingFace model id; a local path below takes precedence if set.',
-  'settings.whisperModelPath': 'Whisper model path (local override, optional)',
-  'settings.whisperModelPathDesc':
-    'Local mlx-whisper model directory; if set, loads offline and overrides the model id above. Leave blank to use the HuggingFace cache.',
-  'settings.whisperPathPlaceholder': '(optional) /path/to/whisper-large-v3-mlx',
+  'settings.whisperModelDesc': 'HuggingFace model id. Downloaded into the project models/ folder on first use and loaded offline afterwards.',
 
   'settings.processingOptions': 'Processing options',
   'settings.supportedExtensions': 'Supported extensions',
@@ -435,11 +431,7 @@ const zh: Record<Key, string> = {
   'settings.whisperTitle': 'Whisper（语音转写）',
   'settings.whisperDesc': 'A-roll 中文语音转文字（独立本地进程，不经过 OMLX）。',
   'settings.whisperModel': 'Whisper model',
-  'settings.whisperModelDesc': 'HuggingFace 模型 id；若下方填了本地路径则以本地路径为准',
-  'settings.whisperModelPath': 'Whisper model path（本地覆盖，可选）',
-  'settings.whisperModelPathDesc':
-    '本地 mlx-whisper 模型目录；填了则离线加载并覆盖上面的模型 id，留空则用 HuggingFace 缓存',
-  'settings.whisperPathPlaceholder': '（可选）/path/to/whisper-large-v3-mlx',
+  'settings.whisperModelDesc': 'HuggingFace 模型 id。首次使用时下载到项目的 models/ 目录，之后离线加载。',
 
   'settings.processingOptions': '处理选项',
   'settings.supportedExtensions': '支持的扩展名',

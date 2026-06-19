@@ -20,6 +20,7 @@ from typing import Any, Callable
 
 import numpy as np
 
+from ..config import DEMUCS_MODELS_DIR
 from ..ports.speech import VocalSeparator
 from ._progress import patch_tqdm
 
@@ -82,6 +83,11 @@ class DemucsSeparator(VocalSeparator):
 
         import torch
         from demucs.pretrained import get_model
+
+        # Download/load the model under <repo>/models/demucs/ (gitignored) so it
+        # lives with the project instead of the global torch hub cache.
+        DEMUCS_MODELS_DIR.mkdir(parents=True, exist_ok=True)
+        torch.hub.set_dir(str(DEMUCS_MODELS_DIR))
 
         device = self._device
         if device is None:

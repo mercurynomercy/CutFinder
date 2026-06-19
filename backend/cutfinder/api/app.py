@@ -137,9 +137,9 @@ def _build_into(ctx: LibraryContext, library_path: Union[str, Path]) -> None:
     conn = sqlite3.connect(str(db_path), check_same_thread=False)
     repository = SqliteRepository(conn)
 
-    # A custom WHISPER_MODEL_PATH (env) overrides the whisper_model pref so the
-    # model loads from a local directory instead of the HF cache.
-    whisper_model = config.env.WHISPER_MODEL_PATH or prefs.whisper_model
+    # The model is downloaded into <repo>/models/whisper/ on first use and
+    # loaded offline thereafter (see MlxWhisperTranscriber._resolve_model_path).
+    whisper_model = prefs.whisper_model
 
     # One shared Demucs separator (lazy-loads the model, so construction is
     # cheap). Subtitle export always separates; the A-roll pipeline only when

@@ -49,7 +49,7 @@ frontend-deps:
 dev: uv-sync frontend-deps
 	@bash scripts/dev.sh
 
-# ── 3. models — download MLX Whisper + Demucs models (honors WHISPER_MODEL_PATH) ──
+# ── 3. models — pre-download MLX Whisper + Demucs models into <repo>/models/ ──
 models: uv-sync
 	cd backend && set -a && [ -f ../.env ] && . ../.env; set +a; $(UV) run python ../scripts/download_whisper.py; $(UV) run python ../scripts/download_demucs.py
 

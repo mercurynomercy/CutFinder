@@ -152,7 +152,6 @@ export interface UpdateSettingsBody {
   // libraries). Omit OMLX_API_KEY to leave the stored secret unchanged.
   OMLX_BASE_URL?: string
   OMLX_API_KEY?: string
-  WHISPER_MODEL_PATH?: string
 }
 
 export interface ClipFilter {

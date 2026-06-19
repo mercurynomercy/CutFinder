@@ -121,7 +121,6 @@ export function SettingsPage({ onSave }: SettingsPageProps) {
   // in ~/.cutfinder/config.json — no .env needed. The API key is write-only:
   // GET returns a mask, and we only send it when the user types a new value.
   const [omlxBaseUrl, setOmlxBaseUrl] = useState('')
-  const [whisperPath, setWhisperPath] = useState('')
   const [apiKeyInput, setApiKeyInput] = useState('')
   const [apiKeyConfigured, setApiKeyConfigured] = useState(false)
 
@@ -139,7 +138,6 @@ export function SettingsPage({ onSave }: SettingsPageProps) {
         const data = await api.getSettings()
         setPrefs(data.prefs)
         setOmlxBaseUrl(data.env.OMLX_BASE_URL || '')
-        setWhisperPath(data.env.WHISPER_MODEL_PATH || '')
         setApiKeyConfigured(Boolean(data.env.OMLX_API_KEY))
         setApiKeyInput('')
       }
@@ -230,11 +228,10 @@ export function SettingsPage({ onSave }: SettingsPageProps) {
       // saved pref from diverging from the real binding.
       const body: UpdateSettingsBody = { ...prefs }
       delete body.library_path
-      // Machine-global keys: always send the (non-secret) endpoint + whisper
-      // path; only send the API key when the user typed a new one, so the
-      // stored secret is never overwritten by the mask.
+      // Machine-global keys: always send the (non-secret) endpoint; only send
+      // the API key when the user typed a new one, so the stored secret is
+      // never overwritten by the mask.
       body.OMLX_BASE_URL = omlxBaseUrl.trim()
-      body.WHISPER_MODEL_PATH = whisperPath.trim()
       if (apiKeyInput.trim()) body.OMLX_API_KEY = apiKeyInput.trim()
       await api.putSettings(body)
       if (apiKeyInput.trim()) {
@@ -448,15 +445,6 @@ export function SettingsPage({ onSave }: SettingsPageProps) {
                 <input
                   type="text" value={prefs.whisper_model} readOnly
                   className="w-full rounded-md border border-[--border] bg-[--surface-2] px-3 py-1.5 text-sm"
-                />
-
-                <label className="mt-2 block text-sm text-[--text-secondary]">{t('settings.whisperModelPath')}</label>
-                <p className="mb-1 text-xs text-[--text-muted]">{t('settings.whisperModelPathDesc')}</p>
-                <input
-                  type="text" value={whisperPath}
-                  onChange={(e) => setWhisperPath(e.target.value)}
-                  placeholder={t('settings.whisperPathPlaceholder')}
-                  className="w-full rounded-md border border-[--border] bg-[--surface-2] px-3 py-1.5 text-sm font-mono outline-none focus:border-[--primary]"
                 />
               </div>
             </fieldset>

@@ -165,19 +165,13 @@ CUTFINDER_LIBRARY=/path/to/library uv run uvicorn cutfinder.api.app:app --reload
 cd frontend && npx vite        # http://localhost:5080
 ```
 
-### 下载 Whisper 模型（首次转写前，可选预热）
+### 下载模型（首次使用前，可选预热）
 
 ```bash
-make models                     # 预下载 mlx-whisper large-v3-mlx
+make models                     # 预下载 mlx-whisper large-v3-mlx + Demucs htdemucs
 ```
 
-默认下载到 HuggingFace 缓存（`~/.cache/huggingface`）。若想把模型放到自定义目录，在**设置页 → OMLX connection → Whisper model path** 填该目录，或在根 `.env` 里设置：
-
-```ini
-WHISPER_MODEL_PATH=/Users/you/AI/Models/ASRs/mlx-community/whisper-large-v3-mlx
-```
-
-设置后：`make models` 会把模型下载到该目录；运行时 CutFinder 直接从此路径离线加载（覆盖 `whisper_model` 偏好），不再用 HF 缓存。
+两个模型都会下载到项目的 **`models/` 目录**（已 gitignore）。其实**无需手动运行**——首次使用时会自动下载到 `models/whisper/` 和 `models/demucs/`，`make models` 只是提前预热，免得首次运行卡在下载上。无需配置任何路径。
 
 ---
 
@@ -255,7 +249,7 @@ make app          # → dist/CutFinder.app（以及 dist/CutFinder.dmg）
 
 > ⚠️ 两件事仍需另行准备（无法塞进我们的 .app）：
 > 1. **OMLX** 是独立的第三方菜单栏 App（本地模型服务器），需自行安装并加载 `Qwen` 模型；
-> 2. **Whisper 模型**首次转写时从 HuggingFace 下载（约 3GB），或按上文 `WHISPER_MODEL_PATH` 预置。
+> 2. **Whisper 模型**（约 3GB）与 **Demucs htdemucs** 模型在首次使用时自动下载到项目 `models/` 目录（或用 `make models` 预热）。
 >
 > 该 .app 未做 Apple 代码签名/公证，首次打开可能需「右键 → 打开」放行。品牌图源在 `branding/`。
 

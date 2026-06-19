@@ -54,7 +54,6 @@ def _build_router(
         env = {
             "OMLX_BASE_URL": config.env.OMLX_BASE_URL,
             "OMLX_API_KEY": _MASKED if config.env.OMLX_API_KEY else "",
-            "WHISPER_MODEL_PATH": config.env.WHISPER_MODEL_PATH,
         }
 
         return {"env": env, "prefs": config.prefs.model_dump()}

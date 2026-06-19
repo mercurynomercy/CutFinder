@@ -27,6 +27,7 @@ from typing import Any, Callable
 
 import numpy as np
 
+from ..config import WHISPER_MODELS_DIR
 from ..domain.models import Segment, Transcript
 from ..ports.speech import Transcriber, VocalSeparator
 from ._progress import patch_tqdm
@@ -129,6 +130,31 @@ class MlxWhisperTranscriber(Transcriber):
         self._model = model
         self._language = language
         self._separator = separator
+        self._resolved_path: str | None = None
+
+    def _resolve_model_path(self) -> str:
+        """Return a local model dir, downloading from HF if missing.
+
+        A custom local path (an existing directory) is used as-is. A
+        HuggingFace repo id is materialised under ``<repo>/models/whisper/
+        <repo-basename>`` on first use, then loaded offline thereafter.
+        """
+        if self._resolved_path is not None:
+            return self._resolved_path
+
+        candidate = Path(self._model)
+        if candidate.is_dir():
+            self._resolved_path = str(candidate)
+            return self._resolved_path
+
+        local = WHISPER_MODELS_DIR / self._model.split("/")[-1]
+        if not local.is_dir():
+            from huggingface_hub import snapshot_download
+
+            local.parent.mkdir(parents=True, exist_ok=True)
+            snapshot_download(self._model, local_dir=str(local))
+        self._resolved_path = str(local)
+        return self._resolved_path
 
     def transcribe(
         self,
@@ -196,10 +222,12 @@ class MlxWhisperTranscriber(Transcriber):
 
         lang = language or self._language
 
+        model_path = self._resolve_model_path()
+
         def _run() -> Any:
             return mlx_whisper.transcribe(
                 audio_array,
-                path_or_hf_repo=self._model,
+                path_or_hf_repo=model_path,
                 language=lang,
                 verbose=False,
                 condition_on_previous_text=False,  # break repetition/hallucination chains

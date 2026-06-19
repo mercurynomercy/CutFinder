@@ -80,7 +80,10 @@ def _make_transcriber(whisper_mock: MagicMock, extract_return: bytes | None = SA
     adapter._extract_audio_bytes = MagicMock(return_value=extract_return)  # type: ignore[attr-defined]
     adapter._audio_bytes_to_array = _fake_convert  # type: ignore[attr-defined]
 
-    return adapter.MlxWhisperTranscriber()
+    t = adapter.MlxWhisperTranscriber()
+    # Skip HF model resolution/download in unit tests (no network).
+    t._resolved_path = "test-whisper-model"
+    return t
 
 
 def _mocked_transcriber(whisper_dict: dict, monkeypatch):
@@ -245,6 +248,7 @@ class TestTranscriberTranscribe:
 
         with patch.object(Path, "is_file", return_value=True):
             transcriber = adapter.MlxWhisperTranscriber(model="base", language="en")
+            transcriber._resolved_path = "test-whisper-model"  # no HF download in tests
             transcript = transcriber.transcribe(Path("/fake/en.mp4"))
 
         assert transcript.full_text == ""
@@ -343,6 +347,7 @@ class TestTranscriberSeparator:
 
         with patch.object(Path, "is_file", return_value=True):
             transcriber = adapter.MlxWhisperTranscriber(separator=separator)
+            transcriber._resolved_path = "test-whisper-model"  # no HF download in tests
             transcriber.transcribe(Path("/fake/video.mp4"))
 
         assert len(separator.calls) == 1
@@ -407,6 +412,7 @@ class TestTranscriberSeparator:
         seen: list[float] = []
         with patch.object(Path, "is_file", return_value=True):
             transcriber = adapter.MlxWhisperTranscriber(separator=separator)
+            transcriber._resolved_path = "test-whisper-model"  # no HF download in tests
             transcript = transcriber.transcribe(Path("/fake/v.mp4"), progress=seen.append)
 
         from cutfinder.domain.models import Transcript

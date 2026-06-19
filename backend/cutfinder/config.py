@@ -23,20 +23,28 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 # ---------------------------------------------------------------------------
 
 # Keys that live in the machine-global store / environment (not per-library).
-_GLOBAL_KEYS = ("OMLX_BASE_URL", "OMLX_API_KEY", "WHISPER_MODEL_PATH")
+_GLOBAL_KEYS = ("OMLX_BASE_URL", "OMLX_API_KEY")
 
 # Repo root, anchored to this file (backend/cutfinder/config.py -> repo root).
 # Used so the root ``.env`` is found even when the process runs from backend/.
-_ROOT_ENV_FILE = Path(__file__).resolve().parents[2] / ".env"
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+_ROOT_ENV_FILE = _REPO_ROOT / ".env"
+
+# Local model store: ``<repo>/models/`` (gitignored). Whisper and Demucs models
+# are downloaded here on first use and loaded offline thereafter — no manual
+# path configuration. See adapters/mlx_whisper.py and adapters/demucs_separator.py.
+MODELS_DIR = _REPO_ROOT / "models"
+WHISPER_MODELS_DIR = MODELS_DIR / "whisper"
+DEMUCS_MODELS_DIR = MODELS_DIR / "demucs"
 
 # Machine-global settings written by the UI. These are shared across all
-# libraries (OMLX endpoint/key, whisper model path are machine-wide, not
-# per-library) and let the app run with no ``.env`` at all.
+# libraries (the OMLX endpoint/key are machine-wide, not per-library) and let
+# the app run with no ``.env`` at all.
 _GLOBAL_CONFIG_FILE = Path.home() / ".cutfinder" / "config.json"
 
 
 class EnvSettings(BaseSettings):
-    """OMLX endpoint/key + whisper model path.
+    """OMLX endpoint/key.
 
     Resolved by :func:`resolve_env` with precedence ``OS env / .env`` >
     ``~/.cutfinder/config.json`` (written by the UI) > empty. Missing values
@@ -59,15 +67,6 @@ class EnvSettings(BaseSettings):
     OMLX_API_KEY: str = Field(
         default="",
         description="API key for authenticating with the OMLX server.",
-    )
-    WHISPER_MODEL_PATH: str = Field(
-        default="",
-        description=(
-            "Optional local directory holding the mlx-whisper model. When set "
-            "(and present on disk), it is loaded from here instead of being "
-            "downloaded into the HuggingFace cache. Overrides the whisper_model "
-            "preference."
-        ),
     )
 
 
