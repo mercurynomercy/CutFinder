@@ -14,6 +14,7 @@ import { DetailPanel, type DetailPanelProps as DetailPanelPropsType } from '@/fe
 import { JobsPanel, type JobsPanelProps } from '@/features/jobs'
 import { JobsQueuePage } from '@/features/jobs-queue'
 import { SettingsPage } from '@/features/settings'
+import { SubtitlesPage } from '@/features/subtitles'
 import { LogModal } from '@/features/logs'
 import { useI18n } from '@/i18n'
 
@@ -39,6 +40,7 @@ export default function App() {
   const [loading, setLoading] = useState(true)
   const [showSettings, setShowSettings] = useState(false)
   const [showJobs, setShowJobs] = useState(false)
+  const [showSubtitles, setShowSubtitles] = useState(false)
   const [showLogs, setShowLogs] = useState(false)
   const [selectedClipId, setSelectedClipId] = useState<DetailPanelPropsType['clipId']>(null)
   const [activeJobId, setActiveJobId] = useState<JobsPanelProps['activeJobId']>(null)
@@ -249,6 +251,11 @@ export default function App() {
     return <JobsQueuePage onClose={() => setShowJobs(false)} />
   }
 
+  // Subtitle export view (full-screen, replaces main layout)
+  if (showSubtitles) {
+    return <SubtitlesPage onClose={() => setShowSubtitles(false)} />
+  }
+
   return (
     <div className="flex h-screen w-full flex-col bg-[--bg-canvas] text-[--text-primary]">
       {/* Top progress bar (absolute, sticky) */}
@@ -279,6 +286,17 @@ export default function App() {
           >
             <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24">
               <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7.848 8.25l1.536.887M7.848 8.25a3 3 0 11-5.196-3 3 3 0 015.196 3zm1.536.887a2.165 2.165 0 011.083 1.839c.005.351.054.695.14 1.024M9.384 9.137l10.962 6.331M7.848 15.75l1.536-.887m-1.536.887a3 3 0 11-5.196 3 3 3 0 015.196-3zm1.536-.887a2.165 2.165 0 001.083-1.838c.005-.352.054-.695.14-1.025m0 0l10.962-6.33m0 0l1.536-.887m-1.536.887l1.536.887" />
+            </svg>
+          </button>
+          <button
+            onClick={() => setShowSubtitles(true)}
+            className="rounded-md p-1.5 text-[--text-secondary] hover:bg-[--surface-3] transition-colors"
+            aria-label={t('app.subtitles')}
+            title={t('app.subtitles')}
+          >
+            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24">
+              <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3.75 6.75A2.25 2.25 0 016 4.5h12a2.25 2.25 0 012.25 2.25v8.25A2.25 2.25 0 0118 17.25H8.25L4.5 21V6.75z" />
+              <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7.5 10.5h3m3 0h3m-9 3h6" />
             </svg>
           </button>
           <button

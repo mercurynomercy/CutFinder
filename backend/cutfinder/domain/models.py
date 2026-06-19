@@ -122,6 +122,17 @@ class Transcript(BaseModel, frozen=True):
     segments: list[Segment] = []
 
 
+# ── SubtitleRequest (standalone subtitle export) ─────────────────
+
+class SubtitleRequest(BaseModel, frozen=True):
+    """Request to re-transcribe a finished video and export subtitle files."""
+
+    video_path: str
+    out_dir: str
+    formats: list[str] = ["itt", "srt"]
+    language: str = "zh"
+
+
 # ── SummaryResult (A-roll AI output) ─────────────────────────────
 
 class SummaryResult(BaseModel, frozen=True):

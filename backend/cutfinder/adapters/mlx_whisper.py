@@ -107,8 +107,12 @@ class MlxWhisperTranscriber(Transcriber):
         self._model = model
         self._language = language
 
-    def transcribe(self, path: Path) -> Transcript:
+    def transcribe(self, path: Path, *, language: str | None = None) -> Transcript:
         """Transcribe the audio track of *path* into text + segments.
+
+        *language* overrides the configured default language for this call
+        (used by the standalone subtitle export, which aligns to the chosen
+        subtitle language). When ``None`` the constructor default is used.
 
         1. Probes video duration via ffprobe (skipped if zero/unknown).
         2. Extracts audio with ffmpeg → converts to numpy array.
@@ -138,10 +142,11 @@ class MlxWhisperTranscriber(Transcriber):
         # Run mlx-whisper transcription (installed per pyproject.toml)
         import mlx_whisper  # type: ignore[import-untyped]
 
+        lang = language or self._language
         result = mlx_whisper.transcribe(
             audio_array,
             path_or_hf_repo=self._model,
-            language=self._language,
+            language=lang,
             verbose=False,
         )
 

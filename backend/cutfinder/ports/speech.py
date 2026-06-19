@@ -18,5 +18,9 @@ class SpeechDetector(Protocol):
 class Transcriber(Protocol):
     """Transcribe spoken audio in a video file to text (A-roll only)."""
 
-    def transcribe(self, path: Path) -> Transcript:
-        """Transcribe the audio track of *path* into text + segments."""
+    def transcribe(self, path: Path, *, language: str | None = None) -> Transcript:
+        """Transcribe the audio track of *path* into text + segments.
+
+        *language* is an optional language hint (e.g. ``"zh"`` / ``"en"``);
+        when ``None`` the implementation falls back to its configured default.
+        """

@@ -314,6 +314,26 @@ export const api = {
     return _fetch('/api/pick-folder', { method: 'POST' })
   },
 
+  /** POST /api/pick-file — open a native macOS file chooser; path is null if cancelled. */
+  pickFile(): Promise<{ path: string | null }> {
+    return _fetch('/api/pick-file', { method: 'POST' })
+  },
+
+  /** POST /api/subtitles/export — transcribe a video and write subtitle files. */
+  exportSubtitles(body: { video_path: string; out_dir: string; formats: string[]; language?: string }): Promise<{ job_id: number }> {
+    return _fetch('/api/subtitles/export', { method: 'POST', body: JSON.stringify(body) })
+  },
+
+  /** GET /api/subtitles/{jobId} — subtitle export result (files populate once done). */
+  getSubtitleResult(jobId: number): Promise<{ job_id: number; status: string; files: string[] }> {
+    return _fetch(`/api/subtitles/${jobId}`)
+  },
+
+  /** POST /api/subtitles/{jobId}/reveal — reveal the output folder in Finder. */
+  revealSubtitle(jobId: number): Promise<{ status: string }> {
+    return _fetch(`/api/subtitles/${jobId}/reveal`, { method: 'POST' })
+  },
+
   /** POST /api/open — reveal a folder in Finder or open a file in its default app. */
   openPath(path: string): Promise<{ status: string; path: string }> {
     return _fetch('/api/open', { method: 'POST', body: JSON.stringify({ path }) })

@@ -13,6 +13,9 @@ Tracker for call assertions in tests:
 
     calls :: list[tuple[Path]]
         List of ``(path,)`` tuples recorded on each :meth:`transcribe` call.
+
+    languages :: list[str | None]
+        The ``language`` hint passed on each :meth:`transcribe` call.
 """
 
 from __future__ import annotations
@@ -56,10 +59,12 @@ class FakeTranscriber(Transcriber):
         self._should_fail = should_fail
         # Track calls for assertions in tests
         self.calls: list[tuple[Path]] = []
+        self.languages: list[str | None] = []
 
-    def transcribe(self, path: Path) -> Transcript:
+    def transcribe(self, path: Path, *, language: str | None = None) -> Transcript:
         """Return the pre-set transcript (or fail if configured to)."""
         self.calls.append((path,))
+        self.languages.append(language)
 
         if self._should_fail:
             raise RuntimeError("FakeTranscriber: simulated failure")

@@ -129,6 +129,27 @@ class ReanalyzeResponse(BaseModel):
     job_id: int
 
 
+# ── Subtitle export (POST /subtitles/export) ────────────────────
+
+class SubtitleExportRequest(BaseModel):
+    """Request a standalone subtitle export for a finished video."""
+
+    video_path: str = Field(..., min_length=1)
+    out_dir: str = Field(..., min_length=1)
+    formats: list[str] = ["itt", "srt"]
+    language: Optional[str] = None
+
+
+class SubtitleExportResponse(BaseModel):
+    job_id: int
+
+
+class SubtitleResultOut(BaseModel):
+    job_id: int
+    status: str
+    files: list[str] = []
+
+
 # ── Search response (GET /search) ───────────────────────────────
 
 class SearchResponse(BaseModel):

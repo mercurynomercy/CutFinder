@@ -43,33 +43,34 @@
 
 ### 后端
 
-- [ ] `domain/models.py`：`SubtitleRequest`（frozen：`video_path, out_dir, formats:list[str], language:str`）；可选 `SubtitleResult`（产出路径列表）。
-- [ ] `config.py` / prefs：可选 `subtitle_default_formats: list[str] = ["itt","srt"]`（仅作 UI 默认；语言不另存，直接读 `output_language`）。
-- [ ] `ports/speech.py` + `adapters/mlx_whisper.py`：`Transcriber.transcribe` 增加 `language: str | None=None`，透传给 `mlx_whisper` 的 `language` 提示（不传则保持现状/自动检测）。
-- [ ] `subtitle/format.py`（纯逻辑，无 IO）：`to_srt(segments) -> str`、`to_itt(segments, *, language, fps) -> str`；时码格式化 `HH:MM:SS,mmm`（SRT）/ `HH:MM:SS.mmm`（iTT）；XML 转义。
-- [ ] `pipeline/subtitle_exporter.py`：`export(...)` —— probe(fps) → transcribe(language) → 按 `formats` 写文件 → 返回路径；逐步错误隔离（失败记错误、不抛）。
-- [ ] `adapters/`（写文件）：在选定 `out_dir` 写入，同名不覆盖；**绝不碰源视频**。
-- [ ] `pipeline/worker.py`：job kind `subtitle`；`enqueue_subtitle(req) -> job_id`（`create_job(total=1, kind="subtitle")`）与 `_process_subtitle`；产出路径存入可由 `GET /api/subtitles/{job_id}` 读取的（内存）结果存储，避免改 DB schema。
-- [ ] `api/routes.py`：
-  - [ ] `POST /api/subtitles/export`：body `{video_path, out_dir, formats?, language?}`（`language` 缺省取 `output_language`）→ `{job_id}`。
-  - [ ] `POST /api/pick-file`：原生 `choose file`（视频类型过滤）→ `{path}`；非 macOS 返回 501（对齐 `pick-folder`）。
-  - [ ] `GET /api/subtitles/{job_id}`：返回该 job 的产出文件路径（完成后）。
-- [ ] `api/schemas.py`：`SubtitleExportRequest` / `SubtitleExportResponse`（job_id）/ `SubtitleResultOut`（paths）。
+- [x] `domain/models.py`：`SubtitleRequest`（frozen：`video_path, out_dir, formats:list[str], language:str`）；可选 `SubtitleResult`（产出路径列表）。
+- [ ] `config.py` / prefs：可选 `subtitle_default_formats`。 — **暂不实现**：前端默认勾选两者即可，避免引入未用配置项。
+- [x] `ports/speech.py` + `adapters/mlx_whisper.py`：`Transcriber.transcribe` 增加 `language: str | None=None`，透传给 `mlx_whisper` 的 `language` 提示（不传则保持现状/自动检测）。
+- [x] `subtitle/format.py`（纯逻辑，无 IO）：`to_srt(segments) -> str`、`to_itt(segments, *, language, fps) -> str`；时码格式化 `HH:MM:SS,mmm`（SRT）/ `HH:MM:SS.mmm`（iTT）；XML 转义。
+- [x] `pipeline/subtitle_exporter.py`：`export(...)` —— probe(fps) → transcribe(language) → 按 `formats` 写文件 → 返回路径；逐步错误隔离（失败记错误、不抛）。
+- [x] `adapters/`（写文件）：在选定 `out_dir` 写入，同名不覆盖；**绝不碰源视频**。
+- [x] `pipeline/worker.py`：job kind `subtitle`；`enqueue_subtitle(req) -> job_id`（`create_job(total=1, kind="subtitle")`）与 `_process_subtitle`；产出路径存入可由 `GET /api/subtitles/{job_id}` 读取的（内存）结果存储，避免改 DB schema。
+- [x] `api/routes.py`：
+  - [x] `POST /api/subtitles/export`：body `{video_path, out_dir, formats?, language?}`（`language` 缺省取 `output_language`）→ `{job_id}`。
+  - [x] `POST /api/pick-file`：原生 `choose file` → `{path}`；非 macOS 返回 501（对齐 `pick-folder`）。
+  - [x] `GET /api/subtitles/{job_id}`：返回该 job 的产出文件路径（完成后）。
+  - [x] `POST /api/subtitles/{job_id}/reveal`：在 Finder 中显示产出（仅限本 job 已产出的文件，绕开 `/api/open` 的库内限制）。
+- [x] `api/schemas.py`：`SubtitleExportRequest` / `SubtitleExportResponse`（job_id）/ `SubtitleResultOut`（paths）。
 
 ### 前端
 
-- [ ] `api/client.ts`：`pickFile()`、`exportSubtitles(req)`、`getSubtitleResult(jobId)`；相关类型。
-- [ ] `features/subtitles`：新页/弹窗 —— 「选择视频…」(`pick-file`) + 「选择输出文件夹…」(`pick-folder`) + 格式勾选（iTT/SRT，默认两者）+ 语言来源说明（跟随 AI 输出语言）+「导出」按钮 → 订阅 SSE 进度 → 完成后列出产出文件 + 「在 Finder 中显示」(`/api/open`)。
-- [ ] 导航入口：在 Header/导航加入「字幕导出」。
-- [ ] `i18n`：EN/ZH 文案。
+- [x] `api/client.ts`：`pickFile()`、`exportSubtitles(req)`、`getSubtitleResult(jobId)`；相关类型。
+- [x] `features/subtitles`：新页 —— 「选择视频…」(`pick-file`) + 「选择输出文件夹…」(`pick-folder`) + 格式勾选（iTT/SRT，默认两者）+ 语言来源说明（跟随 AI 输出语言）+「导出」按钮 → 轮询 `getJob` 进度 → 完成后列出产出文件 + 「在 Finder 中显示」(`/api/subtitles/{id}/reveal`)。
+- [x] 导航入口：在 Header/导航加入「字幕导出」。
+- [x] `i18n`：EN/ZH 文案。
 
 ### 测试
 
-- [ ] 单测 `subtitle/format.py`：SRT/iTT 黄金串；时码边界（亚秒、跨小时、0 时长）；XML 转义；空分段。
-- [ ] 单测 `subtitle_exporter`：注入假 probe/transcriber —— 断言把 `language`（zh/en）透传给 transcribe、按 formats 产出、命名/不覆盖、`xml:lang` 正确。
-- [ ] 单测 worker `subtitle` job + API 路由（假队列/假服务）。
-- [ ] 前端组件测试：选文件/选目录/导出/进度/产出列表与 Reveal。
-- [ ] （集成，手动）真 `mlx-whisper` 跑一段短成片 → 真 iTT → **导入 Final Cut Pro 验证**（字幕轨正确、时码对齐）。
+- [x] 单测 `subtitle/format.py`：SRT/iTT 黄金串；时码边界（亚秒、跨小时、0 时长）；XML 转义；空分段。
+- [x] 单测 `subtitle_exporter`：注入假 probe/transcriber —— 断言把 `language`（zh/en）透传给 transcribe、按 formats 产出、命名/不覆盖、`xml:lang` 正确。
+- [x] 单测 worker `subtitle` job + API 路由（假队列/假服务）。
+- [x] 前端组件测试：选文件/选目录/导出/进度/产出列表与 Reveal。
+- [ ] （集成，手动）真 `mlx-whisper` 跑一段短成片 → 真 iTT → **导入 Final Cut Pro 验证**（字幕轨正确、时码对齐）。 — 需人工 + FCP，自动化测试无法覆盖；待手动验证。
 
 ---
 

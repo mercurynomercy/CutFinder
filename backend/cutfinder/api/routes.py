@@ -702,6 +702,125 @@ def _build_router(ctx: Any) -> Any:
 
         return {"status": "ok", "path": str(target)}
 
+    # ── Native file picker (POST /pick-file) ────────────────
+    @router.post("/pick-file")
+    async def pick_file() -> dict[str, Optional[str]]:
+        """Open a native macOS file chooser and return the absolute path.
+
+        Returns ``{"path": "/abs/path"}`` on selection, or ``{"path": None}``
+        if the user cancels.
+        """
+        import asyncio as _asyncio
+
+        script = 'POSIX path of (choose file with prompt "选择视频文件")'
+        try:
+            proc = await _asyncio.create_subprocess_exec(
+                "osascript", "-e", script,
+                stdout=_asyncio.subprocess.PIPE,
+                stderr=_asyncio.subprocess.PIPE,
+            )
+        except FileNotFoundError as exc:  # osascript absent (non-macOS host)
+            raise HTTPException(
+                status_code=501, detail="Native file picker unavailable on this platform",
+            ) from exc
+
+        out, _err = await proc.communicate()
+        if proc.returncode != 0:
+            return {"path": None}  # user cancelled the dialog
+
+        # Do NOT rstrip("/") — a file path's trailing chars are meaningful.
+        path = out.decode().strip()
+        return {"path": path or None}
+
+    # ── Subtitle export (POST /subtitles/export) ────────────
+    @router.post("/subtitles/export")
+    async def export_subtitles(request: Request) -> dict[str, int]:
+        """Re-transcribe a finished video and export iTT + SRT subtitle files."""
+        from pydantic import ValidationError  # noqa: E402
+
+        from cutfinder.api.schemas import SubtitleExportRequest  # noqa: E402
+        from cutfinder.domain.models import SubtitleRequest  # noqa: E402
+
+        if ctx.worker_queue is None:
+            raise HTTPException(status_code=503, detail="Worker queue not available")
+
+        try:
+            raw = _json.loads(await request.body() or b"{}")
+        except _json.JSONDecodeError as exc:
+            raise HTTPException(status_code=422, detail="Body must be valid JSON") from exc
+        try:
+            body = SubtitleExportRequest(**raw)
+        except (ValidationError, TypeError) as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+        if not Path(body.video_path).is_file():
+            raise HTTPException(status_code=422, detail="video_path is not a file")
+        if not Path(body.out_dir).is_dir():
+            raise HTTPException(status_code=422, detail="out_dir is not a directory")
+
+        formats = [f for f in (body.formats or ["itt", "srt"]) if f in ("itt", "srt")]
+        if not formats:
+            formats = ["itt", "srt"]
+
+        language = body.language
+        if not language:
+            try:
+                from cutfinder.config import load_config  # noqa: E402
+
+                language = load_config(ctx.library_path).prefs.output_language
+            except Exception:  # noqa: BLE001 — fall back to Chinese default
+                language = "zh"
+
+        req = SubtitleRequest(
+            video_path=body.video_path,
+            out_dir=body.out_dir,
+            formats=formats,
+            language=language,
+        )
+        job_id = await ctx.worker_queue.enqueue_subtitle(req)
+        return {"job_id": job_id}
+
+    # ── Subtitle result (GET /subtitles/{job_id}) ───────────
+    @router.get("/subtitles/{job_id}")
+    async def get_subtitle_result(job_id: int) -> dict[str, Any]:
+        """Return the status + exported files for a subtitle job."""
+        if ctx.repository is None:
+            raise HTTPException(status_code=503, detail="Catalog not available")
+
+        job = ctx.repository.get_job(job_id)
+        if job is None:
+            raise HTTPException(status_code=404, detail="Job not found")
+
+        files = (
+            ctx.worker_queue.get_subtitle_result(job_id) if ctx.worker_queue else None
+        ) or []
+        return {"job_id": job_id, "status": job.status, "files": files}
+
+    # ── Reveal exported subtitles (POST /subtitles/{job_id}/reveal) ─
+    @router.post("/subtitles/{job_id}/reveal")
+    async def reveal_subtitles(job_id: int) -> dict[str, str]:
+        """Reveal the folder containing a subtitle job's exported files."""
+        import asyncio as _asyncio
+
+        files = ctx.worker_queue.get_subtitle_result(job_id) if ctx.worker_queue else None
+        if not files:
+            raise HTTPException(status_code=404, detail="No exported files for this job")
+
+        parent = str(Path(files[0]).parent)
+        try:
+            proc = await _asyncio.create_subprocess_exec(
+                "open", parent,
+                stdout=_asyncio.subprocess.PIPE,
+                stderr=_asyncio.subprocess.PIPE,
+            )
+        except FileNotFoundError as exc:  # `open` absent (non-macOS host)
+            raise HTTPException(
+                status_code=501, detail="Open is unavailable on this platform",
+            ) from exc
+
+        await proc.communicate()
+        return {"status": "ok"}
+
     return router
 
 

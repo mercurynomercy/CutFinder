@@ -28,6 +28,7 @@ from typing import Any, Callable
 from cutfinder.domain.models import (
     ClipCandidate,
     JobFailedItem,
+    SubtitleRequest,
 )
 from cutfinder.ports.repository import CatalogRepository
 
@@ -128,6 +129,7 @@ class WorkerQueue:
         repository: CatalogRepository | None = None,
         progress_callback: Callable[[Any], None] | None = None,
         keyframe_auto: bool = False,
+        subtitle_exporter: Any | None = None,
     ) -> None:
         self._queue: asyncio.Queue[Any] = asyncio.Queue()
         self._worker_task: asyncio.Task[None] | None = None
@@ -143,6 +145,10 @@ class WorkerQueue:
 
         # Reference to orchestrator (may be None)
         self._orchestrator = orchestrator
+
+        # Standalone subtitle export (decoupled from the catalog) + its results.
+        self._subtitle_exporter = subtitle_exporter
+        self._subtitle_results: dict[int, list[str]] = {}
 
         # Auto-increment counter for job IDs when no repository is available
         self._next_job_counter: int = 0
@@ -330,6 +336,28 @@ class WorkerQueue:
             await self._queue.put(("keyframes", cid, job_id))
         return job_id
 
+    async def enqueue_subtitle(
+        self,
+        req: SubtitleRequest,
+        job_id: int | None = None,
+    ) -> int:
+        """Enqueue a standalone subtitle-export job for *req* (always total=1)."""
+        if self._repository:
+            if job_id is not None and (self._repository.get_job(job_id) is not None):
+                pass  # reuse existing job record
+            elif job_id is None:
+                job = self._repository.create_job(total=1, kind="subtitle")
+                job_id = job.id
+
+        if job_id is None:
+            self._next_job_counter += 1
+            job_id = self._next_job_counter
+
+        self._emit({"type": "job_started", "job_id": job_id, "total": 1})
+        await self._queue.put(("subtitle", req, job_id))
+
+        return job_id
+
     async def enqueue_clip(self, candidate: ClipCandidate) -> None:
         """Enqueue a single clip for processing (no job tracking).
 
@@ -477,6 +505,8 @@ class WorkerQueue:
                         success, error = await self._process_reanalyze(payload)
                     elif kind == "keyframes":
                         success, error = await self._process_keyframes(payload)
+                    elif kind == "subtitle":
+                        success, error = await self._process_subtitle(payload, job_id)
                     else:
                         success, error = True, None
 
@@ -538,6 +568,10 @@ class WorkerQueue:
                 self._repository.record_failed_item(JobFailedItem(
                     job_id=job_id, kind=kind, clip_id=payload, error=error,
                 ))
+            elif kind == "subtitle":
+                # Subtitle jobs record no retryable item (payload is a
+                # SubtitleRequest, not a ClipCandidate).
+                pass
             else:
                 self._repository.record_failed_item(JobFailedItem(
                     job_id=job_id, kind="clip",
@@ -649,6 +683,37 @@ class WorkerQueue:
         except Exception as exc:  # noqa: BLE001 — error isolation
             self._emit({"type": "keyframes_error", "clip_id": clip_id, "error": str(exc)})
             return False, str(exc)
+
+    async def _process_subtitle(
+        self, req: SubtitleRequest, job_id: int,
+    ) -> tuple[bool, str | None]:
+        """Re-transcribe a video and export subtitle files for one job.
+
+        Returns ``(success, error)`` — counters are updated by the caller.
+        """
+        logger.info("▶ Exporting subtitles for %s", req.video_path)
+        self._emit({"type": "subtitle_started", "video": req.video_path})
+        try:
+            paths = (
+                await asyncio.to_thread(
+                    self._subtitle_exporter.export,
+                    Path(req.video_path), Path(req.out_dir), req.formats, req.language,
+                )
+                if self._subtitle_exporter else []
+            )
+            files = [str(p) for p in paths]
+            self._subtitle_results[job_id] = files
+            logger.info("✓ Subtitles ready for %s (%d file(s))", req.video_path, len(files))
+            self._emit({"type": "subtitle_done", "job_id": job_id, "files": files})
+            return True, None
+        except Exception as exc:  # noqa: BLE001 — error isolation
+            logger.error("✗ Subtitle export failed for %s: %s", req.video_path, exc)
+            self._emit({"type": "subtitle_error", "job_id": job_id, "error": str(exc)})
+            return False, str(exc)
+
+    def get_subtitle_result(self, job_id: int) -> list[str] | None:
+        """Return the exported subtitle file paths for *job_id*, if any."""
+        return self._subtitle_results.get(job_id)
 
 
 

@@ -129,6 +129,7 @@ def _build_into(ctx: LibraryContext, library_path: Union[str, Path]) -> None:
     from cutfinder.adapters.silero_vad import SileroSpeechDetector
     from cutfinder.adapters.sqlite_repo import SqliteRepository
     from cutfinder.pipeline.orchestrator import Orchestrator
+    from cutfinder.pipeline.subtitle_exporter import SubtitleExporter
     from cutfinder.pipeline.worker import WorkerQueue
 
     db_path = cutfinder_dir / "catalog.sqlite"
@@ -160,9 +161,17 @@ def _build_into(ctx: LibraryContext, library_path: Union[str, Path]) -> None:
     # just the OMLX HTTP calls.
     orchestrator.progress_callback = _log_progress_event
 
+    # Standalone subtitle export: re-transcribes a chosen video on its own
+    # timeline (never reuses a stored transcript).
+    subtitle_exporter = SubtitleExporter(
+        probe=FfmpegProbe(),
+        transcriber=MlxWhisperTranscriber(model=whisper_model),
+    )
+
     worker_queue = WorkerQueue(
         orchestrator=orchestrator, repository=repository,
         keyframe_auto=prefs.keyframe_auto,
+        subtitle_exporter=subtitle_exporter,
     )
 
     ctx.library_path = str(lib_dir)
