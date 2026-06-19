@@ -155,6 +155,7 @@ cutfinder/
   ```
   `Transcript`：`full_text: str`、`segments: list[Segment(start_s, end_s, text)]`。
 - **真实实现**：`mlx-whisper`（large-v3，中文），**独立进程，不走 OMLX**。
+- **转写前人声分离**（见 §3.14）：构造可注入 `VocalSeparator`；注入时先抽干声去 BGM 再转写，分离失败回落原始音频。两条路径都补 whisper 防幻觉 kwargs（如 `condition_on_previous_text=False`）。`transcribe()` 端口签名不变——是否分离由构造时是否注入 separator 决定。
 - **独立测**：fake 返回固定文本；适配器集成测试用一段短中文语音样本。
 
 ### 3.6 Summarizer（A-roll 文本总结，适配器→OMLX）
@@ -261,8 +262,29 @@ cutfinder/
   逐步错误隔离（失败记错误不抛）。`language` 缺省取 `output_language`，同时作为 Whisper 提示与字幕 `xml:lang`。
 - **Worker**：新增 job kind `subtitle`，payload `SubtitleRequest{video_path, out_dir, formats, language}`；`enqueue_subtitle / _process_subtitle`；产出路径放**内存结果存储**（避免改 DB schema），由 `GET /api/subtitles/{job_id}` 读取。
 - **硬约束**：源视频**只读**（绝不改名/改写）；只在选定文件夹**新建**字幕文件；转写**全本地离线**。
+- **去 BGM（见 §3.14）**：成片往往混了 BGM，本工具的 transcriber **恒注入 `VocalSeparator`、强制分离**后再转写，不受 A-roll 流水线开关影响。
 - **iTT 决策**：TTML + `ttp:timeBase="media"` + `HH:MM:SS.mmm` 时钟码 + `xml:lang`；`fps` 读取备用。**验收须真机导入 Final Cut Pro 验证**。
 - **独立测**：格式化用黄金串（时码边界/转义/空分段）；服务注入假 probe/transcriber，断言把 `language`（zh/en）透传给 transcribe、按 formats 产出、命名不覆盖、`xml:lang` 正确。
+
+---
+
+### 3.14 VocalSeparator（转写前人声分离，适配器）
+
+> 治理 BGM 污染 transcript：whisper 前抽出人声干声、扔掉伴奏。任务清单见 `tasks/18-vocal-separation.md`。
+
+- **接口**：
+  ```python
+  class VocalSeparator(Protocol):
+      def isolate(self, path: Path) -> np.ndarray: ...   # whisper 就绪的 16k 单声道 float32 干声
+  ```
+- **真实实现**：`DemucsSeparator`（`adapters/demucs_separator.py`）——
+  1. ffmpeg 抽 **44.1kHz 立体声 f32**（Demucs 原生采样率，不能用 16k）；
+  2. `demucs.api.Separator("htdemucs", device=<mps|cpu>)` 分离，取 `separated["vocals"]`；
+  3. 下混单声道 + 重采样 **16kHz** → `np.float32`（与 whisper 输入一致，drop-in）。
+  模型**懒加载**缓存到实例，device 自动选 MPS 回落 CPU；异常抛出由 transcriber 捕获回落原始音频。
+- **接线**：构造**一个**共享 `DemucsSeparator`；**字幕导出 transcriber 恒注入**（强制），**A-roll orchestrator transcriber 仅当 `vocal_separation=true` 才注入**（默认关）。
+- **依赖**：`demucs`（带入 torchaudio）；`scripts/download_demucs.py` + `make models` 一次性预下载 `htdemucs`（~80MB），之后离线。
+- **独立测**：单测用**假 separator**（断言其输出进 whisper、抛异常时回落）；`DemucsSeparator` 走集成测试（真模型，含 BGM 样本）。
 
 ---
 
@@ -274,6 +296,7 @@ cutfinder/
 | ThumbnailMaker/FrameExtractor | ffmpeg | 返回预置图片路径 | 对样本视频真抽帧 |
 | SpeechDetector | Silero VAD | 返回设定 `speech_ratio` | 有声/无声样本各一 |
 | Transcriber | mlx-whisper | 返回固定 `Transcript` | 短中文语音样本 |
+| VocalSeparator | Demucs (`htdemucs`) | 返回固定干声数组 | 含 BGM 样本，验证去伴奏 |
 | Summarizer | OMLX 文本 | 返回固定 `SummaryResult` | 需本机 OMLX |
 | VisionTagger | OMLX 视觉 | 返回固定 `VisionResult` | 需本机 OMLX |
 | LibraryWriter | shutil 复制 | 真跑(轻，临时目录) | — |
@@ -421,6 +444,7 @@ CREATE VIRTUAL TABLE clips_fts USING fts5(
 | `worker_concurrency` | `1` | 顺序处理，尊重模型显存 |
 | `output_language` | `zh` | AI 简介/描述语言；字幕导出(§3.13)也沿用 |
 | `subtitle_default_formats` | `["itt","srt"]` | 字幕导出 UI 默认格式（可选项） |
+| `vocal_separation` | `false` | A-roll 转写前是否用 Demucs 去 BGM（JSON）；仅影响之后 scan 的新片。字幕导出强制分离，不受此项影响 |
 
 ---
 

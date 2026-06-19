@@ -207,10 +207,12 @@
 扫描
   扩展名      [.mov .mp4 .m4v]
   B-roll 抽帧 [3]    VAD 阈值 [0.15]
+  人声分离    [ ] A-roll 转写前分离人声（去 BGM，较慢）
                                    [保存]
 ```
 - 表单：可见标签（非 placeholder-only）、错误就近显示、blur 时校验。
 - OMLX 显「已连接 / 未连接」状态点（调 `check-omlx` 同款探测）。
+- **人声分离开关**（`vocal_separation`，默认关）：开启后**之后** scan 的新 A-roll 先用 Demucs 去 BGM 再转写；副文案点明仅影响新片、较慢。字幕导出强制分离，不在此开关范围。
 
 ---
 

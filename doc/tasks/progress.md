@@ -53,3 +53,4 @@
 - [x] [**16 关键帧推荐（剪辑切点 + 精选帧，需求 8）**](./16-keyframes.md) — 已实现：A-roll 文本/transcript、B-roll 视觉；扫描后自动排队 + 按需；详情面板建议列表 + 画廊角标 + 设置项。后端 +17 单测、前端 +3 测试，mypy/ruff/tsc 干净。
 - [ ] [**17 字幕导出（独立成片 → FCP iTT/SRT）**](./17-subtitle-export.md) — 已设计、待实现。**独立工具**：选一段已剪辑成片 → `mlx-whisper` 重新转写（语言跟随 `output_language`，只转写不翻译）→ 导出 iTT + SRT 到用户选定文件夹；不入库、不分类、源视频只读。设计见 `17-subtitle-export.md` 与 `detailed-design.md` §3.13。
   - 进阶（更后）：FCPXML 深度集成（字幕作为 caption 轨道随片段灌入 FCP）。
+- [ ] [**18 转写前置人声分离（去 BGM）**](./18-vocal-separation.md) — 已设计、待实现。whisper 前用 **Demucs**（`htdemucs`）抽干声扔伴奏，治 BGM 污染 transcript。字幕导出（task 17）**强制**分离；A-roll 流水线 UI 开关 `vocal_separation` **默认关**，开启后之后 scan 的新片先分离再转写；失败回落原始音频。设计见 `18-vocal-separation.md` 与 `detailed-design.md` §3.14。

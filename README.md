@@ -60,6 +60,9 @@ Every external dependency hides behind an interface; business logic depends only
 | B-roll visual recognition (vision) | `Qwen3-VL-8B` | OMLX (same API, frames sent as base64) |
 | A-roll speech transcription | `mlx-whisper` (default `mlx-community/whisper-large-v3-mlx`) | Separate process (OMLX does not serve audio) |
 | A/B speech detection | Silero VAD | Local |
+| Vocal separation (strip BGM before transcribing) | Demucs (`htdemucs`, ~80 MB) | Local (torch/MPS); isolates vocals, then transcribes |
+
+Background music mixed into footage gets transcribed as garbage or triggers Whisper hallucinations. Before transcribing, [Demucs](https://github.com/adefossez/demucs) isolates the vocal stem and drops the accompaniment. **Subtitle export (finished cuts) always separates**; the **A-roll ingest pipeline has a `vocal_separation` toggle, off by default** (raw footage usually has no added music). On separation failure it falls back to the raw audio so transcription never breaks.
 
 The text and vision models are both served by [OMLX](https://github.com/jundot/omlx), a local Apple-Silicon inference server (menu-bar app).
 
@@ -165,13 +168,15 @@ CUTFINDER_LIBRARY=/path/to/library uv run uvicorn cutfinder.api.app:app --reload
 cd frontend && npx vite        # http://localhost:5080
 ```
 
-### Download the Whisper model (optional pre-warm before first transcription)
+### Download the models (optional pre-warm before first transcription)
 
 ```bash
-make models                     # pre-download mlx-whisper large-v3-mlx
+make models                     # pre-download mlx-whisper large-v3-mlx + Demucs htdemucs
 ```
 
-Downloads into the HuggingFace cache (`~/.cache/huggingface`) by default. To place it in a custom directory, set **Settings → OMLX connection → Whisper model path** to that directory, or set it in the root `.env`:
+This pre-downloads both the Whisper model and the Demucs `htdemucs` vocal-separation model (~80 MB, fetched once via `scripts/download_demucs.py`) so the first transcription / subtitle export runs fully offline.
+
+Whisper downloads into the HuggingFace cache (`~/.cache/huggingface`) by default. To place it in a custom directory, set **Settings → OMLX connection → Whisper model path** to that directory, or set it in the root `.env`:
 
 ```ini
 WHISPER_MODEL_PATH=/Users/you/AI/Models/ASRs/mlx-community/whisper-large-v3-mlx
