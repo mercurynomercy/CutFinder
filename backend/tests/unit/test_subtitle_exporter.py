@@ -24,6 +24,16 @@ def test_language_forwarded_to_transcribe(tmp_path: Path) -> None:
     assert transcriber.languages == ["en"]
 
 
+def test_on_progress_forwarded_to_transcribe(tmp_path: Path) -> None:
+    exporter, transcriber = _exporter()
+
+    def cb(_f: float) -> None:
+        return None
+
+    exporter.export(tmp_path / "v.mp4", tmp_path, ["srt"], "zh", on_progress=cb)
+    assert transcriber.progress_callbacks == [cb]
+
+
 def test_writes_named_files_per_format(tmp_path: Path) -> None:
     exporter, _ = _exporter()
     paths = exporter.export(tmp_path / "myvideo.mp4", tmp_path, ["itt", "srt"], "zh")

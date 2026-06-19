@@ -12,6 +12,7 @@ and the subtitle filename suffix.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Callable
 
 from ..ports.probe import MetadataProbe
 from ..ports.speech import Transcriber
@@ -42,17 +43,24 @@ class SubtitleExporter:
         out_dir: Path,
         formats: list[str],
         language: str,
+        *,
+        on_progress: Callable[[float], None] | None = None,
     ) -> list[Path]:
         """Export subtitle files for *video_path* into *out_dir*.
 
         Returns the written paths in *formats* order. Unknown formats are
         skipped. Files are never overwritten — a numeric suffix is appended
         before the extension when a name already exists.
+
+        *on_progress* is forwarded to the transcriber as a 0..1 progress
+        callback (covering separation + transcription).
         """
         meta = self._probe.probe(video_path)
         fps = meta.fps or 25.0
 
-        transcript = self._transcriber.transcribe(video_path, language=language)
+        transcript = self._transcriber.transcribe(
+            video_path, language=language, progress=on_progress,
+        )
         segments = transcript.segments
 
         written: list[Path] = []

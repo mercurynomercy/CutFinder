@@ -54,6 +54,8 @@ const en = {
   'subtitles.reveal': 'Reveal in Finder',
   'subtitles.close': 'Close',
   'subtitles.progressTitle': 'Transcribing audio…',
+  'subtitles.phaseSeparating': 'Separating vocals…',
+  'subtitles.phaseTranscribing': 'Transcribing…',
   'subtitles.progressHint': 'This can take a few minutes for a long video — please keep this open.',
   'subtitles.elapsed': 'Elapsed {time}',
 
@@ -282,6 +284,8 @@ const zh: Record<Key, string> = {
   'subtitles.reveal': '在 Finder 中显示',
   'subtitles.close': '关闭',
   'subtitles.progressTitle': '正在转写音频…',
+  'subtitles.phaseSeparating': '分离人声中…',
+  'subtitles.phaseTranscribing': '转写中…',
   'subtitles.progressHint': '视频较长时可能需要几分钟，请保持此页面打开。',
   'subtitles.elapsed': '已用时 {time}',
 

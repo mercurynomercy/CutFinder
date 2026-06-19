@@ -21,6 +21,7 @@ Tracker for call assertions in tests:
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Callable
 
 from cutfinder.domain.models import Segment, Transcript
 from cutfinder.ports.speech import Transcriber
@@ -60,11 +61,19 @@ class FakeTranscriber(Transcriber):
         # Track calls for assertions in tests
         self.calls: list[tuple[Path]] = []
         self.languages: list[str | None] = []
+        self.progress_callbacks: list[Callable[[float], None] | None] = []
 
-    def transcribe(self, path: Path, *, language: str | None = None) -> Transcript:
+    def transcribe(
+        self,
+        path: Path,
+        *,
+        language: str | None = None,
+        progress: Callable[[float], None] | None = None,
+    ) -> Transcript:
         """Return the pre-set transcript (or fail if configured to)."""
         self.calls.append((path,))
         self.languages.append(language)
+        self.progress_callbacks.append(progress)
 
         if self._should_fail:
             raise RuntimeError("FakeTranscriber: simulated failure")

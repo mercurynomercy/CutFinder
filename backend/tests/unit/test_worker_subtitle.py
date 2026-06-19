@@ -16,15 +16,30 @@ from tests.fakes import FakeCatalogRepository
 class _FakeExporter:
     """Records export calls and returns preset paths (or raises)."""
 
-    def __init__(self, paths: list[str] | None = None, should_fail: bool = False) -> None:
+    def __init__(
+        self,
+        paths: list[str] | None = None,
+        should_fail: bool = False,
+        progress_values: list[float] | None = None,
+    ) -> None:
         self._paths = paths or ["/out/v.zh.itt", "/out/v.zh.srt"]
         self._should_fail = should_fail
+        self._progress_values = progress_values or []
         self.calls: list[tuple[Path, Path, list[str], str]] = []
 
     def export(
-        self, video_path: Path, out_dir: Path, formats: list[str], language: str,
+        self,
+        video_path: Path,
+        out_dir: Path,
+        formats: list[str],
+        language: str,
+        *,
+        on_progress: Any = None,
     ) -> list[Path]:
         self.calls.append((video_path, out_dir, formats, language))
+        if on_progress is not None:
+            for f in self._progress_values:
+                on_progress(f)
         if self._should_fail:
             raise RuntimeError("export boom")
         return [Path(p) for p in self._paths]
@@ -79,6 +94,46 @@ async def test_subtitle_job_emits_events() -> None:
     assert any(e["type"] == "subtitle_started" for e in events)
     done = [e for e in events if e["type"] == "subtitle_done"]
     assert done and done[0]["files"] == ["/out/v.zh.itt", "/out/v.zh.srt"]
+
+
+@pytest.mark.asyncio
+async def test_subtitle_job_created_with_total_100() -> None:
+    repo = FakeCatalogRepository()
+    queue = WorkerQueue(repository=repo, subtitle_exporter=_FakeExporter())
+
+    job_id = await queue.enqueue_subtitle(_req())
+
+    job = repo.get_job(job_id)
+    assert job is not None and job.total == 100
+
+
+@pytest.mark.asyncio
+async def test_subtitle_progress_throttled_and_emitted() -> None:
+    repo = FakeCatalogRepository()
+    events: list[dict[str, Any]] = []
+    # 0.005 (pct 0) collapses into the prior pct-0 emit → throttled out.
+    exporter = _FakeExporter(progress_values=[0.0, 0.005, 0.01, 0.5, 1.0])
+    queue = WorkerQueue(
+        repository=repo, subtitle_exporter=exporter,
+        progress_callback=lambda e: events.append(e),
+    )
+    await queue.start()
+
+    job_id = await queue.enqueue_subtitle(_req())
+    while True:
+        job = repo.get_job(job_id)
+        if job and job.status in ("done", "failed"):
+            break
+        await asyncio.sleep(0.02)
+    await queue.stop()
+
+    dones = [e["done"] for e in events if e["type"] == "job_progress"]
+    # Rapid duplicate-percent calls collapse; distinct percents pass through.
+    assert dones == [0, 1, 50, 100]
+    assert all(e["total"] == 100 for e in events if e["type"] == "job_progress")
+    # Final completion lands done at total.
+    job = repo.get_job(job_id)
+    assert job is not None and job.status == "done" and job.done == 100
 
 
 @pytest.mark.asyncio

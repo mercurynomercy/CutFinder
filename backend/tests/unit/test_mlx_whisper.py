@@ -373,6 +373,54 @@ class TestTranscriberSeparator:
         assert transcript.full_text == "这是一段中文测试。"
         adapter._extract_audio_bytes.assert_called_once()  # type: ignore[attr-defined]
 
+    def test_two_phase_progress_weighting(self, monkeypatch):
+        """Separation maps into [0, W]; transcription into [W, 1] (single 0..1)."""
+        import sys
+        import types
+
+        import numpy as np
+        import tqdm as _tqdm_pkg
+
+        from tests.fakes import FakeVocalSeparator
+
+        # Real-ish mlx_whisper.transcribe submodule carrying the tqdm attribute
+        # that patch_tqdm intercepts; the fake transcribe drives that tqdm.
+        tmod = types.ModuleType("mlx_whisper.transcribe")
+        tmod.tqdm = _tqdm_pkg  # type: ignore[attr-defined]
+
+        def fake_transcribe(audio, **kwargs):  # noqa: ANN001, ANN202, ARG001
+            import io
+
+            bar = tmod.tqdm.tqdm(total=4, file=io.StringIO())  # type: ignore[attr-defined]
+            for _ in range(4):
+                bar.update(1)
+            return {"text": "", "segments": []}
+
+        mlx_mock = MagicMock()
+        mlx_mock.transcribe = MagicMock(side_effect=fake_transcribe)
+        monkeypatch.setitem(sys.modules, "mlx_whisper", mlx_mock)
+        monkeypatch.setitem(sys.modules, "mlx_whisper.transcribe", tmod)
+
+        adapter = _import_adapter()
+        separator = FakeVocalSeparator(audio=np.array([0.1], dtype=np.float32))
+
+        seen: list[float] = []
+        with patch.object(Path, "is_file", return_value=True):
+            transcriber = adapter.MlxWhisperTranscriber(separator=separator)
+            transcript = transcriber.transcribe(Path("/fake/v.mp4"), progress=seen.append)
+
+        from cutfinder.domain.models import Transcript
+
+        assert isinstance(transcript, Transcript)
+        # W = 0.4. Separation phase reports f=1.0 → overall == W.
+        assert seen[0] == pytest.approx(0.4)
+        assert seen[0] <= 0.4 + 1e-9
+        # Transcription phase values all live in [W, 1] and end at 1.0.
+        trans = seen[1:]
+        assert trans
+        assert all(0.4 - 1e-9 <= v <= 1.0 + 1e-9 for v in trans)
+        assert trans[-1] == pytest.approx(1.0)
+
     def test_condition_on_previous_text_passed_to_whisper(self, monkeypatch):
         """transcribe must pass condition_on_previous_text=False to whisper."""
         transcriber = _mocked_transcriber(SAMPLE_RESULT_DICT, monkeypatch)

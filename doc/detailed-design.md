@@ -263,6 +263,7 @@ cutfinder/
 - **Worker**：新增 job kind `subtitle`，payload `SubtitleRequest{video_path, out_dir, formats, language}`；`enqueue_subtitle / _process_subtitle`；产出路径放**内存结果存储**（避免改 DB schema），由 `GET /api/subtitles/{job_id}` 读取。
 - **硬约束**：源视频**只读**（绝不改名/改写）；只在选定文件夹**新建**字幕文件；转写**全本地离线**。
 - **去 BGM（见 §3.14）**：成片往往混了 BGM，本工具的 transcriber **恒注入 `VocalSeparator`、强制分离**后再转写，不受 A-roll 流水线开关影响。
+- **进度同步（见 `tasks/19-subtitle-progress.md`）**：`export(..., on_progress)` 透传单一 0..1 进度；transcriber 内部把**分离 [0, W] + 转写 [W, 1]**合成（W≈0.4），进度来自拦截 Demucs/mlx-whisper 各自的 tqdm。worker 把 subtitle job 改 `total=100`、节流写 `done` + `job_progress` SSE，前端渲染真实进度条。**仅字幕导出**启用；A-roll 流水线不传 `progress`。
 - **iTT 决策**：TTML + `ttp:timeBase="media"` + `HH:MM:SS.mmm` 时钟码 + `xml:lang`；`fps` 读取备用。**验收须真机导入 Final Cut Pro 验证**。
 - **独立测**：格式化用黄金串（时码边界/转义/空分段）；服务注入假 probe/transcriber，断言把 `language`（zh/en）透传给 transcribe、按 formats 产出、命名不覆盖、`xml:lang` 正确。
 

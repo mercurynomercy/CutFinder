@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
@@ -341,19 +342,23 @@ class WorkerQueue:
         req: SubtitleRequest,
         job_id: int | None = None,
     ) -> int:
-        """Enqueue a standalone subtitle-export job for *req* (always total=1)."""
+        """Enqueue a standalone subtitle-export job for *req*.
+
+        Uses a percentage scale (``total=100``) so the real per-frame
+        transcription progress can drive a smooth UI bar.
+        """
         if self._repository:
             if job_id is not None and (self._repository.get_job(job_id) is not None):
                 pass  # reuse existing job record
             elif job_id is None:
-                job = self._repository.create_job(total=1, kind="subtitle")
+                job = self._repository.create_job(total=100, kind="subtitle")
                 job_id = job.id
 
         if job_id is None:
             self._next_job_counter += 1
             job_id = self._next_job_counter
 
-        self._emit({"type": "job_started", "job_id": job_id, "total": 1})
+        self._emit({"type": "job_started", "job_id": job_id, "total": 100})
         await self._queue.put(("subtitle", req, job_id))
 
         return job_id
@@ -557,11 +562,14 @@ class WorkerQueue:
         if job is None:
             return
 
+        # Subtitle jobs use a percent scale (total=100); a finished item means
+        # the whole job is done, so set 'done' to total instead of +1.
+        new_done = job.total if kind == "subtitle" else job.done + 1
         if success:
-            self._repository.update_job(job_id, done=job.done + 1)
+            self._repository.update_job(job_id, done=new_done)
         else:
             self._repository.update_job(
-                job_id, done=job.done + 1, failed=job.failed + 1,
+                job_id, done=new_done, failed=job.failed + 1,
             )
             if kind in ("reanalyze", "keyframes"):
                 # payload is a clip_id (int) for these kinds.
@@ -693,11 +701,32 @@ class WorkerQueue:
         """
         logger.info("▶ Exporting subtitles for %s", req.video_path)
         self._emit({"type": "subtitle_started", "video": req.video_path})
+
+        # Throttle the real per-frame progress: only emit when the integer
+        # percent advances or ~300ms have elapsed, to avoid flooding DB/SSE.
+        last_pct = -1
+        last_t = 0.0
+
+        def on_progress(frac: float) -> None:
+            nonlocal last_pct, last_t
+            pct = int(min(1.0, max(0.0, frac)) * 100)
+            now = time.monotonic()
+            if pct <= last_pct and (now - last_t) < 0.3:
+                return
+            last_pct = pct
+            last_t = now
+            if self._repository is not None:
+                self._repository.update_job(job_id, done=pct)
+            self._emit({
+                "type": "job_progress", "job_id": job_id, "done": pct, "total": 100,
+            })
+
         try:
             paths = (
                 await asyncio.to_thread(
                     self._subtitle_exporter.export,
                     Path(req.video_path), Path(req.out_dir), req.formats, req.language,
+                    on_progress=on_progress,
                 )
                 if self._subtitle_exporter else []
             )

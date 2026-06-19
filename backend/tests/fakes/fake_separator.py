@@ -12,6 +12,7 @@ Tracker for call assertions in tests:
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Callable
 
 import numpy as np
 
@@ -41,12 +42,23 @@ class FakeVocalSeparator(VocalSeparator):
         self._should_fail = should_fail
         # Track calls for assertions in tests
         self.calls: list[tuple[Path]] = []
+        self.progress_callbacks: list[Callable[[float], None] | None] = []
 
-    def isolate(self, path: Path) -> np.ndarray:
-        """Return the pre-set vocals array (or fail if configured to)."""
+    def isolate(
+        self, path: Path, *, progress: Callable[[float], None] | None = None,
+    ) -> np.ndarray:
+        """Return the pre-set vocals array (or fail if configured to).
+
+        When a *progress* callback is given, reports completion (``1.0``) so
+        tests can verify the separation phase weighting.
+        """
         self.calls.append((path,))
+        self.progress_callbacks.append(progress)
 
         if self._should_fail:
             raise RuntimeError("FakeVocalSeparator: simulated failure")
+
+        if progress is not None:
+            progress(1.0)
 
         return self._audio

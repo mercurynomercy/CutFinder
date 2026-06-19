@@ -24,13 +24,24 @@ const basename = (p: string) => p.split('/').pop() || p
 // Format a seconds count as m:ss for the elapsed timer.
 const mmss = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
 
+// Percent at which the backend switches from vocal separation to transcription.
+// Mirrors `_SEPARATION_WEIGHT` (0.4) in the backend mlx_whisper.py adapter.
+const SEPARATION_WEIGHT_PCT = 40
+
 // Poll a job until it reaches a terminal state; returns the final status.
-async function waitForJob(jobId: number, timeoutMs = 30 * 60_000): Promise<string> {
+// `onProgress` receives the live done/total percentage (clamped 0..100) on each poll.
+async function waitForJob(
+  jobId: number,
+  onProgress: (pct: number) => void,
+  timeoutMs = 30 * 60_000,
+): Promise<string> {
   const deadline = Date.now() + timeoutMs
   while (Date.now() < deadline) {
     await new Promise((resolve) => setTimeout(resolve, 1500))
     try {
       const job = await api.getJob(jobId)
+      const pct = job.total > 0 ? (job.done / job.total) * 100 : 0
+      onProgress(Math.max(0, Math.min(100, pct)))
       if (['done', 'failed', 'cancelled'].includes(job.status)) return job.status
     } catch {
       // transient error — keep polling
@@ -56,6 +67,7 @@ export function SubtitlesPage({ onClose }: SubtitlesPageProps) {
   const [files, setFiles] = useState<string[]>([])
   const [jobId, setJobId] = useState<number | null>(null)
   const [elapsed, setElapsed] = useState(0)
+  const [progress, setProgress] = useState(0)
 
   // Tick an elapsed timer while a job is running so the user sees it's working
   // (Whisper transcription of a long video can take minutes with no sub-step).
@@ -91,10 +103,11 @@ export function SubtitlesPage({ onClose }: SubtitlesPageProps) {
     if (!videoPath || !outDir || formats.length === 0) return
     setPhase('running')
     setFiles([])
+    setProgress(0)
     try {
       const { job_id } = await api.exportSubtitles({ video_path: videoPath, out_dir: outDir, formats })
       setJobId(job_id)
-      const status = await waitForJob(job_id)
+      const status = await waitForJob(job_id, setProgress)
       if (status !== 'done') {
         setPhase('error')
         return
@@ -203,23 +216,25 @@ export function SubtitlesPage({ onClose }: SubtitlesPageProps) {
             </Button>
           </div>
 
-          {/* ── Progress (indeterminate while transcribing) ─ */}
+          {/* ── Progress (determinate, two phases: separation → transcription) ─ */}
           {phase === 'running' && (
             <div className="rounded-lg border border-[--border] bg-[--surface-1] p-4">
               <div className="flex items-center justify-between gap-3">
                 <span className="flex items-center gap-2 text-sm font-medium text-[--text-primary]">
                   <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-[1.5px] border-[--primary] border-t-transparent" />
-                  {t('subtitles.progressTitle')}
+                  {t(progress < SEPARATION_WEIGHT_PCT ? 'subtitles.phaseSeparating' : 'subtitles.phaseTranscribing')}
                 </span>
                 <span className="number-tabular text-xs text-[--text-muted]">
                   {t('subtitles.elapsed', { time: mmss(elapsed) })}
                 </span>
               </div>
-              <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-[--surface-3]">
-                <div className="h-full w-1/3 animate-[cf-slide_1.4s_ease-in-out_infinite] rounded-full bg-[--primary]" />
+              <div className="mt-3 flex items-center gap-3">
+                <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-[--surface-3]">
+                  <div className="h-full rounded-full bg-[--primary] transition-all duration-500 ease-out" style={{ width: `${progress}%` }} />
+                </div>
+                <span className="tabular-nums text-xs text-[--text-secondary]">{Math.round(progress)}%</span>
               </div>
               <p className="mt-2 text-xs text-[--text-muted]">{t('subtitles.progressHint')}</p>
-              <style>{`@keyframes cf-slide{0%{transform:translateX(-120%)}100%{transform:translateX(420%)}}`}</style>
             </div>
           )}
 

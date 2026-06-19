@@ -14,12 +14,14 @@ caller (transcriber) catches it and falls back to the original audio.
 from __future__ import annotations
 
 import subprocess
+from contextlib import nullcontext
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 import numpy as np
 
 from ..ports.speech import VocalSeparator
+from ._progress import patch_tqdm
 
 
 def _extract_audio_bytes(path: Path) -> bytes | None:
@@ -91,12 +93,18 @@ class DemucsSeparator(VocalSeparator):
         model.eval()
         self._dmodel = model
 
-    def isolate(self, path: Path) -> np.ndarray:
+    def isolate(
+        self, path: Path, *, progress: Callable[[float], None] | None = None,
+    ) -> np.ndarray:
         """Return whisper-ready 16 kHz mono float32 vocals (BGM removed).
 
         1. Extracts audio with ffmpeg (44.1 kHz stereo float32).
         2. Runs Demucs to separate stems, taking ``vocals``.
         3. Downmixes to mono and resamples to 16 kHz.
+
+        When *progress* is given, separation progress is forwarded as a 0..1
+        fraction (Demucs' internal tqdm is intercepted); ``apply_model`` is run
+        with ``progress=True`` so the tqdm bar exists.
 
         Raises
         ------
@@ -112,6 +120,7 @@ class DemucsSeparator(VocalSeparator):
         if raw_audio is None:
             raise RuntimeError(f"No audio stream found in video file: {path}")
 
+        import demucs.apply as _apply
         import torch
         import torchaudio
         from demucs.apply import apply_model
@@ -129,9 +138,13 @@ class DemucsSeparator(VocalSeparator):
         std = ref.std() + 1e-8
         wav_norm = (wav - mean) / std
 
-        with torch.no_grad():
+        # demucs only creates its tqdm bar when progress=True (and requires the
+        # default split=True). Intercept that tqdm to forward 0..1 progress.
+        ctx = patch_tqdm(_apply, progress) if progress is not None else nullcontext()
+        with torch.no_grad(), ctx:
             sources = apply_model(
-                model, wav_norm[None], device=self._device, progress=False,
+                model, wav_norm[None], device=self._device,
+                progress=progress is not None,
             )[0]
         sources = sources * std + mean  # (stems, 2, M) at model.samplerate
 

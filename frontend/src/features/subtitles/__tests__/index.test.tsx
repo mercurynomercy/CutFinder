@@ -96,4 +96,52 @@ describe('SubtitlesPage', () => {
 
     vi.useRealTimers()
   })
+
+  it('renders the live percentage and switches phase label across the separation threshold', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    const user = userEvent.setup()
+    // total=100; done climbs 20 → 60 → 100 so the label flips separating → transcribing.
+    const doneSeq = [20, 60, 100]
+    let poll = 0
+
+    server.use(
+      http.post(`${API}/pick-file`, () => HttpResponse.json({ path: '/Movies/a.mov' })),
+      http.post(`${API}/pick-folder`, () => HttpResponse.json({ path: '/Movies/Subs' })),
+      http.post(`${API}/subtitles/export`, () => HttpResponse.json({ job_id: 9 })),
+      http.get(`${API}/jobs/:id`, () => {
+        const done = doneSeq[Math.min(poll++, doneSeq.length - 1)]
+        return HttpResponse.json({
+          id: 9, status: done >= 100 ? 'done' : 'running',
+          total: 100, done, failed: 0, started_at: null, finished_at: null,
+        })
+      }),
+      http.get(`${API}/subtitles/:id`, () => HttpResponse.json({
+        job_id: 9, status: 'done', files: ['/Movies/Subs/a.zh.srt'],
+      })),
+    )
+
+    render(<SubtitlesPage onClose={() => {}} />)
+
+    await user.click(screen.getByRole('button', { name: 'Choose video' }))
+    await screen.findByText('a.mov')
+    await user.click(screen.getByRole('button', { name: 'Choose output folder' }))
+    await screen.findByText('/Movies/Subs')
+    await user.click(screen.getByRole('button', { name: 'Export' }))
+
+    // First poll: done=20 (<40) → separating, 20%
+    await vi.advanceTimersByTimeAsync(1600)
+    expect(await screen.findByText('Separating vocals…')).toBeInTheDocument()
+    expect(screen.getByText('20%')).toBeInTheDocument()
+
+    // Second poll: done=60 (>=40) → transcribing, 60%
+    await vi.advanceTimersByTimeAsync(1600)
+    expect(await screen.findByText('Transcribing…')).toBeInTheDocument()
+    expect(screen.getByText('60%')).toBeInTheDocument()
+
+    // Third poll: done=100 → terminal, result shown
+    await vi.advanceTimersByTimeAsync(1600)
+    expect(await screen.findByText('a.zh.srt')).toBeInTheDocument()
+
+    vi.useRealTimers()
+  })
 })
