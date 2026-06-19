@@ -69,4 +69,32 @@ describe('SettingsPage', () => {
     await waitFor(() => expect(saved).not.toBeNull())
     expect(saved!.output_language).toBe('en')
   })
+
+  it('renders the vocal-separation toggle reflecting the loaded value (off)', async () => {
+    render(<SettingsPage />)
+    const toggle = await screen.findByRole('checkbox', {
+      name: /Separate vocals before A-roll transcription/i,
+    })
+    expect((toggle as HTMLInputElement).checked).toBe(false)
+  })
+
+  it('sends vocal_separation in the PUT payload when toggled on', async () => {
+    let saved: Record<string, unknown> | null = null
+    server.use(
+      http.put(`${API}/settings`, async ({ request }) => {
+        saved = (await request.json()) as Record<string, unknown>
+        return HttpResponse.json({ status: 'ok' })
+      }),
+    )
+
+    render(<SettingsPage />)
+    const toggle = await screen.findByRole('checkbox', {
+      name: /Separate vocals before A-roll transcription/i,
+    })
+    await userEvent.click(toggle)
+    await userEvent.click(screen.getByRole('button', { name: /save settings/i }))
+
+    await waitFor(() => expect(saved).not.toBeNull())
+    expect(saved!.vocal_separation).toBe(true)
+  })
 })

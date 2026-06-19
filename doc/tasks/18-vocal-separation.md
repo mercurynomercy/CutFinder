@@ -19,7 +19,7 @@
 | 字幕导出 | **强制**分离 |
 | A-roll 流水线 | 开关默认 **False** |
 | 分离失败 | **记日志 + 回落原始音频**（转写不中断，仅退化为未去 BGM），不报错 |
-| Whisper 调参 | 两条路径都加防幻觉 kwargs（落地时验证 mlx-whisper 支持） |
+| Whisper 调参 | 两条路径都加 `condition_on_previous_text=False`（已确认 mlx-whisper 原生支持，断重复幻觉链；其余 no_speech/compression/logprob 阈值用默认） |
 
 ### 硬约束（继承 proposal）
 
@@ -43,26 +43,26 @@
 
 ### 后端
 
-- [ ] `ports/speech.py`：新增 `VocalSeparator` Protocol（`isolate(path) -> np.ndarray`）；导出到 `ports/__init__.py`。
-- [ ] `adapters/demucs_separator.py`：`DemucsSeparator` —— ffmpeg 44.1k 立体声抽取、demucs `htdemucs` 取 vocals、下混+重采样 16k、懒加载+device 选择、失败抛异常。
-- [ ] `adapters/mlx_whisper.py`：`MlxWhisperTranscriber.__init__` 加 `separator`；`transcribe()` 接入分离（失败回落）+ whisper 防幻觉 kwargs。
-- [ ] `config.py`：`Prefs` 加 `vocal_separation: bool = False`。
-- [ ] `api/app.py`：构造共享 `DemucsSeparator`；subtitle exporter 恒传、orchestrator 按 `prefs.vocal_separation` 传/不传。
-- [ ] `api/schemas.py` + settings 路由：`vocal_separation` 纳入设置读写（沿用现有 prefs 保存）。
-- [ ] `pyproject.toml`：加 `demucs`；`scripts/download_demucs.py`；`Makefile` `models` 目标加预拉 Demucs。
+- [x] `ports/speech.py`：新增 `VocalSeparator` Protocol（`isolate(path) -> np.ndarray`）；导出到 `ports/__init__.py`。
+- [x] `adapters/demucs_separator.py`：`DemucsSeparator` —— ffmpeg 44.1k 立体声抽取、demucs `htdemucs` 取 vocals、下混+重采样 16k、懒加载+device 选择、失败抛异常。
+- [x] `adapters/mlx_whisper.py`：`MlxWhisperTranscriber.__init__` 加 `separator`；`transcribe()` 接入分离（失败回落）+ 传 `condition_on_previous_text=False`（mlx-whisper 已确认支持）。
+- [x] `config.py`：`Prefs` 加 `vocal_separation: bool = False`。
+- [x] `api/app.py`：构造共享 `DemucsSeparator`；subtitle exporter 恒传、orchestrator 按 `prefs.vocal_separation` 传/不传。
+- [x] `api/schemas.py` + settings 路由：`vocal_separation` 纳入设置读写（沿用现有 prefs 保存）。
+- [x] `pyproject.toml`：加 `demucs`；`scripts/download_demucs.py`；`Makefile` `models` 目标加预拉 Demucs。
 
 ### 前端
 
-- [ ] `features/settings`：扫描区加开关「A-roll 转写前分离人声（去 BGM，较慢）」，默认关；说明仅影响之后 scan 的新片。
-- [ ] `api/client.ts` + 类型：settings 读写带上 `vocal_separation`。
-- [ ] `i18n`：EN/ZH 文案。
+- [x] `features/settings`：扫描区加开关「A-roll 转写前分离人声（去 BGM，较慢）」，默认关；说明仅影响之后 scan 的新片。
+- [x] `api/client.ts` + 类型：settings 读写带上 `vocal_separation`。
+- [x] `i18n`：EN/ZH 文案。
 
 ### 测试
 
-- [ ] `DemucsSeparator`：集成测试（真模型，`@pytest.mark.integration`）—— 含 BGM 样本 → 断言产出 16k 单声道、长度合理的干声。
-- [ ] `MlxWhisperTranscriber`：单测用**假 separator** + mock `mlx_whisper` —— 断言有 separator 时其输出进 whisper；separator 抛异常时回落原始音频、转写仍成功。
-- [ ] `config`：`vocal_separation` 默认 `False`、可往返。
-- [ ] 前端：Settings 开关渲染/切换/保存测试。
+- [x] `DemucsSeparator`：集成测试（真模型，`@pytest.mark.integration`）—— 含 BGM 样本 → 断言产出 16k 单声道、长度合理的干声。
+- [x] `MlxWhisperTranscriber`：单测用**假 separator** + mock `mlx_whisper` —— 断言有 separator 时其输出进 whisper；separator 抛异常时回落原始音频、转写仍成功。
+- [x] `config`：`vocal_separation` 默认 `False`、可往返。
+- [x] 前端：Settings 开关渲染/切换/保存测试。
 
 ---
 

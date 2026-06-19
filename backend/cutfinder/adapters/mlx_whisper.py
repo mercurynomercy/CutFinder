@@ -18,6 +18,7 @@ Examples
 
 from __future__ import annotations
 
+import logging
 import struct
 import subprocess
 from pathlib import Path
@@ -25,7 +26,9 @@ from pathlib import Path
 import numpy as np
 
 from ..domain.models import Segment, Transcript
-from ..ports.speech import Transcriber
+from ..ports.speech import Transcriber, VocalSeparator
+
+logger = logging.getLogger(__name__)
 
 
 # ── audio extraction helpers ───────────────────────────────────────
@@ -102,10 +105,14 @@ class MlxWhisperTranscriber(Transcriber):
     """
 
     def __init__(
-        self, model: str = "mlx-community/whisper-large-v3-mlx", language: str = "zh"
+        self,
+        model: str = "mlx-community/whisper-large-v3-mlx",
+        language: str = "zh",
+        separator: VocalSeparator | None = None,
     ) -> None:
         self._model = model
         self._language = language
+        self._separator = separator
 
     def transcribe(self, path: Path, *, language: str | None = None) -> Transcript:
         """Transcribe the audio track of *path* into text + segments.
@@ -129,15 +136,28 @@ class MlxWhisperTranscriber(Transcriber):
         if not path.is_file():
             raise FileNotFoundError(f"Not a video file: {path}")
 
-        # Extract audio bytes from the video
-        raw_audio = _extract_audio_bytes(path)
-        if raw_audio is None:
-            raise RuntimeError(f"No audio stream found in video file: {path}")
+        # Optionally isolate vocals (strip BGM) before transcription.
+        # On any failure, log and fall back to the raw audio extraction path.
+        audio_array: np.ndarray | None = None
+        if self._separator is not None:
+            try:
+                audio_array = self._separator.isolate(path)
+            except Exception as exc:  # noqa: BLE001 — degrade gracefully to raw audio
+                logger.warning(
+                    "Vocal separation failed for %s, falling back to raw audio: %s", path, exc
+                )
+                audio_array = None
 
-        # Convert to numpy array for mlx-whisper
-        audio_array = _audio_bytes_to_array(raw_audio)
         if audio_array is None:
-            raise RuntimeError(f"Failed to decode audio from video file: {path}")
+            # Extract audio bytes from the video
+            raw_audio = _extract_audio_bytes(path)
+            if raw_audio is None:
+                raise RuntimeError(f"No audio stream found in video file: {path}")
+
+            # Convert to numpy array for mlx-whisper
+            audio_array = _audio_bytes_to_array(raw_audio)
+            if audio_array is None:
+                raise RuntimeError(f"Failed to decode audio from video file: {path}")
 
         # Run mlx-whisper transcription (installed per pyproject.toml)
         import mlx_whisper  # type: ignore[import-untyped]
@@ -148,6 +168,7 @@ class MlxWhisperTranscriber(Transcriber):
             path_or_hf_repo=self._model,
             language=lang,
             verbose=False,
+            condition_on_previous_text=False,  # break repetition/hallucination chains
         )
 
         # Map result dict → Transcript domain model

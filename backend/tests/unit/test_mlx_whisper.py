@@ -319,6 +319,70 @@ class TestTranscriberTranscribe:
         assert transcript.full_text == ""
 
 
+# ── vocal separation path tests ──────────────────────────
+
+class TestTranscriberSeparator:
+    """Test the optional VocalSeparator integration in transcribe()."""
+
+    def test_separator_output_used_as_whisper_input(self, monkeypatch):
+        """With a separator injected, its array feeds whisper; ffmpeg is skipped."""
+        import sys
+        import numpy as np
+
+        from tests.fakes import FakeVocalSeparator
+
+        mod = MagicMock(transcribe=MagicMock(return_value={"text": "", "segments": []}))
+        monkeypatch.setitem(sys.modules, "mlx_whisper", mod)
+
+        adapter = _import_adapter()
+        extract_mock = MagicMock()
+        adapter._extract_audio_bytes = extract_mock  # type: ignore[attr-defined]
+
+        fake_audio = np.array([0.1, 0.2, 0.3], dtype=np.float32)
+        separator = FakeVocalSeparator(audio=fake_audio)
+
+        with patch.object(Path, "is_file", return_value=True):
+            transcriber = adapter.MlxWhisperTranscriber(separator=separator)
+            transcriber.transcribe(Path("/fake/video.mp4"))
+
+        assert len(separator.calls) == 1
+        extract_mock.assert_not_called()
+        passed = mod.transcribe.call_args[0][0]
+        np.testing.assert_array_equal(passed, fake_audio)
+
+    def test_separator_failure_falls_back_to_ffmpeg(self, monkeypatch):
+        """When the separator raises, transcribe falls back to ffmpeg extraction."""
+        import sys
+
+        from tests.fakes import FakeVocalSeparator
+
+        mod = MagicMock(transcribe=MagicMock(return_value=SAMPLE_RESULT_DICT))
+        monkeypatch.setitem(sys.modules, "mlx_whisper", mod)
+
+        transcriber = _make_transcriber(mod)
+        transcriber._separator = FakeVocalSeparator(should_fail=True)
+        # _make_transcriber already mocked _extract_audio_bytes on the live module
+        adapter = sys.modules["cutfinder.adapters.mlx_whisper"]
+
+        from cutfinder.domain.models import Transcript
+
+        with patch.object(Path, "is_file", return_value=True):
+            transcript = transcriber.transcribe(Path("/fake/video.mp4"))
+
+        assert isinstance(transcript, Transcript)
+        assert transcript.full_text == "这是一段中文测试。"
+        adapter._extract_audio_bytes.assert_called_once()  # type: ignore[attr-defined]
+
+    def test_condition_on_previous_text_passed_to_whisper(self, monkeypatch):
+        """transcribe must pass condition_on_previous_text=False to whisper."""
+        transcriber = _mocked_transcriber(SAMPLE_RESULT_DICT, monkeypatch)
+        transcriber.transcribe(Path("/fake/video.mp4"))
+
+        import sys
+        kwargs = sys.modules["mlx_whisper"].transcribe.call_args.kwargs
+        assert kwargs["condition_on_previous_text"] is False
+
+
 # ── MlxWhisperTranscriber init tests ─────────────────────
 
 class TestTranscriberInit:

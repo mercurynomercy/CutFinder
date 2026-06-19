@@ -169,6 +169,7 @@ class PrefsOut(BaseModel):
     vad_threshold: float = 0.4
     keyframe_count: int = 3
     keyframe_auto: bool = True
+    vocal_separation: bool = False
 
 
 class SettingsOut(BaseModel):
@@ -189,6 +190,7 @@ class SettingsUpdate(BaseModel):
     vad_threshold: Optional[float] = None
     keyframe_count: Optional[int] = None
     keyframe_auto: Optional[bool] = None
+    vocal_separation: Optional[bool] = None
 
 
 # ── SSE event types (internal helper schemas) ───────────────────

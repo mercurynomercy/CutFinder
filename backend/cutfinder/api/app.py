@@ -121,6 +121,7 @@ def _build_into(ctx: LibraryContext, library_path: Union[str, Path]) -> None:
         FfmpegFrameExtractor,
         FfmpegThumbnailMaker,
     )
+    from cutfinder.adapters.demucs_separator import DemucsSeparator
     from cutfinder.adapters.ffmpeg_probe import FfmpegProbe
     from cutfinder.adapters.fs_library import FsLibraryWriter
     from cutfinder.adapters.mlx_whisper import MlxWhisperTranscriber
@@ -140,12 +141,20 @@ def _build_into(ctx: LibraryContext, library_path: Union[str, Path]) -> None:
     # model loads from a local directory instead of the HF cache.
     whisper_model = config.env.WHISPER_MODEL_PATH or prefs.whisper_model
 
+    # One shared Demucs separator (lazy-loads the model, so construction is
+    # cheap). Subtitle export always separates; the A-roll pipeline only when
+    # the vocal_separation pref is on.
+    vocal_separator = DemucsSeparator()
+
     orchestrator = Orchestrator(
         probe=FfmpegProbe(),
         thumbnail_maker=FfmpegThumbnailMaker(),
         frame_extractor=FfmpegFrameExtractor(default_count=prefs.broll_frame_count),
         speech_detector=SileroSpeechDetector(threshold=prefs.vad_threshold),
-        transcriber=MlxWhisperTranscriber(model=whisper_model),
+        transcriber=MlxWhisperTranscriber(
+            model=whisper_model,
+            separator=vocal_separator if prefs.vocal_separation else None,
+        ),
         summarizer=OmlxSummarizer(config),
         vision_tagger=OmlxVisionTagger(config),
         repository=repository,
@@ -165,7 +174,9 @@ def _build_into(ctx: LibraryContext, library_path: Union[str, Path]) -> None:
     # timeline (never reuses a stored transcript).
     subtitle_exporter = SubtitleExporter(
         probe=FfmpegProbe(),
-        transcriber=MlxWhisperTranscriber(model=whisper_model),
+        transcriber=MlxWhisperTranscriber(
+            model=whisper_model, separator=vocal_separator
+        ),
     )
 
     worker_queue = WorkerQueue(

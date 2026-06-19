@@ -68,14 +68,22 @@ def test_create_app_with_library_serves_settings(
         "output_language",
         "keyframe_count",
         "keyframe_auto",
+        "vocal_separation",
     }
     # The OMLX secret is masked, never returned in the clear.
     assert resp.json()["env"]["OMLX_API_KEY"] == "***MASKED***"
+
+    # Off by default.
+    assert prefs["vocal_separation"] is False
 
     # Valid update persists; invalid value is rejected with 422.
     assert client.put("/api/settings", json={"broll_frame_count": 4}).status_code == 200
     assert client.get("/api/settings").json()["prefs"]["broll_frame_count"] == 4
     assert client.put("/api/settings", json={"vad_threshold": 9}).status_code == 422
+
+    # The vocal_separation toggle persists through PUT and is read back via GET.
+    assert client.put("/api/settings", json={"vocal_separation": True}).status_code == 200
+    assert client.get("/api/settings").json()["prefs"]["vocal_separation"] is True
 
 
 def test_create_app_with_library_starts_worker(tmp_path: Path, omlx_env: None) -> None:
@@ -86,6 +94,31 @@ def test_create_app_with_library_starts_worker(tmp_path: Path, omlx_env: None) -
     """
     with TestClient(create_app(tmp_path)) as client:
         assert client.get("/api/clips").status_code == 200
+
+
+def test_vocal_separator_wiring(tmp_path: Path, omlx_env: None) -> None:
+    """Subtitle export always gets a separator; the pipeline only when on.
+
+    Builds the real adapter graph via ``_build_into`` and introspects each
+    ``MlxWhisperTranscriber._separator``.
+    """
+    from cutfinder.api.app import LibraryContext, _build_into
+    from cutfinder.config import Prefs, load_config, save_prefs
+
+    # Default (vocal_separation off): pipeline transcriber has no separator,
+    # subtitle exporter always does.
+    ctx = LibraryContext()
+    _build_into(ctx, tmp_path)
+    assert ctx.orchestrator.transcriber._separator is None
+    assert ctx.worker_queue._subtitle_exporter._transcriber._separator is not None
+
+    # Turn the pref on, rebuild: pipeline transcriber now has a separator too.
+    prefs = load_config(tmp_path).prefs
+    save_prefs(Prefs(**{**prefs.model_dump(), "vocal_separation": True}), tmp_path)
+    ctx2 = LibraryContext()
+    _build_into(ctx2, tmp_path)
+    assert ctx2.orchestrator.transcriber._separator is not None
+    assert ctx2.worker_queue._subtitle_exporter._transcriber._separator is not None
 
 
 def test_set_library_binds_at_runtime(

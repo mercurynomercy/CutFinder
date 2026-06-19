@@ -213,6 +213,7 @@ class TestPrefs:
         assert prefs.extensions == [".mov", ".mp4", ".m4v"]
         assert prefs.broll_frame_count == 5
         assert prefs.vad_threshold == 0.35
+        assert prefs.vocal_separation is False
 
     def test_custom_values(self) -> None:
         """Prefs accepts custom values and overrides defaults."""
@@ -350,6 +351,7 @@ class TestSavePrefs:
             source_folders=["/data/a", "/data/b"],
             broll_frame_count=4,
             vad_threshold=0.25,
+            vocal_separation=True,
         )
 
         save_prefs(prefs, tmp_library.parent)
@@ -361,6 +363,7 @@ class TestSavePrefs:
         assert config.prefs.source_folders == prefs.source_folders
         assert config.prefs.broll_frame_count == 4
         assert config.prefs.vad_threshold == 0.25
+        assert config.prefs.vocal_separation is True
 
     def test_round_trip_preserves_defaults(
         self,

@@ -19,6 +19,8 @@ dependencies = [
     "torch>=2.0",
     "silero-vad",
     "onnxruntime",
+    # Vocal separation — Demucs (strip BGM before transcription, see adapters/demucs_separator.py)
+    "demucs",
     # HTTP client for SSE streaming (uvicorn handles server-side; httpx used in tests)
     "httpx",
 ]
@@ -64,7 +66,7 @@ disallow_untyped_defs = false
 
 # Third-party packages without type stubs / py.typed markers.
 [[tool.mypy.overrides]]
-module = ["silero_vad.*"]
+module = ["silero_vad.*", "demucs.*", "torchaudio.*"]
 ignore_missing_imports = true
 
 [tool.ruff]

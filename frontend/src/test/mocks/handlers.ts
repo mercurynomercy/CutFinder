@@ -61,6 +61,7 @@ function makeSettingsPrefs(overrides: Partial<SettingsPrefs> = {}): SettingsPref
     extensions: overrides.extensions ?? ['.mp4', '.mov'],
     broll_frame_count: overrides.broll_frame_count ?? 5,
     vad_threshold: overrides.vad_threshold ?? 0.48,
+    vocal_separation: overrides.vocal_separation ?? false,
     output_language: overrides.output_language ?? 'zh',
     keyframe_count: overrides.keyframe_count ?? 3,
     keyframe_auto: overrides.keyframe_auto ?? true,

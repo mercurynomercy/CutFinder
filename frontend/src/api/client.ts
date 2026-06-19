@@ -107,6 +107,7 @@ export interface SettingsPrefs {
   extensions: string[]
   broll_frame_count: number
   vad_threshold: number
+  vocal_separation: boolean
   output_language: 'zh' | 'en'
   keyframe_count: number
   keyframe_auto: boolean
@@ -143,6 +144,7 @@ export interface UpdateSettingsBody {
   extensions?: string[]
   broll_frame_count?: number
   vad_threshold?: number
+  vocal_separation?: boolean
   output_language?: 'zh' | 'en'
   keyframe_count?: number
   keyframe_auto?: boolean

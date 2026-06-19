@@ -503,6 +503,17 @@ export function SettingsPage({ onSave }: SettingsPageProps) {
                 className="w-full rounded-md border border-[--border] bg-[--surface-2] px-3 py-1.5 text-sm outline-none focus:border-[--primary]"
               />
 
+              {/* Separate vocals before A-roll transcription */}
+              <label className="mt-4 flex items-center gap-2 text-sm text-[--text-secondary]">
+                <input
+                  type="checkbox" checked={prefs.vocal_separation ?? false}
+                  onChange={(e) => updateField('vocal_separation', e.target.checked)}
+                  className="h-4 w-4 rounded border-[--border] bg-[--surface-2]"
+                />
+                {t('settings.vocalSeparation')}
+              </label>
+              <p className="mb-1 mt-1 text-xs text-[--text-muted]">{t('settings.vocalSeparationDesc')}</p>
+
               {/* AI output language */}
               <label className="mt-4 block text-sm text-[--text-secondary]">{t('settings.aiOutputLanguage')}</label>
               <p className="mb-1 text-xs text-[--text-muted]">{t('settings.aiOutputLanguageDesc')}</p>

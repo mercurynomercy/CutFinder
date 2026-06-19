@@ -169,6 +169,9 @@ class Prefs(BaseModel, frozen=True):
     # whether to auto-queue a keyframes job after each scan completes.
     keyframe_count: int = Field(default=3, ge=1, le=10)
     keyframe_auto: bool = True
+    # A-roll transcription strips BGM with Demucs before Whisper; off by
+    # default. Subtitle export always separates regardless of this flag.
+    vocal_separation: bool = False
 
     @field_validator("text_model", "vision_model", "whisper_model", mode="before")
     @classmethod

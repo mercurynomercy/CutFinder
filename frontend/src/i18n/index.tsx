@@ -229,6 +229,9 @@ const en = {
   'settings.vadThreshold': 'VAD threshold (0–1)',
   'settings.vadThresholdDesc':
     'Speech-detection sensitivity — higher is stricter (only segments with clear speech are marked A-roll)',
+  'settings.vocalSeparation': 'Separate vocals before A-roll transcription (strip BGM, slower)',
+  'settings.vocalSeparationDesc':
+    'Uses Demucs to remove background music before Whisper. Only affects clips scanned after you enable it. Subtitle export always separates.',
   'settings.aiOutputLanguage': 'AI output language',
   'settings.aiOutputLanguageDesc': 'Language of AI-generated summaries, tags, and other text output',
   'settings.keyframeCount': 'Keyframe suggestions per clip',
@@ -441,6 +444,8 @@ const zh: Record<Key, string> = {
   'settings.brollFrameCountDesc': 'B-roll 视觉分析时提取的视频帧数，越多越准确但处理更慢',
   'settings.vadThreshold': 'VAD 阈值 (0–1)',
   'settings.vadThresholdDesc': '语音检测灵敏度阈值，越高越严格（只标记有明显人声的片段为 A-roll）',
+  'settings.vocalSeparation': 'A-roll 转写前分离人声（去 BGM，较慢）',
+  'settings.vocalSeparationDesc': '转写前用 Demucs 去掉背景音乐。仅影响开启后新扫描的素材；字幕导出始终分离。',
   'settings.aiOutputLanguage': 'AI 输出语言',
   'settings.aiOutputLanguageDesc': 'AI 生成的摘要、标签等文字输出的语言',
   'settings.keyframeCount': '每段关键帧建议数',

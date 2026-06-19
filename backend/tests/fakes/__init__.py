@@ -29,6 +29,7 @@ from .fake_transcriber import (
     FakeTranscriber,
     make_sample_transcript,
 )
+from .fake_separator import FakeVocalSeparator
 from .fake_library import FakeLibraryWriter
 from .omlx_vision import FakeVisionTagger, make_sample_result
 from .fake_repository import FakeCatalogRepository
@@ -42,6 +43,7 @@ __all__ = [
     "FakeSpeechDetector",
     "FakeSummarizer",
     "FakeTranscriber",
+    "FakeVocalSeparator",
     "FakeVisionTagger",
     "make_sample",
     "make_sample_frame_paths",
