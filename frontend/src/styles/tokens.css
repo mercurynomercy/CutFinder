@@ -1,36 +1,41 @@
-/* ── CutFinder Design Tokens (Dark theme) ─────────────────────── */
+/* ── CutFinder Design Tokens ───────────────────────────────────
+   Light theme = default (`:root`). Dark theme overrides only the
+   colour tokens via `html[data-theme="dark"]`. Structural tokens
+   (spacing / radius / fonts) are shared and live in `:root` only.   */
 
 :root {
-  /* Surface / hierarchy (neutral cool grey) */
-  --bg-canvas: #0E0F11;
-  --surface-1: #16181B;
-  --surface-2: #1E2125;
-  --surface-3: #282C31;
-  --border:    #2E333A;
-  --border-strong: #3A4048;
+  color-scheme: light;
+
+  /* Surface / hierarchy (cool neutral light grey) */
+  --bg-canvas: #EEF0F3;
+  --surface-1: #FFFFFF;
+  --surface-2: #F6F7F9;
+  --surface-3: #E4E7EC;
+  --border:    #D8DCE2;
+  --border-strong: #BCC2CB;
 
   /* Text */
-  --text-primary:   #F2F4F7;
-  --text-secondary: #A4ACB9;
+  --text-primary:   #1A1D21;
+  --text-secondary: #4B5563;
   --text-muted:     #6B7280;
 
-  /* Primary (interaction / CTA / focus) */
-  --primary:    #6366F1;
-  --primary-hover:   #7077F2;
-  --primary-press:   #525AE0;
+  /* Primary (interaction / CTA / focus) — deepened for white-on-primary ≥4.5:1 */
+  --primary:    #5256E0;
+  --primary-hover:   #4146C4;
+  --primary-press:   #383DB0;
   --primary-fg:    #FFFFFF;
-  --primary-soft:   rgba(99, 102, 241, 0.16);
+  --primary-soft:   rgba(82, 86, 224, 0.12);
 
-  /* Content types (A/B-roll) */
-  --roll-a:    #F59E0B; /* amber — A-roll */
-  --roll-a-soft: rgba(245, 158, 11, 0.16);
-  --roll-b:    #2DD4BF; /* teal — B-roll */
-  --roll-b-soft: rgba(45, 212, 191, 0.16);
+  /* Content types (A/B-roll) — deepened for contrast on light surfaces */
+  --roll-a:    #B45309; /* deep amber — A-roll */
+  --roll-a-soft: rgba(180, 83, 9, 0.12);
+  --roll-b:    #0F766E; /* deep teal — B-roll */
+  --roll-b-soft: rgba(15, 118, 110, 0.12);
 
   /* Status */
-  --success: #22C55E;
-  --warning: #F59E0B;
-  --error:   #EF4444;
+  --success: #15803D;
+  --warning: #B45309;
+  --error:   #DC2626;
 
   /* Spacing scale (multiples of 4px) */
   --space-1: 0.25rem;   /* 4px */
@@ -52,4 +57,40 @@
   --radius-md:   0.375rem; /* 6px */
   --radius-lg:   0.5rem;   /* 8px */
   --radius-xl:   0.75rem;  /* 12px */
+}
+
+/* ── Dark theme (opt-in) ──────────────────────────────────────── */
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  /* Surface / hierarchy (neutral cool grey) */
+  --bg-canvas: #0E0F11;
+  --surface-1: #16181B;
+  --surface-2: #1E2125;
+  --surface-3: #282C31;
+  --border:    #2E333A;
+  --border-strong: #3A4048;
+
+  /* Text */
+  --text-primary:   #F2F4F7;
+  --text-secondary: #A4ACB9;
+  --text-muted:     #6B7280;
+
+  /* Primary */
+  --primary:    #6366F1;
+  --primary-hover:   #7077F2;
+  --primary-press:   #525AE0;
+  --primary-fg:    #FFFFFF;
+  --primary-soft:   rgba(99, 102, 241, 0.16);
+
+  /* Content types (A/B-roll) */
+  --roll-a:    #F59E0B; /* amber — A-roll */
+  --roll-a-soft: rgba(245, 158, 11, 0.16);
+  --roll-b:    #2DD4BF; /* teal — B-roll */
+  --roll-b-soft: rgba(45, 212, 191, 0.16);
+
+  /* Status */
+  --success: #22C55E;
+  --warning: #F59E0B;
+  --error:   #EF4444;
 }

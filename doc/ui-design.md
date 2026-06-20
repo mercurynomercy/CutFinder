@@ -56,7 +56,49 @@
 | `--danger` | `#F87171` | 错误 / 破坏性操作 |
 | `--processing` | `#6366F1` | 处理中（同主色） |
 
-> **浅色主题**：留作后续。届时用 desaturated 调，不做简单反色，单独验对比度（`color_dark_mode`）。
+### 浅色主题（Normal / Light，**默认主题**）
+
+浅色为**默认主题**（`:root`），深色为可切换的第二主题。两者均遵循「desaturated 中性、不做简单反色、逐项验对比度」（`color_dark_mode`）。深色实现上挂在 `html[data-theme="dark"]`，仅**覆盖**配色 token；浅色配色直接落在 `:root`，结构 token（间距/圆角/字体）也共用于 `:root`。
+
+> 注：第 2 节开头标「深色为默认」是 v1 早期基线；现已改为**浅色默认 + 可切换深色**，下表与第 8.1 节为准。
+
+**表面（冷中性浅灰，层级感靠明度递减 + 描边）**
+| Token | 值 | 用途 |
+|---|---|---|
+| `--bg-canvas` | `#EEF0F3` | 最底画布（浅灰，非纯白，护眼） |
+| `--surface-1` | `#FFFFFF` | 侧栏 / 顶栏 / 面板（白，浮于画布之上） |
+| `--surface-2` | `#F6F7F9` | 卡片 / 输入框 |
+| `--surface-3` | `#E4E7EC` | hover / 抬起（浅模式下 hover 加深一档） |
+| `--border` | `#D8DCE2` | 描边 / 分隔线 |
+| `--border-strong` | `#BCC2CB` | 输入聚焦前描边 |
+
+**文字（on `--surface-1` 白底）**
+| Token | 值 | 对比度 |
+|---|---|---|
+| `--text-primary` | `#1A1D21` | ~16:1 ✅ |
+| `--text-secondary` | `#4B5563` | ~7.4:1 ✅ |
+| `--text-muted` | `#6B7280` | ~4.8:1 ✅ |
+
+**主色（浅底需略加深以保证白字 ≥4.5:1，hover 改为加深）**
+| Token | 值 | 用途 |
+|---|---|---|
+| `--primary` | `#5256E0` | 白字 ~4.7:1 ✅ |
+| `--primary-hover` | `#4146C4` | hover（加深） |
+| `--primary-press` | `#383DB0` | active |
+| `--primary-soft` | `#5256E0`@12% | 选中底色 / 高亮 |
+
+**内容类型 / 状态（务必加深，原深色饱和值在白底对比度不足）**
+| Token | 深色值 | 浅色值 | 白底对比 |
+|---|---|---|---|
+| `--roll-a` | `#F59E0B` | `#B45309` 深琥珀 | ~5.3:1 ✅ |
+| `--roll-b` | `#2DD4BF` | `#0F766E` 深青 | ~5.0:1 ✅ |
+| `--success` | `#22C55E` | `#15803D` | ~4.7:1 ✅ |
+| `--warning` | `#F59E0B` | `#B45309` | ~5.3:1 ✅ |
+| `--error` | `#EF4444` | `#DC2626` | ~4.5:1 ✅ |
+
+> A/B「soft」底色在浅色下用同色 ~12% 低透明度淡彩；徽标始终**色 + 图标 + 文字**三重表达，切主题不破坏可访问性。
+
+**切换交互**：顶栏 ghost 图标按钮（深色态显「太阳」点亮浅色，浅色态显「月亮」切深色），写入 `localStorage`（key `cutfinder-theme`），**默认 `light`**。`index.html` 内联早执行脚本在首帧前设 `data-theme`，避免深色用户的浅色闪烁（FOUC）。`color-scheme` 随主题切换以适配原生滚动条/表单控件。
 
 ---
 
@@ -232,19 +274,34 @@
 
 ### 8.1 CSS 变量（`tokens.css`，挂在 `:root`）
 ```css
-:root {
-  color-scheme: dark;
-  --bg-canvas:#0E0F11; --surface-1:#16181B; --surface-2:#1E2125;
-  --surface-3:#282C31; --border:#2E333A; --border-strong:#3A4048;
-  --text-primary:#F2F4F7; --text-secondary:#A4ACB9; --text-muted:#6B7280;
-  --primary:#6366F1; --primary-hover:#7077F2; --primary-press:#525AE0; --primary-fg:#fff;
-  --roll-a:#F59E0B; --roll-b:#2DD4BF;
-  --success:#34D399; --warning:#FBBF24; --danger:#F87171;
+:root {            /* 浅色 = 默认（无 data-theme 时）；结构 token 也在此 */
+  color-scheme: light;
+  --bg-canvas:#EEF0F3; --surface-1:#FFFFFF; --surface-2:#F6F7F9;
+  --surface-3:#E4E7EC; --border:#D8DCE2; --border-strong:#BCC2CB;
+  --text-primary:#1A1D21; --text-secondary:#4B5563; --text-muted:#6B7280;
+  --primary:#5256E0; --primary-hover:#4146C4; --primary-press:#383DB0; --primary-fg:#fff;
+  --roll-a:#B45309; --roll-b:#0F766E;
+  --success:#15803D; --warning:#B45309; --error:#DC2626;
   --radius-sm:6px; --radius-md:8px; --radius-lg:10px;
   --font-ui:"Inter","PingFang SC",-apple-system,system-ui,sans-serif;
   --font-mono:"JetBrains Mono",ui-monospace,"SF Mono",monospace;
 }
+
+[data-theme="dark"] {    /* 深色 = 仅覆盖配色 token，结构 token 复用 */
+  color-scheme: dark;
+  --bg-canvas:#0E0F11; --surface-1:#16181B; --surface-2:#1E2125;
+  --surface-3:#282C31; --border:#2E333A; --border-strong:#3A4048;
+  --text-primary:#F2F4F7; --text-secondary:#A4ACB9; --text-muted:#6B7280;
+  --primary:#6366F1; --primary-hover:#7077F2; --primary-press:#525AE0;
+  --roll-a:#F59E0B; --roll-b:#2DD4BF;
+  --success:#22C55E; --warning:#F59E0B; --error:#EF4444;
+}
 ```
+
+**主题切换落地**：
+- `index.html` `<head>` 内联早执行脚本读 `localStorage['cutfinder-theme']`，首帧前给 `<html>` 设 `data-theme`，避免 FOUC。
+- `src/theme.ts` 暴露 `getStoredTheme()` / `applyTheme(theme)`（写 `data-theme` + `localStorage`）。
+- 顶栏 ghost 图标按钮调 `applyTheme` 切换并更新本地 state（太阳/月亮图标互换）。
 
 ### 8.2 Tailwind / shadcn
 - 把上面的 token 映射到 `tailwind.config` 的 `theme.extend.colors` 与 `fontFamily`，shadcn/ui 主题变量指向同一套 CSS 变量，确保所有组件统一。

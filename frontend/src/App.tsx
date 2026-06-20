@@ -17,6 +17,7 @@ import { SettingsPage } from '@/features/settings'
 import { SubtitlesPage } from '@/features/subtitles'
 import { LogModal } from '@/features/logs'
 import { useI18n } from '@/i18n'
+import { applyTheme, getStoredTheme, type Theme } from '@/theme'
 
 // Poll a job until it reaches a terminal state (or the timeout elapses).
 async function waitForJob(jobId: number, timeoutMs = 30 * 60_000): Promise<void> {
@@ -48,6 +49,14 @@ export default function App() {
   const [reanalyzingIds, setReanalyzingIds] = useState<Set<number>>(new Set())
   const [sortBy, setSortBy] = useState<'date-newest' | 'date-oldest'>('date-newest')
   const [searchQuery, setSearchQuery] = useState('')
+  const [theme, setTheme] = useState<Theme>(getStoredTheme)
+
+  // Light / dark toggle — persists and updates <html data-theme>.
+  const toggleTheme = () => {
+    const next: Theme = theme === 'dark' ? 'light' : 'dark'
+    applyTheme(next)
+    setTheme(next)
+  }
 
   const clipsRef = useRef(clips)
   clipsRef.current = clips
@@ -301,6 +310,22 @@ export default function App() {
               <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3.75 6.75A2.25 2.25 0 016 4.5h12a2.25 2.25 0 012.25 2.25v8.25A2.25 2.25 0 0118 17.25H8.25L4.5 21V6.75z" />
               <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7.5 10.5h3m3 0h3m-9 3h6" />
             </svg>
+          </button>
+          <button
+            onClick={toggleTheme}
+            className="rounded-md p-1.5 text-[--text-secondary] hover:bg-[--surface-3] transition-colors"
+            aria-label={theme === 'dark' ? t('app.themeToLight') : t('app.themeToDark')}
+            title={theme === 'dark' ? t('app.themeToLight') : t('app.themeToDark')}
+          >
+            {theme === 'dark' ? (
+              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" aria-hidden="true">
+                <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 3v2.25m6.364.386l-1.591 1.591M21 12h-2.25m-.386 6.364l-1.591-1.591M12 18.75V21m-4.773-4.227l-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0z" />
+              </svg>
+            ) : (
+              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" aria-hidden="true">
+                <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21.752 15.002A9.718 9.718 0 0118 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 003 11.25C3 16.635 7.365 21 12.75 21a9.753 9.753 0 009.002-5.998z" />
+              </svg>
+            )}
           </button>
           <button
             onClick={() => setShowLogs(true)}

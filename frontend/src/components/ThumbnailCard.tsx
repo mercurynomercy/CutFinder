@@ -135,7 +135,7 @@ const ThumbnailCard = React.forwardRef<HTMLDivElement, ThumbnailCardProps>(
           {/* "Partial" marker (bottom-left) — AI analysis failed, can re-analyze */}
           {status === 'partial' && (
             <div
-              className="absolute bottom-2 left-2 flex items-center gap-1 rounded bg-[--warning] px-1.5 py-0.5 text-[10px] font-semibold text-black"
+              className="absolute bottom-2 left-2 flex items-center gap-1 rounded bg-amber-400 px-1.5 py-0.5 text-[10px] font-semibold text-black"
               title={t('card.partialTitle')}
             >
               <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" aria-hidden="true">
@@ -166,7 +166,7 @@ const ThumbnailCard = React.forwardRef<HTMLDivElement, ThumbnailCardProps>(
 
           {/* Duration label (bottom-right) */}
           {duration !== null && duration !== undefined ? (
-            <div className="absolute bottom-2 right-2 rounded bg-black/70 px-1.5 py-0.5 text-xs font-medium tabular-numbers">
+            <div className="absolute bottom-2 right-2 rounded bg-black/70 px-1.5 py-0.5 text-xs font-medium text-white tabular-numbers">
               {formatDuration(duration)}
             </div>
           ) : null}

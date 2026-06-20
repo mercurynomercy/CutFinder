@@ -33,6 +33,8 @@ const en = {
   'app.logs': 'Backend logs',
   'app.keyframes': 'Keyframes',
   'app.subtitles': 'Subtitle export',
+  'app.themeToLight': 'Switch to light mode',
+  'app.themeToDark': 'Switch to dark mode',
 
   // Subtitle export page
   'subtitles.title': 'Subtitle export',
@@ -260,6 +262,8 @@ const zh: Record<Key, string> = {
   'app.logs': '后端日志',
   'app.keyframes': '关键帧',
   'app.subtitles': '字幕导出',
+  'app.themeToLight': '切换到浅色模式',
+  'app.themeToDark': '切换到深色模式',
 
   'subtitles.title': '字幕导出',
   'subtitles.desc': '选择一个剪辑好的视频和输出文件夹，导出根据音频转写生成的字幕。',
