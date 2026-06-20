@@ -67,6 +67,10 @@ make app          # → dist/CutFinder.app（以及 dist/CutFinder.dmg）
 - **扫描后自动刷新**：Scan 完成后自动轮询任务状态并刷新缩略图墙，无需手动操作。
 - **深色专业界面**：近黑面板让缩略图突出，A-roll/B-roll 以颜色+图标区分，贴近 FCP 调性（见 [`doc/ui-design.md`](./doc/ui-design.md)）。
 
+<p align="center">
+  <img src="doc/images/example.png" alt="CutFinder UI — 按日期分组的缩略图墙、筛选面板与详情面板"/>
+</p>
+
 ### 不破坏原素材（核心约束）
 
 - **原文件只读**，所有整理只发生在复制出来的新素材库里。

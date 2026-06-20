@@ -6,7 +6,10 @@
 
 CutFinder takes a pile of **A-roll** (clips with spoken narration — Chinese by default) and **B-roll** (pure visuals, no narration) and automatically **classifies, tags, summarizes, and thumbnails** every clip, so you can later find any shot by date, type, tag, or spoken line. Built for macOS (Apple Silicon) + Final Cut Pro workflows — **fully offline, all AI runs on your own machine.**
 
-> **Status: core functionality is complete and runs end-to-end.** Backend adapters, the orchestration layer, the API wiring layer (`create_app`), and the frontend are all implemented and connected. `make test-unit` (367 unit tests), frontend `vitest` (190 tests), `npm run build` (type-clean), `make check-omlx`, and `make dev` all pass. The model inference chain (text / vision / transcription / VAD) is verified against a real OMLX server plus local integration tests (see [Testing](#testing)).
+<p align="center">
+  <img src="branding/full-logo.png" alt="CutFinder logo" width="200"/>
+</p>
+
 
 ---
 
@@ -67,6 +70,10 @@ Drag `dist/CutFinder.app` to `/Applications` and double-click:
 - **Bind your library in Settings** — pick or type one absolute path on first use; it takes effect **at runtime with no restart** (a `CUTFINDER_LIBRARY` env var also works).
 - **Auto-refresh after scan** — when a scan finishes, the app polls job status and refreshes the thumbnail wall automatically.
 - **Dark professional UI** — near-black panels make thumbnails pop; A-roll/B-roll are distinguished by color + icon, close to FCP's feel (see [`doc/ui-design.md`](./doc/ui-design.md)).
+
+<p align="center">
+  <img src="doc/images/example.png" alt="CutFinder UI — thumbnail wall with date grouping, filters and detail panel"/>
+</p>
 
 ### Never touch the originals (core constraints)
 
