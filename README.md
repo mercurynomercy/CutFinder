@@ -1,15 +1,14 @@
 # CutFinder
 
+<p align="center">
+  <img src="branding/full-logo.png" alt="CutFinder logo" width="200"/>
+</p>
+
 > A local, offline tool that automatically classifies, tags, summarizes, and organizes your Vlog footage. Inspired by [Argus](https://github.com/discoposse/argus).
 
 **中文文档 → [README-zh.md](./README-zh.md)**
 
 CutFinder takes a pile of **A-roll** (clips with spoken narration — Chinese by default) and **B-roll** (pure visuals, no narration) and automatically **classifies, tags, summarizes, and thumbnails** every clip, so you can later find any shot by date, type, tag, or spoken line. Built for macOS (Apple Silicon) + Final Cut Pro workflows — **fully offline, all AI runs on your own machine.**
-
-<p align="center">
-  <img src="branding/full-logo.png" alt="CutFinder logo" width="200"/>
-</p>
-
 
 ---
 
