@@ -49,7 +49,10 @@ def check_omlx(
     """
 
     if not api_key:
-        print("OMLX_API_KEY is empty — set it in .env", file=_sys.stderr)
+        print(
+            "OMLX_API_KEY is empty — set it in the Settings UI or as an env var",
+            file=_sys.stderr,
+        )
         _sys.exit(1)
 
     models_url = f"{base_url}/models"

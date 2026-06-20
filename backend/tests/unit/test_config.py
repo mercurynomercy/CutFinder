@@ -28,13 +28,12 @@ from cutfinder.config import (
 def _isolate_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Keep every test hermetic from the developer's real machine config.
 
-    ``resolve_env`` now reads ``~/.cutfinder/config.json`` and the repo-root
-    ``.env``; redirect both so tests aren't polluted by local state.
+    ``resolve_env`` reads ``~/.cutfinder/config.json``; redirect it so tests
+    aren't polluted by local state.
     """
     import cutfinder.config as cfg
 
     monkeypatch.setattr(cfg, "_GLOBAL_CONFIG_FILE", tmp_path / "global-config.json")
-    monkeypatch.setattr(cfg, "_read_dotenv", dict)
 
 
 @pytest.fixture()
@@ -84,9 +83,7 @@ class TestEnvSettings:
         monkeypatch.delenv("OMLX_BASE_URL", raising=False)
         monkeypatch.delenv("OMLX_API_KEY", raising=False)
 
-        # _env_file=None isolates the unit test from the repo-root .env, which
-        # EnvSettings otherwise always loads (see config._ROOT_ENV_FILE).
-        env = EnvSettings(_env_file=None)
+        env = EnvSettings()
         assert env.OMLX_BASE_URL == ""
         assert env.OMLX_API_KEY == ""
 
@@ -106,9 +103,6 @@ class TestGlobalSettings:
 
         target = tmp_path / ".cutfinder" / "config.json"
         monkeypatch.setattr(cfg, "_GLOBAL_CONFIG_FILE", target)
-        # Isolate from the real repo-root .env so env-vs-global precedence is
-        # driven only by what each test sets.
-        monkeypatch.setattr(cfg, "_read_dotenv", dict)
         return target
 
     def test_save_then_load_round_trip(self, global_file: Path) -> None:
@@ -207,14 +201,13 @@ class TestGlobalPrefs:
         assert load_global_prefs() == {"vocal_separation": True}
 
     def test_load_config_overlays_global_over_per_library(
-        self, global_file: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+        self, global_file: Path, tmp_path: Path
     ) -> None:
         """A global override wins over the value in the per-library file."""
         import json as _json
 
         from cutfinder.config import load_config, save_global_prefs
 
-        monkeypatch.setattr("cutfinder.config._read_dotenv", dict)
         lib = tmp_path / "lib"
         (lib / ".cutfinder").mkdir(parents=True)
         (lib / ".cutfinder" / "config.json").write_text(
@@ -234,8 +227,7 @@ class TestGlobalPrefs:
     ) -> None:
         """The Settings UI (global store) is authoritative over env vars.
 
-        ``make dev`` exports ``.env`` into the environment, so a stale env var
-        must not shadow what the user saved in the UI.
+        A stale OS env var must not shadow what the user saved in the UI.
         """
         from cutfinder.config import resolve_env, save_global_settings
 

@@ -1,7 +1,10 @@
-"""Configuration loading: .env (OMLX) + JSON (user prefs), merged into AppConfig.
+"""Configuration loading: OS env + JSON (machine-global + per-library prefs).
 
-All classes are frozen Pydantic ``BaseModel`` instances so they are
-immutable, hashable (where useful), and serialisable to JSON.
+OMLX endpoint/key and model names come from ``~/.cutfinder/config.json``
+(written by the Settings UI) or OS environment variables; per-library
+preferences live in ``<library>/.cutfinder/config.json``. All classes are
+frozen Pydantic ``BaseModel`` instances so they are immutable, hashable
+(where useful), and serialisable to JSON.
 
 Required fields that are missing from both env vars and the JSON file
 raise a clear ``ValueError`` at load time.
@@ -14,12 +17,11 @@ import os
 from pathlib import Path
 from typing import Any, Literal
 
-from dotenv import dotenv_values
 from pydantic import BaseModel, Field, ValidationInfo, field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings
 
 # ---------------------------------------------------------------------------
-# EnvSettings — secrets and endpoints from .env / environment variables
+# EnvSettings — OMLX endpoint/key from OS env vars / the machine-global store
 # ---------------------------------------------------------------------------
 
 # Keys that live in the machine-global store / environment (not per-library).
@@ -33,9 +35,7 @@ _GLOBAL_KEYS = ("OMLX_BASE_URL", "OMLX_API_KEY", "TEXT_MODEL", "VISION_MODEL")
 _GLOBAL_PREF_KEYS = ("whisper_model", "vocal_separation", "keyframe_auto")
 
 # Repo root, anchored to this file (backend/cutfinder/config.py -> repo root).
-# Used so the root ``.env`` is found even when the process runs from backend/.
 _REPO_ROOT = Path(__file__).resolve().parents[2]
-_ROOT_ENV_FILE = _REPO_ROOT / ".env"
 
 # Local model store: ``<repo>/models/`` (gitignored). Whisper and Demucs models
 # are downloaded here on first use and loaded offline thereafter — no manual
@@ -45,27 +45,20 @@ WHISPER_MODELS_DIR = MODELS_DIR / "whisper"
 DEMUCS_MODELS_DIR = MODELS_DIR / "demucs"
 
 # Machine-global settings written by the UI. These are shared across all
-# libraries (the OMLX endpoint/key are machine-wide, not per-library) and let
-# the app run with no ``.env`` at all.
+# libraries (the OMLX endpoint/key are machine-wide, not per-library) so the
+# app runs with no environment variables at all.
 _GLOBAL_CONFIG_FILE = Path.home() / ".cutfinder" / "config.json"
 
 
 class EnvSettings(BaseSettings):
     """OMLX endpoint/key.
 
-    Resolved by :func:`resolve_env` with precedence ``OS env / .env`` >
-    ``~/.cutfinder/config.json`` (written by the UI) > empty. Missing values
-    are allowed: the app starts unconfigured and the user fills them in via
-    the Settings UI; adapters surface a clear connection error if used while
-    still empty.
+    Resolved by :func:`resolve_env` with precedence
+    ``~/.cutfinder/config.json`` (written by the UI) > OS environment
+    variable > empty. Missing values are allowed: the app starts
+    unconfigured and the user fills them in via the Settings UI; adapters
+    surface a clear connection error if used while still empty.
     """
-
-    model_config = SettingsConfigDict(
-        # Both the repo-root .env (the documented location) and a CWD-local
-        # .env are honoured; the latter wins for overlapping keys.
-        env_file=(_ROOT_ENV_FILE, ".env"),
-        env_file_encoding="utf-8",
-    )
 
     OMLX_BASE_URL: str = Field(
         default="",
@@ -156,39 +149,19 @@ def save_global_prefs(updates: dict[str, Any]) -> None:
     _write_global_file(data)
 
 
-def _read_dotenv() -> dict[str, str]:
-    """Return recognised keys from the ``.env`` file(s) — bootstrap defaults.
-
-    These are the *lowest* priority layer: values saved through the Settings
-    UI (the global store) override them so UI edits actually take effect.
-    """
-    values: dict[str, str | None] = {}
-    for env_file in (_ROOT_ENV_FILE, Path(".env")):
-        try:
-            if env_file.is_file():
-                values.update(dotenv_values(env_file))
-        except OSError:
-            continue
-    return {k: v for k, v in values.items() if k in _GLOBAL_KEYS and v}
-
-
 def resolve_env() -> EnvSettings:
-    """Resolve OMLX/whisper config, layering all sources.
+    """Resolve OMLX config, layering all sources.
 
     Precedence (highest wins): ``~/.cutfinder/config.json`` (Settings UI) >
-    OS environment variable > ``.env`` file > empty.
-
-    The Settings UI is authoritative — values saved there always take effect,
-    even when a stale ``.env`` sets the same key (note ``make dev`` exports
-    ``.env`` into the environment, so env vars and ``.env`` are effectively the
-    same fallback layer). Env / ``.env`` only fill keys the UI hasn't set.
+    OS environment variable > empty. The Settings UI is authoritative — values
+    saved there always take effect, even when an OS env var sets the same key.
+    Env vars only fill keys the UI hasn't set.
     """
     layered: dict[str, str] = {}
-    layered.update(_read_dotenv())
     layered.update({k: os.environ[k] for k in _GLOBAL_KEYS if os.environ.get(k)})
     layered.update(load_global_settings())
-    # _env_file=None: the .env is layered above by hand, not by pydantic's own
-    # reader (which would otherwise outrank the global store).
+    # _env_file=None: don't let pydantic's own env-file reader run; sources are
+    # layered above by hand so the global store outranks OS env vars.
     return EnvSettings(_env_file=None, **layered)
 
 
@@ -288,7 +261,7 @@ def load_config(library_path: str | Path) -> AppConfig:
     """
     library_dir = Path(library_path).resolve()
 
-    # Load EnvSettings from environment / .env, falling back to the global store.
+    # Load OMLX settings from the global store, falling back to OS env vars.
     env = resolve_env()
 
     # Load Prefs — merge JSON file on top of defaults

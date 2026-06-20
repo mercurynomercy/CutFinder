@@ -17,7 +17,7 @@ from pathlib import Path
 import pytest
 
 from cutfinder.adapters.omlx_vision import OmlxVisionTagger
-from cutfinder.config import EnvSettings
+from cutfinder.config import resolve_env
 
 
 def _real_frame(index: int = 0) -> Path:
@@ -35,9 +35,9 @@ def _real_frame(index: int = 0) -> Path:
 
 
 def _has_omlx_config() -> bool:
-    """Check if OMLX credentials are configured in the environment."""
+    """Check if OMLX credentials are configured (global store or OS env)."""
     try:
-        settings = EnvSettings()
+        settings = resolve_env()
         return bool(settings.OMLX_BASE_URL and settings.OMLX_API_KEY)
     except Exception:
         return False
@@ -55,7 +55,7 @@ def vision_tagger(tmp_path_factory):
 
     from cutfinder.config import AppConfig, Prefs
     config = AppConfig(
-        env=EnvSettings(),
+        env=resolve_env(),
         prefs=Prefs(vision_model="Qwen3-VL-8B"),
     )
 

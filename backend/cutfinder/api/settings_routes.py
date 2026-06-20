@@ -68,11 +68,10 @@ def _build_router(
         """Apply a partial settings update.
 
         Per-library prefs are persisted via :func:`cutfinder.config.save_prefs`;
-        machine-global keys (OMLX endpoint/key, whisper path) are persisted via
+        machine-global keys (OMLX endpoint/key, model names) are persisted via
         :func:`cutfinder.config.save_global_settings` so they apply across all
-        libraries without a ``.env`` file. Only fields present in the request
-        body are touched. A masked ``OMLX_API_KEY`` is ignored so the stored
-        secret is never clobbered.
+        libraries. Only fields present in the request body are touched. A masked
+        ``OMLX_API_KEY`` is ignored so the stored secret is never clobbered.
         """
         library_path = get_library_fn()
         if not library_path:

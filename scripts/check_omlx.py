@@ -1,7 +1,7 @@
 """Verify the OMLX server is reachable and required models are loaded.
 
 Reads OMLX_BASE_URL / OMLX_API_KEY via CutFinder's config layer
-(`~/.cutfinder/config.json` > OS env var > ``.env``) and checks that
+(`~/.cutfinder/config.json` > OS env var) and checks that
 both the text and vision models CutFinder needs are present.
 Exits non-zero with a clear message on any failure.
 
@@ -28,7 +28,7 @@ REQUIRED_MODELS = ["qwen3.6-35b-a3b", "qwen3-vl-8b"]
 def _resolve_omlx_config() -> Tuple[str, str]:
     """Return ``(base_url, api_key)`` using the same precedence as the app.
 
-    Priority: ``~/.cutfinder/config.json`` > OS env var > ``.env`` file.
+    Priority: ``~/.cutfinder/config.json`` > OS env var.
     Falls back to the default OMLX URL if no base_url is set anywhere.
 
     Extracted as a separate function for testability — tests can patch
@@ -46,7 +46,7 @@ def main() -> int:
     base, key = _resolve_omlx_config()
 
     if not key:
-        print("OMLX_API_KEY is empty — set it in Settings UI or .env", file=sys.stderr)
+        print("OMLX_API_KEY is empty — set it in the Settings UI or as an env var", file=sys.stderr)
         return 1
 
     try:

@@ -4,7 +4,7 @@ testVideo/
 # 本地模型缓存（Whisper / Demucs，按需联网下载，不入库）
 models/
 
-# 密钥/端点（只提交 .env.example）
+# 密钥/端点不入库（OMLX 配置走设置页 → ~/.cutfinder/config.json；保留忽略以防本地遗留的密钥文件被提交）
 .env
 .env.local
 
