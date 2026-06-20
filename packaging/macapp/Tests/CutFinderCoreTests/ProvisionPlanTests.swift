@@ -60,9 +60,11 @@ final class ProvisionPlanTests: XCTestCase {
         )
     }
 
-    func testPythonEnvBranches() {
+    func testPythonEnvAlwaysRuns() {
+        // uv sync always runs (idempotent) so dependency changes between app
+        // versions get applied even when a venv already exists.
         XCTAssertEqual(action(ProvisionPlanner.plan(for: env(pythonEnv: false)), .pythonEnv), .run)
-        XCTAssertEqual(action(ProvisionPlanner.plan(for: env(pythonEnv: true)), .pythonEnv), .skip)
+        XCTAssertEqual(action(ProvisionPlanner.plan(for: env(pythonEnv: true)), .pythonEnv), .run)
     }
 
     func testModelsBranches() {
@@ -98,7 +100,7 @@ final class ProvisionPlanTests: XCTestCase {
             PlannedStep(step: .payload, action: .run),
             PlannedStep(step: .uv, action: .skip),
             PlannedStep(step: .ffmpeg, action: .skip),
-            PlannedStep(step: .pythonEnv, action: .skip),
+            PlannedStep(step: .pythonEnv, action: .run),
             PlannedStep(step: .models, action: .skip),
             PlannedStep(step: .omlx, action: .skip),
         ])

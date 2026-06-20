@@ -40,6 +40,12 @@ public struct PayloadPaths {
             .appendingPathComponent("python", isDirectory: false)
     }
 
+    /// `<runtimeDir>/models` — where whisper + demucs weights are downloaded
+    /// (matches `cutfinder.config.MODELS_DIR`, anchored at the backend's repo root).
+    public var modelsDir: URL {
+        runtimeDir.appendingPathComponent("models", isDirectory: true)
+    }
+
     /// `<runtimeDir>/frontend/dist`
     public var frontendDist: URL {
         runtimeDir

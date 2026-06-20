@@ -78,7 +78,11 @@ public enum ProvisionPlanner {
             if env.ffmpegInstalled { return .skip }
             return env.brewInstalled ? .run : .guide("ffmpeg-no-brew")
         case .pythonEnv:
-            return env.pythonEnvReady ? .skip : .run
+            // Always run `uv sync` — it's idempotent and fast when already in
+            // sync, but crucially it picks up dependency changes between app
+            // versions (e.g. a newly added `demucs`). Skipping just because the
+            // venv exists would strand an older venv missing new packages.
+            return .run
         case .models:
             return env.modelsPresent ? .skip : .run
         case .omlx:
