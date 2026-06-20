@@ -70,6 +70,7 @@ def _extract_audio_bytes(path: Path) -> bytes | None:
         ],
         capture_output=True,
         check=False,
+        stdin=subprocess.DEVNULL,  # prevent hang on terminal close / pipe break
     )
 
     if result.returncode != 0 or not result.stdout:

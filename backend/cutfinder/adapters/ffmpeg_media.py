@@ -58,6 +58,7 @@ def _probe_duration(path: Path) -> float | None:
             ],
             capture_output=True,
             text=True,
+            stdin=subprocess.DEVNULL,  # prevent hang on terminal close / pipe break
         )
     except FileNotFoundError:
         return None
@@ -120,6 +121,7 @@ class FfmpegThumbnailMaker(ThumbnailMaker):
 
         result = subprocess.run(  # noqa: S603 — ffmpeg is a trusted local tool
             cmd, capture_output=True, text=True, check=False,
+            stdin=subprocess.DEVNULL,  # prevent hang on terminal close / pipe break
         )
 
         if result.returncode != 0:
@@ -199,6 +201,7 @@ class FfmpegFrameExtractor(FrameExtractor):
 
             result = subprocess.run(  # noqa: S603 — ffmpeg is a trusted local tool
                 cmd, capture_output=True, text=True, check=False,
+                stdin=subprocess.DEVNULL,  # prevent hang on terminal close / pipe break
             )
 
             if result.returncode != 0:
@@ -240,6 +243,7 @@ class FfmpegFrameExtractor(FrameExtractor):
         ]
         result = subprocess.run(  # noqa: S603 — ffmpeg is a trusted local tool
             cmd, capture_output=True, text=True, check=False,
+            stdin=subprocess.DEVNULL,  # prevent hang on terminal close / pipe break
         )
         if result.returncode != 0 or not out_path.is_file():
             raise RuntimeError(

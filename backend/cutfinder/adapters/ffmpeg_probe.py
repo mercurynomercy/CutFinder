@@ -167,7 +167,8 @@ class FfmpegProbe:
             str(path),
         ]
         proc = subprocess.run(  # noqa: S603 — ffprobe is a trusted local tool
-            cmd, capture_output=True, text=True, check=False
+            cmd, capture_output=True, text=True, check=False,
+            stdin=subprocess.DEVNULL,  # prevent hang on terminal close / pipe break
         )
 
         if proc.returncode != 0:

@@ -91,6 +91,12 @@ def _build_into(ctx: LibraryContext, library_path: Union[str, Path]) -> None:
     Synchronous: the worker queue is created but not started (the caller starts
     it — either the FastAPI startup event or :func:`rebind_library`).
     """
+    # GC-safety: cancel any still-running worker from a previous bind / reload.
+    # Uses close() (sync, non-draining) because we are already inside a request
+    # context where stop() has been awaited — this is the final cleanup guard.
+    if ctx.worker_queue is not None:
+        ctx.worker_queue.close()
+
     lib_dir = Path(str(library_path)).resolve()
     cutfinder_dir = lib_dir / ".cutfinder"
     cutfinder_dir.mkdir(parents=True, exist_ok=True)

@@ -200,6 +200,31 @@ class WorkerQueue:
             await self._worker_task
         self._worker_task = None
 
+    def close(self) -> None:
+        """Synchronous cleanup for GC safety.
+
+        Cancels the worker task if it is still running, preventing
+        ``"Task was destroyed but it is pending!"`` warnings during
+        uvicorn --reload or other abrupt process terminations where the
+        async shutdown hook may not complete in time.
+
+        This is a best-effort teardown — it does NOT drain the queue
+        (use ``stop()`` for graceful shutdown).  Safe to call even if
+        the worker was never started or already stopped.
+        """
+        task = self._worker_task
+        if task is not None and not task.done():
+            task.cancel()
+
+    # ── Context manager (GC safety) ───────────────────────────────
+
+    async def __aenter__(self) -> "WorkerQueue":
+        await self.start()
+        return self
+
+    async def __aexit__(self, *_: Any) -> None:
+        self.close()
+
     # ── Pause / resume / cancel (global + per-job control) ───────
 
     def pause(self) -> None:
@@ -515,7 +540,7 @@ class WorkerQueue:
                         success, error = await self._process_reanalyze(payload)
                     elif kind == "keyframes":
                         success, error = await self._process_keyframes(payload)
-                    elif kind == "subtitle":
+                    elif kind == "subtitle" and job_id is not None:
                         success, error = await self._process_subtitle(payload, job_id)
                     else:
                         success, error = True, None
