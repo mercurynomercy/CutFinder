@@ -10,6 +10,44 @@
 
 ---
 
+## 快速开始 —— `make app`
+
+推荐用原生的 **`CutFinder.app`** 来跑 CutFinder：一个用 Swift/AppKit 写的小外壳，把界面装进独立窗口（WKWebView，不开浏览器标签页），托管本地服务，并在**首次启动时自建所需的一切**。一条命令即可构建。
+
+> **有一个前置依赖装在 .app 之外：** [OMLX](https://github.com/jundot/omlx)，本地 Apple Silicon 模型服务器（菜单栏 App）。装好它并加载 `Qwen3.6-35B-A3B`（文本）+ `Qwen3-VL-8B`（视觉）。CutFinder 首次运行会检测它，**缺失时会引导你安装** —— 没有它，扫描 / 转写 / 缩略图仍可用，只有 A-roll 简介和 B-roll 打标需要它。
+
+### 1. 构建 App
+
+```bash
+git clone <repo> && cd CutFinder
+make app          # → dist/CutFinder.app（以及 dist/CutFinder.dmg）
+```
+
+`make app` 用 **SwiftPM** 编译 Swift 外壳并内置预构建的前端，所以**构建机**需要 **Xcode 命令行工具**（`xcode-select --install`）和 Node。而运行*已构建好*的 `.app` 两者都不需要 —— `.app` 自带 UI 与后端源码，由同一个服务同时提供二者（运行时不需要 Node）。
+
+### 2. 安装与首次启动
+
+把 `dist/CutFinder.app` 拖到 `/Applications`，双击即可：
+
+- **首次启动会自建运行环境。** 原生安装界面会显示进度：同步运行时、安装 `uv` 与 `ffmpeg`（有 Homebrew 时自动 `brew install`，否则引导你安装）、创建 Python 环境（`uv sync`）、下载 Whisper + Demucs 模型（约 3GB）。之后启动是秒开。
+- **服务自动启动**，UI 加载在 App 自己的窗口里。可用**「服务」菜单**来 启动 / 停止 / 重启 后端，或选「在浏览器中打开」用标签页。
+- **标准 Mac App 行为** —— 完整应用菜单；关窗口后服务继续运行；点 Dock 图标重新打开窗口；⌘Q 干净地停止服务（不留孤儿进程）。
+- 运行环境写在 `~/Library/Application Support/CutFinder/`（**不写进 .app 包内**，便于更新/签名）；日志在同目录 `launch.log`。
+
+> **未签名的开发版？** 当本机有 Developer ID 签名身份时，`make app` 会用 **Hardened Runtime** 签名（设置了 `CUTFINDER_NOTARY_PROFILE` 时还会公证 + staple）；否则产出未签名的开发版，首次打开需「**右键 → 打开**」放行。因为 Python 环境与模型都在包外，只需签那个很小的 Swift 二进制。
+
+### 3. 开始使用
+
+1. **配置 OMLX** —— **设置 → OMLX 连接** → 填入 Base URL / API key → 保存。存到 `~/.cutfinder/config.json`（**全机共享**；Whisper 模型、人声分离 / 自动关键帧开关也存在这里）。
+2. **绑定素材库** —— **设置 → 设置素材库** → 用原生选择器选一个绝对路径。整理后的副本、缩略图和 SQLite 目录都放在这里（全在 `<library>/.cutfinder/` 下）。**改了无需重启**即时生效。
+3. **添加源文件夹并扫描** —— 把 CutFinder 指向你的素材文件夹，运行扫描。每个新片段会被判定 A-roll/B-roll、转写/打标、生成缩略图，并复制到 `<library>/YYYY-MM-DD/A-roll(或 B-roll)/`。重新扫描只处理新文件（按指纹去重）—— 原始文件永不改动。
+4. **浏览、检索、纠正** —— 缩略图墙按拍摄日期分组；可按文件名、简介、标签、日期、类型检索/筛选。判错的 A/B 或标签可手动改 —— 改动会被记住。
+5. **导出字幕** —— 选一个剪好的成片 → 重新转写（先去掉 BGM）→ 导出 Final Cut Pro 原生的 **iTT + SRT** 到你选的文件夹。
+
+> 想从源码运行（用于开发）？见下方[从源码运行](#从源码运行开发)。
+
+---
+
 ## 它能做什么
 
 - **自动区分 A-roll / B-roll**：检测有无人声解说（Silero VAD），可手动纠正且会被记住。
@@ -89,7 +127,9 @@ API 层 (FastAPI，薄)                       :5081
 
 ---
 
-## 安装与启动 (Setup & Run)
+## 从源码运行（开发）
+
+> 用于日常开发。若只是想**使用** CutFinder，请改用 [`make app`](#快速开始--make-app) 构建原生 App。
 
 ### 1. 安装依赖
 
@@ -98,7 +138,7 @@ git clone <repo> && cd CutFinder
 make setup                      # mise install + brew bundle + uv sync + npm install
 ```
 
-> OMLX 配置可在**设置页**里填（见步骤 2），无需 `.env`。若你偏好用 `.env`，再 `cp .env.example .env` 并填值。
+> OMLX 配置在**设置页**里填（见步骤 2），不用手改配置文件。
 
 > 没有 mise？先 `brew install mise`，或手动执行：
 > ```bash
@@ -108,21 +148,18 @@ make setup                      # mise install + brew bundle + uv sync + npm ins
 
 ### 2. 配置 OMLX 连接
 
-需要配置三项：OMLX 地址、API key、（可选）Whisper 模型路径。两种方式，任选其一：
+配置两项：OMLX 地址和 API key。两种方式，任选其一：
 
-- **设置页（推荐，无需 `.env`）**：启动后打开 http://localhost:5080 → 「设置」→ **OMLX connection** 填写 Base URL / API key / Whisper 路径 → 保存。这些值存到 `~/.cutfinder/config.json`（**全机共用**，换素材库不用重填），保存即生效。
+- **设置页（推荐）**：启动后打开 http://localhost:5080 → 「设置」→ **OMLX connection** 填写 Base URL / API key → 保存。这些值存到 `~/.cutfinder/config.json`（**全机共用**，换素材库不用重填），保存即生效。
 
-- **`.env`（可选，用于临时覆盖）**：在**仓库根目录**放一个 `.env`：
+- **系统环境变量（可选）**：在 shell 里 `export OMLX_BASE_URL` / `OMLX_API_KEY`（适合 CI / 临时跑）：
 
-  ```ini
-  # OMLX 本地推理服务器（OpenAI 兼容）。默认假设 :8000；按你的实际端口改。
-  OMLX_BASE_URL=http://localhost:8000/v1
-  OMLX_API_KEY=your-omlx-key
+  ```bash
+  export OMLX_BASE_URL=http://localhost:8000/v1
+  export OMLX_API_KEY=your-omlx-key
   ```
 
-  `make dev` / `make check-omlx` / `make test-integration` 会自动加载它；手动用 `uvicorn` 起后端则先 `set -a; source .env; set +a` 导出。
-
-> **优先级**（高→低）：**设置页全局配置**（`~/.cutfinder/config.json`）> **环境变量 / `.env`**。设置页是权威来源——存进去的值始终生效，即使 `.env` 设了同一个键也不会被它盖掉（注意 `make dev` 会把 `.env` 导出成环境变量，所以两者属于同一层「兜底」）。`.env` / 环境变量只用于填设置页尚未配置的键。
+> **优先级**（高→低）：**设置页全局配置**（`~/.cutfinder/config.json`）> **系统环境变量**。设置页是权威来源——存进去的值始终生效，即使环境变量设了同一个键也不会被它盖掉；环境变量只用于填设置页尚未配置的键。（已不再使用 `.env` 文件。）
 
 ### 3. 验证 OMLX 就绪
 
@@ -132,7 +169,7 @@ make check-omlx                 # 校验文本/视觉模型是否已加载
 #   All required text/vision models are present.
 ```
 
-> `make check-omlx` 只读 `.env` / 环境变量，**不读**设置页存的全局配置。若你走 UI 配置（无 `.env`），可跳过这步，直接在应用里扫描时验证；或临时 `OMLX_BASE_URL=... OMLX_API_KEY=... make check-omlx`。
+> `make check-omlx` 与应用用同一套优先级解析凭据（`~/.cutfinder/config.json` > 系统环境变量），所以无论你走 UI 还是环境变量配置都能用。
 
 ### 4. 启动开发服务器（推荐：一条命令同时起前后端）
 
@@ -149,16 +186,15 @@ make dev
 素材库目录用于存放整理后的副本、缩略图与 SQLite 目录（都在 `<库>/.cutfinder/`）。两种方式：
 
 - **设置页（推荐）**：打开 http://localhost:5080 → 「设置」→ **Set up your library** → 点 **Choose…** 用 macOS 原生选择框选目录（或手填绝对路径）→ **运行时热生效、无需重启**，且选择会被记住（持久化到 `~/.cutfinder`）。
-- **环境变量**：在根 `.env` 里加 `CUTFINDER_LIBRARY=/path/to/library`，再 `make dev`。
+- **环境变量**：在 shell 里 `export CUTFINDER_LIBRARY=/path/to/library`，再 `make dev`。
 
 > 未绑定库时后端正常启动，但目录类接口返回 503、「设置」页显示绑定向导，直到你绑定一个库。
 
 ### 手动分起（调试用）
 
 ```bash
-# 终端 1 — 后端（先导出 .env）
+# 终端 1 — 后端（OMLX 配置来自 ~/.cutfinder/config.json 或 export 的环境变量）
 cd backend
-set -a; source ../.env; set +a
 CUTFINDER_LIBRARY=/path/to/library uv run uvicorn cutfinder.api.app:app --reload --port 5081
 
 # 终端 2 — 前端
@@ -188,11 +224,10 @@ uv run mypy cutfinder/               # 类型检查（strict，clean）
 uv run ruff check cutfinder/         # linting（clean）
 ```
 
-集成测试在缺少 `.env` / OMLX / 样片时会**自动 skip**，不会误报失败。要真正跑 OMLX 链路：
+集成测试在缺少 OMLX / 样片时会**自动 skip**，不会误报失败。要真正跑 OMLX 链路，先配好 OMLX（设置页或环境变量），再：
 
 ```bash
 cd backend
-set -a; source ../.env; set +a
 uv run pytest -m integration
 ```
 
@@ -209,8 +244,8 @@ npx playwright test             # e2e（自动起 Vite dev server）
 
 ```bash
 make test-unit         # 后端单元测试（快，tests/unit，无外部依赖）—— 日常用这个
-make test              # 后端全量（含 -m integration；本机有 OMLX/.env 时会真跑，可能慢/挂起）
-make test-integration  # 仅跑 -m integration（自动加载 .env；需 ffmpeg/OMLX）
+make test              # 后端全量（含 -m integration；配好 OMLX 时会真跑，可能慢/挂起）
+make test-integration  # 仅跑 -m integration（需 ffmpeg + 已配置的 OMLX）
 make e2e               # Playwright e2e
 ```
 
@@ -231,36 +266,4 @@ make e2e               # Playwright e2e
 - [任务清单 `doc/tasks/`](./doc/tasks/progress.md) —— 各模块最小任务与总体进度
 - [`CLAUDE.md`](./CLAUDE.md) —— 给 AI 协作者的项目约束与架构速览
 
----
-
-## 打包为 macOS App（CutFinder.app）
-
-把整个应用打包成一个可拖入「应用程序」文件夹的 `CutFinder.app`（自安装启动器）：
-
-```bash
-make app          # → dist/CutFinder.app（以及 dist/CutFinder.dmg）
-```
-
-把 `dist/CutFinder.app` 拖到 `/Applications`，双击即可：
-
-- 首次启动会**自建运行环境**——用 `uv` 安装 Python 依赖、检测/安装 ffmpeg（有 Homebrew 时自动 `brew install ffmpeg`），随后启动本地服务并在浏览器打开（默认 `http://127.0.0.1:5080`）。之后启动是秒开。
-- 运行环境写在 `~/Library/Application Support/CutFinder/`（**不写进 .app 包内**，便于更新/签名）；日志在同目录 `launch.log`。
-- `.app` 内置了**预构建的前端**与后端源码，由同一个服务同时提供 UI 与 API（运行时**不需要 Node**）。
-
-> ⚠️ 两件事仍需另行准备（无法塞进我们的 .app）：
-> 1. **OMLX** 是独立的第三方菜单栏 App（本地模型服务器），需自行安装并加载 `Qwen` 模型；
-> 2. **Whisper 模型**（约 3GB）与 **Demucs htdemucs** 模型在首次使用时自动下载到项目 `models/` 目录（或用 `make models` 预热）。
->
-> 该 .app 未做 Apple 代码签名/公证，首次打开可能需「右键 → 打开」放行。品牌图源在 `branding/`。
-
----
-
-## 路线图
-
-- **v1**：需求 0–7（自定义文件夹、保留拍摄时间、A/B 判定、A-roll 简介、日期+类型归档、标签、缩略图、接 OMLX）—— 已完成。
-- **已完成（v1 之外）**：关键帧（剪辑切点）建议（需求 8）；打包为自安装 `CutFinder.app`（`make app`）。
-- **后续 / TODO**：
-  - **原生 .app 外壳（Swift/ObjC 包装器）**：当前是 shell 脚本 .app，Dock 退出靠 SIGTERM。换成最小原生壳可获得标准应用菜单、稳定的 Dock 生命周期、点击 Dock 图标重开 UI、以及未来代码签名/公证。
-  - **导出 transcript 为 Final Cut Pro 可导入的字幕**（A-roll 已有带时间轴的 `Segment`，纯文本格式化即可导出 iTT / SRT；后端可加 `GET /api/clips/{id}/transcript.srt|.itt` + 详情面板「导出字幕」按钮，无需再调模型）。
-  - Final Cut Pro 深度集成（FCPXML / 关键词导出；可与上一条合并：把字幕作为 caption 轨道随片段灌入 FCP）。
-  - PyInstaller 全离线包 / Tauri 原生窗口。
+> 品牌图源在 `branding/`。
