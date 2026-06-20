@@ -495,7 +495,119 @@ OMLX_API_KEY=your-omlx-key
 
 ---
 
-## 11. 关键决策汇总
+## 11. 原生 macOS .app 外壳（Swift 包装器）
+
+> 取代现有 shell 脚本启动器（`packaging/launcher.sh` + `scripts/build-app.sh`）。
+> 现状痛点：`Contents/MacOS/CutFinder` 是 bash 脚本，Dock 生命周期靠「脚本保持前台 + 转发 SIGTERM」勉强维持，没有标准应用菜单，点 Dock 图标不会重开 UI，且不利于代码签名/公证。
+> 目标：用**最小 Swift/AppKit 包装器**取而代之，得到标准菜单、稳定 Dock 生命周期、点 Dock 重开 UI、可签名/公证；并把「开启/关闭服务」与「首次自动安装所有依赖」做成原生体验。
+> **设计决策**（已确认）：① UI 用 **WKWebView 内嵌**现有 web 前端（无浏览器、无标签页）；② 服务**启动即自动开启**，可手动停止/重启；③ 首次启动**自动安装本地依赖**（uv / ffmpeg / Python env / whisper+demucs 模型），**OMLX 仅探测 + 引导**（独立菜单栏 App，无法静默安装）。UI 细节见 ui-design §「原生 App 外壳」。
+
+### 11.1 为什么不再用 shell 脚本
+
+`exec` 进 venv 的 Python 会让 macOS 以为 App 退出、移除 Dock tile（脚本里已有此注释告警）。脚本只能「自己留前台 + 后台跑 uvicorn + trap SIGTERM」，本质是绕过 Dock 生命周期，得不到 `NSApplication` 的菜单、reopen、terminate 钩子。换成真正的 Mach-O 可执行（Swift 编译产物）作为 `CFBundleExecutable`，这些都由系统原生提供。
+
+### 11.2 架构与组件
+
+App target 名 `CutFinder`，编译为 `Contents/MacOS/CutFinder`（真 Mach-O，非脚本）。Swift 源码极薄，**业务仍全在 Python 后端 + web 前端**，Swift 只做「进程管理 + 首次安装 + 窗口宿主」。
+
+| 组件 | 职责 |
+|---|---|
+| `main.swift` | `NSApplication` 引导，装配 delegate |
+| `AppDelegate` | 生命周期、菜单、Dock reopen、退出时停服务 |
+| `MainWindowController` | 单窗口，宿主 `WKWebView`；在「安装中 / 运行中 / 错误」三态间切换视图 |
+| `ServerController` | 用 `Process` 拉起/停止/重启 uvicorn 子进程；健康探测；端口管理 |
+| `Provisioner` | 首次安装流程（payload 同步 + 依赖安装 + 模型下载），逐步上报进度 |
+| `DependencyChecker` | 探测 uv / ffmpeg / OMLX 是否就绪 |
+| `PayloadManager` | 把 bundle 内 `Resources/payload` 同步到可写运行目录（保留 venv/catalog/用户状态） |
+| `SetupView` / `ErrorView` | 原生安装进度视图、错误/引导视图（配色沿用设计 token） |
+
+源码与产物布局：
+
+```
+packaging/macapp/            # Swift 包装器源码（swiftc 直接编译，无 .xcodeproj）
+  main.swift  AppDelegate.swift  MainWindowController.swift
+  ServerController.swift  Provisioner.swift  DependencyChecker.swift
+  PayloadManager.swift  SetupView.swift  ErrorView.swift
+  CutFinder.entitlements     # Hardened Runtime entitlements
+packaging/Info.plist.template  # 复用，微调
+packaging/{download_whisper.py,download_demucs.py,check_omlx.py}  # Provisioner 复用
+scripts/build-app.sh         # 升级：编译 Swift → 组 bundle → 签名 → dmg → 公证
+```
+
+> 构建用 **swiftc**（`-framework Cocoa -framework WebKit`）而非 Xcode 工程，贴合「最小包装器」、CI 友好（只需 Command Line Tools）。`packaging/launcher.sh` 淘汰。
+
+### 11.3 进程与 Dock 生命周期模型
+
+- App 进程（Swift）= `CFBundleExecutable`，**永远是前台 owner**；uvicorn 是它的**子进程**，绝不 `exec` 替换自身 → Dock tile 稳定。
+- `applicationDidFinishLaunching`：建主窗口 → 跑首次安装（按需）→ 启动服务 → 健康后加载 WKWebView。
+- `applicationShouldHandleReopen(_:hasVisibleWindows:)`：点 Dock 图标且无可见窗口 → 重建/显示主窗口（**点 Dock 重开 UI**），返回 `true`。
+- 关闭窗口**不**退出 App：服务继续在后台跑，App 留在 Dock；Dock 点击重开。（满足「服务独立于窗口开关」）
+- `applicationShouldTerminate` / `applicationWillTerminate`（⌘Q）：先 `ServerController.stop()` 优雅停子进程（SIGTERM→超时 SIGKILL）再退出 → 不留孤儿服务。
+- 单实例：若端口已被占（已有实例在跑），探测到健康端点则只重开窗口、不再起第二个服务。
+
+### 11.4 窗口三态（WKWebView 宿主）
+
+`MainWindowController` 是单窗口，按服务状态切换 contentView：
+
+1. **安装中**：显示原生 `SetupView`（步骤清单 + 进度条 + 可折叠日志），Provisioner 实时回调更新。
+2. **运行中**：`WKWebView` 加载 `http://127.0.0.1:<PORT>/`（复用后端静态托管的前端构建产物，`CUTFINDER_STATIC_DIR`）。
+3. **错误/引导**：原生 `ErrorView`（如 OMLX 不可达、ffmpeg 缺失），含「重试 / 打开日志 / 打开下载页 / 仍然继续」。
+
+WKWebView 配置：仅允许加载本地 `127.0.0.1` 源；外部链接（如 OMLX 下载页）用 `NSWorkspace.open` 走系统浏览器，不在内嵌 webview 打开。
+
+### 11.5 ServerController（开启 / 停止 / 重启）
+
+- 启动：`Process` 运行 `<runtime>/backend/.venv/bin/python -m uvicorn cutfinder.api.app:app --host 127.0.0.1 --port <PORT> --timeout-graceful-shutdown 5`，记录 PID。
+- 健康：轮询 `GET /api/library`（复用现有就绪探针）至 200，再切到运行态加载 webview。
+- 停止：向子进程发 SIGTERM，超时回落 SIGKILL；菜单项「停止服务」。
+- 重启：stop→start，并 `reload` webview；菜单项「重启服务」。
+- 端口：默认 5080，`CUTFINDER_PORT` 可覆盖（沿用现状）。
+- 状态对外：以 enum `.idle/.installing/.starting/.running/.stopped/.error` 驱动菜单项启用态与（可选）标题栏状态点。
+
+### 11.6 首次安装流程（自动装齐本地依赖）
+
+首次启动（或菜单「重新运行安装」）按序执行，每步在 `SetupView` 一行（待定/进行中/完成/失败）：
+
+1. **PayloadManager**：`rsync` bundle 内 `Resources/payload` → `~/Library/Application Support/CutFinder/app`，`--exclude .venv/__pycache__`，**保留** venv、catalog、用户状态（与现 launcher 一致，bundle 内永不写入 → 利于签名）。
+2. **uv**：缺失则 `curl -LsSf https://astral.sh/uv/install.sh | sh`（装到 `~/.local/bin`）。
+3. **ffmpeg/ffprobe**：缺失则 `brew install ffmpeg`；无 Homebrew 时不静默装 brew，转「引导」（给 brew.sh 链接 + 命令）。
+4. **Python env**：在运行目录 `backend/` 跑 `uv sync --frozen`（回落 `uv sync`），幂等。
+5. **模型**：复用 `download_whisper.py`（large-v3）/ `download_demucs.py`（htdemucs），缺则下载、已存在跳过；体量大，进度纳入安装视图。
+6. **OMLX 探测**：复用 `check_omlx.py` 逻辑探 `GET <OMLX_BASE_URL>/models` 并校验所需模型在列。**不可达/缺模型** → 不阻断启动，弹引导（说明 + 「打开 OMLX 下载页」「重试」「仍然继续」）。无 OMLX 时扫描仍能做 VAD/转写/缩略图，但 A-roll 简介与 B-roll 打标会失败——引导文案点明此点。
+7. 写**版本戳安装完成标记**；后续启动只做快速存在性检查 + `uv sync --frozen`（满足时近乎瞬时），不重复全量安装。
+
+幂等：payload 同步保 venv/catalog；uv sync、模型下载、探测均可重复安全执行。
+
+### 11.7 沙盒 / 签名 / 公证
+
+- **不开 App Sandbox**：要执行外部工具（uv/brew/python）、写 `~/.local`、读用户任意素材文件夹。→ 走 **Developer ID 直分发**（DMG），非 Mac App Store。
+- **Hardened Runtime 开启** + entitlements（因运行用户侧 venv 的 Python / MLX / torch，会 JIT、用 Metal、加载未由我们签名的 dylib）：
+  - `com.apple.security.cs.allow-jit`
+  - `com.apple.security.cs.allow-unsigned-executable-memory`
+  - `com.apple.security.cs.disable-library-validation`
+- **关键利好**：venv 与模型都建在 **Application Support（bundle 之外）**，不进签名范围、不受 library validation 约束；bundle 内只有 Swift 二进制 + Python 源 + `.icns`，签名简单（只需签 Swift Mach-O，无需 `--deep` 黑魔法）。
+- 流程（`build-app.sh`）：`codesign --options runtime --entitlements packaging/macapp/CutFinder.entitlements --sign "Developer ID Application: …"` → `hdiutil` 出 DMG → `xcrun notarytool submit … --wait` → `xcrun stapler staple`。无签名身份时跳过签名步骤，仍可本地出未签名 .app（开发用）。
+
+### 11.8 与后端/前端的接口（零侵入）
+
+- 后端、前端**不改动**：Swift 只消费现有 `GET /api/library`（健康探针）与后端静态托管的前端构建产物。
+- 「开启/关闭服务」是控制 uvicorn 子进程，与 web 内的「扫描 / 任务队列」等业务正交。
+- 旧 launcher.sh 的所有职责（payload 同步、uv/ffmpeg 自检、起服务、开 UI）都被 Swift 组件 1:1 接管，行为等价但获得原生生命周期。
+
+### 11.9 测试策略
+
+- Swift 层逻辑刻意薄、以编排为主：核心可测点是 **Provisioner 步骤判定**（哪步该装/该跳/该引导）与 **DependencyChecker/OMLX 探测**——后者沿用 §10 已有的 `check-omlx` 纯函数单测（假 HTTP 响应）。
+- 进程管理、菜单、Dock reopen 等以**手动验收清单**覆盖（启动即起服务、停止/重启、关窗不退、Dock 重开、⌘Q 不留孤儿、首次安装断网/缺 ffmpeg/缺 OMLX 的引导）。
+- 后端/前端既有单测不受影响。
+
+### 11.10 迁移
+
+- 新增 `packaging/macapp/` Swift 源；`scripts/build-app.sh` 升级为「编译 Swift → 组 bundle → 签名 → dmg → 公证」。
+- 删除 `packaging/launcher.sh`（职责迁入 Swift）。`Info.plist.template` 保持（`LSUIElement=false` 即常规 Dock App，符合需求）。
+
+---
+
+## 12. 关键决策汇总
 
 - **隔离手段**：六类外部依赖 + 仓储统一抽象为 `Protocol`，真实实现放 `adapters/`，业务逻辑(`pipeline/`)只依赖接口 → 模块可独立替换与测试。
 - **测试边界**：单元测试一律 mock 外部依赖（仓储用内存 SQLite、LibraryWriter 用临时真文件，因其轻）；真实模型/视频只在带标记的集成测试出现。
@@ -505,7 +617,7 @@ OMLX_API_KEY=your-omlx-key
 
 ---
 
-## 12. 待办 / 需后续确认
+## 13. 待办 / 需后续确认
 
 - 前端 UI 视觉与交互细节（缩略图墙布局、详情面板排版）——可在实现阶段配合设计稿确定。
 - ~~样本素材由谁提供~~ —— 已解决：用户在 `testVideo/` 提供（A=`MVI_5298`，B=`MVI_5368`/`DJI_...`）。
