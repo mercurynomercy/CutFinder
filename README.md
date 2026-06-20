@@ -285,3 +285,19 @@ make e2e               # Playwright e2e
 - [`CLAUDE.md`](./CLAUDE.md) — project constraints and architecture cheat-sheet for AI collaborators
 
 > Brand art sources are in `branding/`.
+
+---
+
+## License
+
+CutFinder is licensed under the [PolyForm Noncommercial License 1.0.0](./LICENSE).
+
+It is **free for personal and other noncommercial use** — personal projects,
+hobby and amateur use, research and study, and use by nonprofits, educational
+institutions, and government organizations.
+
+**Commercial use is not permitted** under this license. For a commercial
+license, please open an issue on this repository or reach out via the
+[author's GitHub profile](https://github.com/mercurynomercy).
+
+Copyright © 2026 mercurynomercy.
