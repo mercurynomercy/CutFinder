@@ -250,6 +250,8 @@ const en = {
   'settings.validationNum': 'Must be a number between 0 and 1',
   'settings.switchLibraryConfirm':
     'Switch library to:\n{path}\n\nThe app will use that folder\'s catalog database, thumbnails, and settings (each library is independent). The current library is not modified. Continue?',
+  'confirm.confirm': 'OK',
+  'confirm.cancel': 'Cancel',
 } as const
 
 type Key = keyof typeof en
@@ -465,6 +467,8 @@ const zh: Record<Key, string> = {
   'settings.validationNum': '必须是 0 到 1 之间的数字',
   'settings.switchLibraryConfirm':
     '切换素材库到:\n{path}\n\n应用将改用这个目录的目录数据库、缩略图和设置（每个库各自独立）。当前库不会被修改。是否继续？',
+  'confirm.confirm': '确定',
+  'confirm.cancel': '取消',
 }
 
 const dict: Record<Lang, Record<Key, string>> = { en, zh }

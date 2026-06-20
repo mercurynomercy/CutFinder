@@ -12,7 +12,7 @@ import { useCallback, useEffect, useState } from 'react'
 
 import type { UpdateSettingsBody } from '@/api/client'
 import { api } from '@/api/client'
-import { Button } from '@/components/Button'
+import { Button, ConfirmDialog } from '@/components'
 import { useI18n } from '@/i18n'
 
 // ── Validation helpers ────────────────────────────────────────────
@@ -130,6 +130,29 @@ export function SettingsPage({ onSave }: SettingsPageProps) {
   const [libraryPath, setLibraryPath] = useState<string | null | undefined>(undefined)
   const [newLibraryPath, setNewLibraryPath] = useState('')
 
+  // Confirmation dialog for library switch (WKWebView has no window.confirm).
+  const [confirmSwitch, setConfirmSwitch] = useState(false)
+  const [switchPath, setSwitchPath] = useState('')
+
+  // Cancel library switch: close dialog without changing anything.
+  const handleCancelSwitch = () => { setConfirmSwitch(false); setSwitchPath('') }
+
+  // Confirm library switch: actually perform the switch (extracted from handleSwitchLibrary).
+  const handleConfirmSwitch = async () => {
+    setConfirmSwitch(false)
+    if (!switchPath || switchPath === libraryPath) return
+    setSaving(true)
+    setError(null)
+    try {
+      await api.setLibrary(switchPath)
+      await load()
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err : new Error(String(err)))
+    } finally {
+      setSaving(false)
+    }
+  }
+
   const load = useCallback(async () => {
     setLoading(true)
     setError(null)
@@ -174,21 +197,12 @@ export function SettingsPage({ onSave }: SettingsPageProps) {
   // PUT /settings into the *current* library), the library binding lives in
   // ~/.cutfinder/active_library and must be changed via POST /api/library —
   // otherwise the app keeps using the old library no matter what's picked.
+  // Show confirmation dialog instead of window.confirm (WKWebView has no JS dialogs).
   const handleSwitchLibrary = async (path: string) => {
     const p = path.trim()
     if (!p || p === libraryPath) return
-    const ok = window.confirm(t('settings.switchLibraryConfirm', { path: p }))
-    if (!ok) return
-    setSaving(true)
-    setError(null)
-    try {
-      await api.setLibrary(p)
-      await load()
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err : new Error(String(err)))
-    } finally {
-      setSaving(false)
-    }
+    setSwitchPath(p)
+    setConfirmSwitch(true)
   }
 
   const updateField = <K extends keyof UpdateSettingsBody>(key: K, value: UpdateSettingsBody[K]) => {
@@ -559,6 +573,14 @@ export function SettingsPage({ onSave }: SettingsPageProps) {
           </Button>
         </div>
 
+        {/* Library switch confirmation dialog */}
+        <ConfirmDialog
+          open={confirmSwitch}
+          title={t('settings.setLibrary')}
+          message={t('settings.switchLibraryConfirm', { path: switchPath })}
+          onConfirm={handleConfirmSwitch}
+          onCancel={handleCancelSwitch}
+        />
       </div>
     </div>
   )

@@ -16,6 +16,7 @@ import { JobsQueuePage } from '@/features/jobs-queue'
 import { SettingsPage } from '@/features/settings'
 import { SubtitlesPage } from '@/features/subtitles'
 import { LogModal } from '@/features/logs'
+import { ConfirmDialog } from '@/components'
 import { useI18n } from '@/i18n'
 import { applyTheme, getStoredTheme, type Theme } from '@/theme'
 
@@ -51,6 +52,21 @@ export default function App() {
   const [searchQuery, setSearchQuery] = useState('')
   const [theme, setTheme] = useState<Theme>(getStoredTheme)
   const [showMenu, setShowMenu] = useState(false)
+
+  // Confirmation dialog for pause→resume scan (WKWebView has no window.confirm).
+  const [confirmPause, setConfirmPause] = useState(false)
+
+  // Cancel pause-resume dialog.
+  const handleCancelResume = () => { setConfirmPause(false) }
+
+  // Confirm: resume jobs, then start the scan.
+  const handleConfirmResume = async () => {
+    setConfirmPause(false)
+    await api.resumeJobs()
+    await doScan()
+  }
+
+  const menuRef = useRef<HTMLDivElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
 
   // Light / dark toggle — persists and updates <html data-theme>.
@@ -132,21 +148,20 @@ export default function App() {
     return sortBy === 'date-newest' ? db.localeCompare(da) : da.localeCompare(db)
   })
 
+  // Called from the Scan button. Checks pause state first; if paused, shows a dialog.
   const handleScan = async () => {
     console.log('[App] Scan button clicked')
     try {
-      // If the worker is globally paused, a queued scan won't start processing.
-      // Warn the user and offer to resume before scanning.
-      try {
-        const { paused } = await api.listJobs()
-        if (paused) {
-          const ok = window.confirm(t('scan.pausedConfirm'))
-          if (!ok) return
-          await api.resumeJobs()
-        }
-      } catch {
-        // Couldn't check pause state — proceed with the scan anyway.
-      }
+      const { paused } = await api.listJobs()
+      if (paused) { setConfirmPause(true); return }
+    } catch { /* couldn't check pause state — proceed anyway */ }
+    await doScan()
+  }
+
+  // Core scan logic: trigger /api/scan, poll until done. Does NOT check pause state.
+  const doScan = async () => {
+    console.log('[App] Scan button clicked')
+    try {
       // Trigger scan — SSE will stream progress events; poll for job id
       console.log('[App] Calling POST /api/scan...')
       const response = await fetch('/api/scan', { method: 'POST' })
@@ -440,6 +455,15 @@ export default function App() {
 
       {/* Backend log viewer (modal) */}
       <LogModal open={showLogs} onClose={() => setShowLogs(false)} />
+
+      {/* Pause→resume scan confirmation dialog */}
+      <ConfirmDialog
+        open={confirmPause}
+        title={t('scan.title')}
+        message={t('scan.pausedConfirm')}
+        onConfirm={handleConfirmResume}
+        onCancel={handleCancelResume}
+      />
     </div>
   )
 }
