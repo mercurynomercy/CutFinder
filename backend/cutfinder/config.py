@@ -23,7 +23,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 # ---------------------------------------------------------------------------
 
 # Keys that live in the machine-global store / environment (not per-library).
-_GLOBAL_KEYS = ("OMLX_BASE_URL", "OMLX_API_KEY")
+_GLOBAL_KEYS = ("OMLX_BASE_URL", "OMLX_API_KEY", "TEXT_MODEL", "VISION_MODEL")
 
 # Repo root, anchored to this file (backend/cutfinder/config.py -> repo root).
 # Used so the root ``.env`` is found even when the process runs from backend/.
@@ -67,6 +67,16 @@ class EnvSettings(BaseSettings):
     OMLX_API_KEY: str = Field(
         default="",
         description="API key for authenticating with the OMLX server.",
+    )
+
+    # Default model names — overridable via global config (settings UI) or env.
+    TEXT_MODEL: str = Field(
+        default="",
+        description="Default text model for A-roll summary + tags (e.g. Qwen3.6-35B-A3B).",
+    )
+    VISION_MODEL: str = Field(
+        default="",
+        description="Default vision model for B-roll visual tags (e.g. Qwen3-VL-8B).",
     )
 
 

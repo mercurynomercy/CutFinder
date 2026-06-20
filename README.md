@@ -239,34 +239,44 @@ make e2e               # Playwright e2e
 
 ---
 
-## Package as a macOS App (CutFinder.app)
+## Install as a macOS App (CutFinder.app)
 
-Bundle the whole app into a `CutFinder.app` you can drag into Applications (a self-installing launcher):
+The easiest way to run CutFinder is the native **`CutFinder.app`** — a small Swift/AppKit wrapper that hosts the UI in a native window (WKWebView, no browser tab), manages the local service, and installs everything it needs on first launch.
+
+### Build the .app
 
 ```bash
 make app          # → dist/CutFinder.app (and dist/CutFinder.dmg)
 ```
 
+`make app` compiles the Swift wrapper with **SwiftPM**, so the build host needs the **Xcode Command Line Tools** (`xcode-select --install`) plus Node (to build the bundled frontend). Anyone running a *prebuilt* `.app` needs none of that.
+
+### Install & first launch
+
 Drag `dist/CutFinder.app` to `/Applications` and double-click:
 
-- First launch **builds its own runtime** — installs Python deps with `uv`, detects/installs ffmpeg (auto `brew install ffmpeg` if Homebrew is present), then starts the local service and opens the browser (default `http://127.0.0.1:5080`). Later launches open in a second.
-- The runtime lives in `~/Library/Application Support/CutFinder/` (**not inside the .app bundle**, for easy updates/signing); logs are at `launch.log` in that directory.
-- The `.app` bundles a **prebuilt frontend** and the backend source; one service serves both the UI and the API (**no Node needed at runtime**).
+- **First launch self-installs everything.** A native setup screen shows progress while it syncs its runtime, installs `uv` and `ffmpeg` (auto `brew install` when Homebrew is present, otherwise it guides you), creates the Python environment (`uv sync`), and downloads the Whisper + Demucs models (~3 GB). Later launches start in a second.
+- **The service starts automatically** and the UI loads in the app's own window — no browser. Use the **Service menu (服务)** to Start / Stop / Restart the backend, or "Open in browser" if you prefer a tab.
+- **Standard Mac app behavior** — full application menu; closing the window keeps the service running; clicking the Dock icon reopens the window; ⌘Q stops the service cleanly (no orphaned process).
+- The runtime lives in `~/Library/Application Support/CutFinder/` (**outside the .app bundle**, for clean updates/signing); logs are at `launch.log` there. The `.app` bundles a **prebuilt frontend** + backend source — one service serves both the UI and the API, so **no Node is needed at runtime**.
 
-> ⚠️ Two things still need to be set up separately (they can't go inside our .app):
-> 1. **OMLX** is a separate third-party menu-bar app (the local model server) — install it and load the `Qwen` models yourself.
-> 2. The **Whisper model** (~3GB) and the **Demucs htdemucs** model download automatically into the project `models/` folder on first use (or pre-warm with `make models`).
+### Signing & notarization
+
+`make app` signs the app with **Developer ID + Hardened Runtime** automatically when a signing identity is present, and notarizes + staples it when `CUTFINDER_NOTARY_PROFILE` is set; otherwise it produces an **unsigned dev build** (first open needs right-click → **Open**). Because the Python env and models live outside the bundle, only the small Swift binary is signed.
+
+> ⚠️ Two things stay separate (they can't live inside the .app):
+> 1. **OMLX** is a third-party menu-bar model server — install it and load the `Qwen` text/vision models yourself. CutFinder detects it on first run and **guides you if it's missing** (scanning / transcription / thumbnails still work without it; only A-roll summaries and B-roll tags need it).
+> 2. The **Whisper** (~3 GB) and **Demucs `htdemucs`** models download automatically on first use (or pre-warm with `make models`).
 >
-> The .app is not Apple code-signed/notarized; first open may require "right-click → Open". Brand art sources are in `branding/`.
+> Brand art sources are in `branding/`.
 
 ---
 
 ## Roadmap
 
 - **v1**: requirements 0–7 (custom folders, preserve capture time, A/B detection, A-roll summary, date+type organization, tags, thumbnails, OMLX integration) — **done**.
-- **Beyond v1, done**: keyframe suggestions / cut points (requirement 8); self-installing `CutFinder.app` (`make app`).
+- **Beyond v1, done**: keyframe suggestions / cut points (requirement 8); self-installing **native `CutFinder.app` shell** (Swift/AppKit + WKWebView, `make app`) — standard app menu, stable Dock lifecycle, Dock-click reopens the window, auto-installs deps on first run, manages the service, and is code-signing/notarization-ready.
 - **Next / TODO**:
-  - **Native .app shell (Swift/ObjC wrapper)** — the current .app is a shell-script launcher that relies on SIGTERM for Dock quit. A minimal native shell would give a standard app menu, a stable Dock lifecycle, reopening the UI on Dock-icon click, and future code signing/notarization.
   - **Export transcript as Final Cut Pro-importable subtitles** — A-roll already has time-coded `Segment`s, so iTT / SRT export is just timecode formatting (no model call). A backend `GET /api/clips/{id}/transcript.srt|.itt` + a detail-panel "Export subtitles" button would do it.
   - **Final Cut Pro deep integration** (FCPXML / Keywords export; can merge with the above: subtitles as a caption track loaded into FCP with each clip).
   - PyInstaller fully-offline bundle / Tauri native window.

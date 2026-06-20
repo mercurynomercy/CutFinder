@@ -30,6 +30,9 @@ def _make_config(monkeypatch: pytest.MonkeyPatch) -> MagicMock:
     env = MagicMock()
     env.OMLX_BASE_URL = "http://localhost:8000/v1"
     env.OMLX_API_KEY = "test-api-key-12345"
+    # Empty strings so the adapter's `.strip()` falls through to prefs.
+    env.TEXT_MODEL = ""
+    env.VISION_MODEL = ""
 
     prefs = MagicMock()
     prefs.text_model = "Qwen3.6-35B-A3B"

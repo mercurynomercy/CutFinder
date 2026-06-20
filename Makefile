@@ -55,7 +55,7 @@ models: uv-sync
 
 # ── 4. check-omlx — verify OMLX endpoint & models are ready ────
 check-omlx: uv-sync
-	cd backend && set -a && [ -f ../.env ] && . ../.env; set +a; $(UV) run python ../scripts/check_omlx.py
+	cd backend && $(UV) run python ../scripts/check_omlx.py
 
 # ── 5. test — full suite (incl. integration; needs ffmpeg/OMLX) ─
 test: uv-sync

@@ -110,7 +110,12 @@ class OmlxVisionTagger(VisionTagger):
 
     def __init__(self, config: AppConfig, model: str | None = None) -> None:
         self._config = config
-        self._model = model or config.prefs.vision_model
+        # Precedence: explicit override > global/env > per-library prefs.
+        self._model = (
+            model
+            or config.env.VISION_MODEL.strip()
+            or config.prefs.vision_model
+        )
 
     def describe(self, frame_paths: list[Path]) -> VisionResult:
         """Tag B-roll frames via OMLX vision model structured output.

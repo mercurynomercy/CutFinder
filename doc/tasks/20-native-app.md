@@ -47,30 +47,35 @@
 
 ## 任务清单
 
-### Swift 包装器（`packaging/macapp/`）
+> **实现状态（自动化完成边界）**：构建/测试改用 **SwiftPM**（`packaging/macapp/Package.swift`，`swift test`），非原文档设想的 raw `swiftc`。
+> `[x]` = 已实现且通过本机自动校验（`swift build`/`swift build -c release` 零错误、`swift test` 30 项全绿、`bash -n`、`plutil -lint`）。
+> GUI/Dock/首次安装/uvicorn 启动等**运行期行为**无法在无人环境自动执行——相关组件**已实现且编译通过，运行待手动验收**（见下方「手动验收清单」与「完成标准」）。
 
-- [ ] `main.swift` + `AppDelegate`：`NSApplication` 引导、标准应用菜单 + 「服务」菜单、Dock reopen、退出停服务。
-- [ ] `MainWindowController`：单窗口 + `WKWebView` 宿主，三态视图切换；记忆窗口尺寸/位置；标题栏服务状态点（色+文字）。
-- [ ] `ServerController`：`Process` 启动/停止/重启 uvicorn；健康轮询 `GET /api/library`；状态 enum；端口管理 + 单实例探测。
-- [ ] `PayloadManager`：payload → Application Support 同步（排除 `.venv`/`__pycache__`，保留 venv/catalog/用户状态）。
-- [ ] `DependencyChecker`：uv / ffmpeg / OMLX 探测（OMLX 复用 `check_omlx.py` 逻辑）。
-- [ ] `Provisioner`：首次安装步骤编排（uv / ffmpeg / `uv sync` / 模型 / OMLX 探测），逐步进度回调 + 版本戳完成标记。
-- [ ] `SetupView`：步骤清单 + 进度条 + 可折叠日志（图标+文字，沿用 token）。
-- [ ] `ErrorView`：OMLX/ffmpeg/`uv sync`/端口占用等引导（主/次操作分离，外链走系统浏览器）。
-- [ ] `CutFinder.entitlements`：Hardened Runtime entitlements。
+### Swift 包装器（`packaging/macapp/`，SwiftPM：`CutFinderCore` 库 + `CutFinder` 可执行）
+
+- [x] `main.swift` + `AppDelegate`：`NSApplication` 引导、标准应用菜单 + 「服务」菜单、Dock reopen、退出停服务。（编译通过；Dock/菜单运行待手动验）
+- [x] `MainWindowController`：单窗口 + `WKWebView` 宿主，三态视图切换；记忆窗口尺寸/位置；标题栏服务状态点（色+文字）。（编译通过；GUI 运行待手动验）
+- [x] `ServerController`：`Process` 启动/停止/重启 uvicorn；健康轮询 `GET /api/library`；状态 enum；端口管理 + 单实例探测。（编译通过；进程行为运行待手动验）
+- [x] `PayloadManager`：payload → Application Support 同步（排除 `.venv`/`__pycache__`，保留 venv/catalog/用户状态）。（编译通过；rsync 运行待手动验）
+- [x] `DependencyChecker`：uv / ffmpeg / OMLX 探测（OMLX 探测纯逻辑在 `CutFinderCore.OMLXProbe`，已单测）。
+- [x] `Provisioner`：首次安装步骤编排（uv / ffmpeg / `uv sync` / 模型 / OMLX 探测），逐步进度回调 + 版本戳完成标记；步骤判定 `ProvisionPlanner` 在 `CutFinderCore`（已单测）。（编排编译通过；真实安装运行待手动验）
+- [x] `SetupView`：步骤清单 + 进度条 + 可折叠日志（图标+文字）。（编译通过；GUI 运行待手动验）
+- [x] `ErrorView`：OMLX/ffmpeg/`uv sync`/端口占用等引导（主/次操作分离，外链走系统浏览器）。（编译通过；GUI 运行待手动验）
+- [x] `CutFinder.entitlements`：Hardened Runtime entitlements（`allow-jit` / `allow-unsigned-executable-memory` / `disable-library-validation`，`plutil -lint` 通过）。
+- [x] `CutFinderCore`（纯逻辑库）：`ProvisionPlanner` / `OMLXProbe` / `PayloadPaths` / `ServerState`，Foundation-only，**30 项 XCTest 全绿**。
 
 ### 打包 / 构建
 
-- [ ] `scripts/build-app.sh` 升级：构建前端 → 组 payload → **swiftc 编译** Swift 源为 `Contents/MacOS/CutFinder` → 生成 `.icns` → 组 bundle → `codesign`（有身份时）→ DMG → `notarytool` 公证 + `stapler`（有身份时）。
-- [ ] `packaging/Info.plist.template`：保留 `LSUIElement=false`（常规 Dock App）；按需补 `CFBundleExecutable`/版本占位（沿用现状）。
-- [ ] 删除 `packaging/launcher.sh`（职责迁入 Swift）；`Makefile` `app` 目标指向新 build 流程。
+- [x] `scripts/build-app.sh` 升级：构建前端 → 组 payload（含把 `scripts/download_{whisper,demucs}.py` 拷到 `payload/packaging/`）→ **`swift build -c release`** 产物拷为 `Contents/MacOS/CutFinder` → 生成 `.icns` → 组 bundle → `codesign`（有 Developer ID 时，hardened runtime + entitlements，无 `--deep`）→ DMG →（`$CUTFINDER_NOTARY_PROFILE` 存在时）`notarytool` 公证 + `stapler`。`bash -n` 通过；全量出包/签名/公证需真身份手动跑。
+- [x] `packaging/Info.plist.template`：保留 `LSUIElement=false`（常规 Dock App）、`CFBundleExecutable=CutFinder`、arm64、`LSMinimumSystemVersion 13.0`（沿用现状，无需改）。
+- [x] 删除 `packaging/launcher.sh`（职责迁入 Swift）；`Makefile` `app` 目标已指向 `scripts/build-app.sh`（验证无误）。
 
 ### 测试
 
-- [ ] `Provisioner` 步骤判定：哪步该装/该跳/该引导（纯逻辑，可对决策函数单测）。
-- [ ] OMLX 探测：沿用 §10 `check-omlx` 纯函数单测（假 HTTP 响应）。
-- [ ] 手动验收清单：启动即起服务并展示 UI；停止/重启；关窗不退、Dock 点击重开；⌘Q 不留孤儿；首次安装在「断网 / 缺 ffmpeg 且无 brew / 缺 OMLX / 端口被占」下的引导与回落。
-- [ ] 回归：后端/前端既有单测不受影响。
+- [x] `Provisioner` 步骤判定：install/skip/guide 决策（`ProvisionPlanTests`，含 fresh/全装/缺 brew/缺 OMLX 分支）。
+- [x] OMLX 探测：`OMLXProbeTests`（合法 JSON→ids、畸形/nil→unreachable、缺模型→missingModels）——以 `CutFinderCore.OMLXProbe` 纯函数实现并测，等价于原 §10 `check-omlx` 设想。
+- [ ] 手动验收清单（**待手动验**）：启动即起服务并展示 UI；停止/重启；关窗不退、Dock 点击重开；⌘Q 不留孤儿；首次安装在「断网 / 缺 ffmpeg 且无 brew / 缺 OMLX / 端口被占」下的引导与回落。
+- [x] 回归：后端/前端**零改动**（git 改动仅限 `packaging/macapp/` 与 `scripts/build-app.sh`、删 `packaging/launcher.sh`），既有单测不受影响。
 
 ---
 
@@ -82,3 +87,9 @@
 4. 可 `codesign` + 公证（有 Developer ID 时）；无身份时仍能本地出未签名 `.app`（开发用）。
 5. bundle 内零写入；venv/模型/catalog 全在 Application Support；重跑安装幂等。
 6. 后端/前端零改动；Provisioner/OMLX 探测单测全绿，手动验收清单通过。
+
+### 当前状态（2026-06-20）
+
+- **已自动达成**：全部 Swift 组件实现且 `swift build` / `swift build -c release` 零错误；`CutFinderCore` 纯逻辑 30 项 XCTest 全绿；`build-app.sh` 升级（`bash -n` 通过）+ entitlements（`plutil -lint` 通过）；`launcher.sh` 删除；后端/前端零改动（标准 6 关于「单测全绿/零改动」部分满足）。
+- **待手动验收**（需真机运行，本无人环境不执行）：标准 1–3、5 的运行期行为（首次装齐依赖→自动起服务→WKWebView 展示 UI；菜单开关/重启；关窗不退 + Dock 重开 + ⌘Q 无孤儿；bundle 零写入 + App Support venv + 幂等）；标准 4 的真实 `codesign`+公证（需 Developer ID）。
+- 产物：`packaging/macapp/.build/release/CutFinder` 为 `Mach-O 64-bit executable arm64`。

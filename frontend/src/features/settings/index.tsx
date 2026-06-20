@@ -117,11 +117,13 @@ export function SettingsPage({ onSave }: SettingsPageProps) {
   // Form inputs
   const [extensions, setExtensions] = useState('')
 
-  // Machine-global env settings (OMLX endpoint/key, whisper path). These live
+  // Machine-global env settings (OMLX endpoint/key, model names). These live
   // in ~/.cutfinder/config.json — no .env needed. The API key is write-only:
   // GET returns a mask, and we only send it when the user types a new value.
   const [omlxBaseUrl, setOmlxBaseUrl] = useState('')
   const [apiKeyInput, setApiKeyInput] = useState('')
+  const [textModelGlobal, setTextModelGlobal] = useState('')
+  const [visionModelGlobal, setVisionModelGlobal] = useState('')
   const [apiKeyConfigured, setApiKeyConfigured] = useState(false)
 
   // Library binding (when no library is bound, the user sets one here first).
@@ -137,6 +139,8 @@ export function SettingsPage({ onSave }: SettingsPageProps) {
       if (lib.library_path) {
         const data = await api.getSettings()
         setPrefs(data.prefs)
+        setTextModelGlobal(data.env.TEXT_MODEL || '')
+        setVisionModelGlobal(data.env.VISION_MODEL || '')
         setOmlxBaseUrl(data.env.OMLX_BASE_URL || '')
         setApiKeyConfigured(Boolean(data.env.OMLX_API_KEY))
         setApiKeyInput('')
@@ -228,10 +232,13 @@ export function SettingsPage({ onSave }: SettingsPageProps) {
       // saved pref from diverging from the real binding.
       const body: UpdateSettingsBody = { ...prefs }
       delete body.library_path
-      // Machine-global keys: always send the (non-secret) endpoint; only send
+      // Machine-global keys: always send the (non-secret) endpoint and model names; only send
       // the API key when the user typed a new one, so the stored secret is
       // never overwritten by the mask.
       body.OMLX_BASE_URL = omlxBaseUrl.trim()
+      if (textModelGlobal) body.TEXT_MODEL = textModelGlobal
+      else delete body.TEXT_MODEL  // clear: fall back to default
+      if (visionModelGlobal) body.VISION_MODEL = visionModelGlobal
       if (apiKeyInput.trim()) body.OMLX_API_KEY = apiKeyInput.trim()
       await api.putSettings(body)
       if (apiKeyInput.trim()) {
@@ -412,8 +419,8 @@ export function SettingsPage({ onSave }: SettingsPageProps) {
               <label className="mt-3 block text-sm text-[--text-secondary]">{t('settings.textModel')}</label>
               <p className="mb-1 text-xs text-[--text-muted]">{t('settings.textModelDesc')}</p>
               <input
-                type="text" value={prefs.text_model}
-                onChange={(e) => updateField('text_model', e.target.value)}
+                type="text" value={textModelGlobal}
+                onChange={(e) => setTextModelGlobal(e.target.value)}
                 placeholder="Qwen3.6-35B-A3B"
                 className="w-full rounded-md border border-[--border] bg-[--surface-2] px-3 py-1.5 text-sm font-mono outline-none focus:border-[--primary]"
               />
@@ -421,8 +428,8 @@ export function SettingsPage({ onSave }: SettingsPageProps) {
               <label className="mt-3 block text-sm text-[--text-secondary]">{t('settings.visionModel')}</label>
               <p className="mb-1 text-xs text-[--text-muted]">{t('settings.visionModelDesc')}</p>
               <input
-                type="text" value={prefs.vision_model}
-                onChange={(e) => updateField('vision_model', e.target.value)}
+                type="text" value={visionModelGlobal}
+                onChange={(e) => setVisionModelGlobal(e.target.value)}
                 placeholder="Qwen3-VL-8B"
                 className="w-full rounded-md border border-[--border] bg-[--surface-2] px-3 py-1.5 text-sm font-mono outline-none focus:border-[--primary]"
               />

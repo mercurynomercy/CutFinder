@@ -119,7 +119,12 @@ class OmlxSummarizer(Summarizer):
 
     def __init__(self, config: AppConfig, model: str | None = None) -> None:
         self._config = config
-        self._model = model or config.prefs.text_model
+        # Precedence: explicit override > global/env > per-library prefs.
+        self._model = (
+            model
+            or config.env.TEXT_MODEL.strip()
+            or config.prefs.text_model
+        )
 
     def summarize(self, transcript_text: str) -> SummaryResult:
         """Summarize A-roll transcript text via OMLX structured output.

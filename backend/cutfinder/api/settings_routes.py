@@ -50,10 +50,12 @@ def _build_router(
         except Exception as exc:  # noqa: BLE001 — return best-effort if config unreadable
             raise HTTPException(status_code=503, detail=f"Config error: {exc}") from exc
 
-        # Expose the OMLX endpoint + whisper path; mask the secret key.
+        # Expose the OMLX endpoint + model names; mask the secret key.
         env = {
             "OMLX_BASE_URL": config.env.OMLX_BASE_URL,
             "OMLX_API_KEY": _MASKED if config.env.OMLX_API_KEY else "",
+            "TEXT_MODEL": config.env.TEXT_MODEL,
+            "VISION_MODEL": config.env.VISION_MODEL,
         }
 
         return {"env": env, "prefs": config.prefs.model_dump()}

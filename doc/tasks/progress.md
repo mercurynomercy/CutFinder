@@ -49,10 +49,10 @@
 ---
 
 ### 待办 (TODO)
-- [ ] [**20 原生 macOS .app 外壳（Swift 包装器）**](./20-native-app.md) — 已设计、待实现。取代 shell 脚本启动器（`packaging/launcher.sh` + `scripts/build-app.sh`，现靠脚本留前台 + 转发 SIGTERM 撑 Dock 生命周期），换成最小 Swift/AppKit 包装器，得到标准应用菜单、稳定 Dock 生命周期、点 Dock 图标重开 UI、代码签名/公证能力，并把「开启/关闭服务」「首次自动装齐依赖」做成原生体验。设计见 `detailed-design.md` §11 与 `ui-design.md` §9。
-  - **已确认决策**：① UI 用 **WKWebView 内嵌**现有 web 前端（无浏览器/标签页）；② 服务**启动即自动开启**，菜单可停止/重启；③ 首次启动**自动安装本地依赖**（uv / ffmpeg / Python env / whisper+demucs 模型），**OMLX 仅探测 + 引导**（独立菜单栏 App，无法静默安装，缺失不阻断、弹下载引导）。
-  - **要点**：Swift 二进制作 `CFBundleExecutable`、uvicorn 为其子进程（绝不 `exec`）→ Dock tile 稳定、⌘Q 先停服务无孤儿；venv/模型建在 Application Support（bundle 外）→ 签名只需签 Swift Mach-O，Hardened Runtime + JIT/Metal/disable-library-validation entitlements，Developer ID 直分发(DMG)+公证。后端/前端零改动。
-  - **落地**：新增 `packaging/macapp/`（swiftc 编译，无 .xcodeproj），`scripts/build-app.sh` 升级为 编译→组 bundle→签名→dmg→公证；删除 `packaging/launcher.sh`。测试以 Provisioner 步骤判定 + OMLX 探测纯函数单测 + 手动验收清单覆盖。
+- [~] [**20 原生 macOS .app 外壳（Swift 包装器）**](./20-native-app.md) — **代码实现完成 + 自动校验通过，GUI/首装/签名待手动验收**。取代 shell 脚本启动器，换成 SwiftPM 构建的 Swift/AppKit 包装器（WKWebView 内嵌现有 web 前端），得到标准应用菜单、稳定 Dock 生命周期、点 Dock 图标重开 UI、代码签名/公证能力，并把「开启/关闭服务」「首次自动装齐依赖」做成原生体验。设计见 `detailed-design.md` §11 与 `ui-design.md` §9。
+  - **已确认决策**：① UI 用 **WKWebView 内嵌**现有 web 前端；② 服务**启动即自动开启**，菜单可停止/重启；③ 首次启动**自动安装本地依赖**（uv / ffmpeg / Python env / whisper+demucs 模型），**OMLX 仅探测 + 引导**；④ 构建/测试用 **SwiftPM**（非 raw swiftc，以满足「完整单测」）。
+  - **已落地**：`packaging/macapp/`（SwiftPM：`CutFinderCore` 纯逻辑库 + `CutFinder` AppKit 可执行）。`swift build`/`-c release` 零错误；`CutFinderCore` **30 项 XCTest 全绿**（ProvisionPlanner / OMLXProbe / PayloadPaths）。`scripts/build-app.sh` 升级为 前端→payload→`swift build -c release`→bundle→（有身份）codesign+hardened entitlements→dmg→（有 profile）公证；新增 `CutFinder.entitlements`；删除 `packaging/launcher.sh`。后端/前端零改动。
+  - **待手动验收**（无人环境不执行）：双击 .app 首装→自动起服务→WKWebView 展示 UI；菜单开启/停止/重启；关窗不退 + Dock 重开 + ⌘Q 无孤儿；真实 `codesign`+公证（需 Developer ID）。详见 `20-native-app.md`「手动验收清单 / 当前状态」。
 - [x] [**16 关键帧推荐（剪辑切点 + 精选帧，需求 8）**](./16-keyframes.md) — 已实现：A-roll 文本/transcript、B-roll 视觉；扫描后自动排队 + 按需；详情面板建议列表 + 画廊角标 + 设置项。后端 +17 单测、前端 +3 测试，mypy/ruff/tsc 干净。
 - [ ] [**17 字幕导出（独立成片 → FCP iTT/SRT）**](./17-subtitle-export.md) — 已设计、待实现。**独立工具**：选一段已剪辑成片 → `mlx-whisper` 重新转写（语言跟随 `output_language`，只转写不翻译）→ 导出 iTT + SRT 到用户选定文件夹；不入库、不分类、源视频只读。设计见 `17-subtitle-export.md` 与 `detailed-design.md` §3.13。
   - 进阶（更后）：FCPXML 深度集成（字幕作为 caption 轨道随片段灌入 FCP）。
