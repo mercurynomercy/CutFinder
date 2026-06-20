@@ -326,7 +326,7 @@ export function DetailPanel({ clipId, onClose, onOpenPath }: DetailPanelProps) {
             <>
               {/* ── Header: A/B roll label (left) + close (right) ── */}
               <div className="flex items-center justify-between border-b border-[--border] px-5 py-3">
-                <Badge type={clip.roll_type === 'b' ? 'b' : 'a'}>
+                <Badge type={clip.roll_type === 'photo' ? 'photo' : clip.roll_type === 'b' ? 'b' : 'a'}>
                   {clip.roll_type === 'photo' ? t('detail.photo') : clip.roll_type === 'b' ? 'B-roll' : 'A-roll'}
                 </Badge>
                 <button
