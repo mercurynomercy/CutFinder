@@ -132,7 +132,7 @@ export function Gallery({ clips, selectedClipId, onSelect, onReanalyze, reanalyz
                 clipId={clip.id}
                 sourcePath={clip.source_path}
                 libraryPath={clip.library_path}
-                rollType={(clip.roll_type === 'a' ? 'a' : clip.roll_type === 'b' ? 'b' : undefined)}
+                rollType={(clip.roll_type === 'a' ? 'a' : clip.roll_type === 'b' ? 'b' : clip.roll_type === 'photo' ? 'photo' : undefined)}
                 duration={clip.duration_s ?? undefined}
                 thumbnailUrl={(typeof clip.thumbnail_path === 'string' && clip.thumbnail_path) || undefined}
                 status={clip.status}
@@ -141,7 +141,7 @@ export function Gallery({ clips, selectedClipId, onSelect, onReanalyze, reanalyz
                 captureTime={clip.capture_time}
                 isSelected={selectedClipId === clip.id}
                 onClick={() => onSelect(clip.id)}
-                onReanalyze={onReanalyze ? () => onReanalyze(clip.id) : undefined}
+                onReanalyze={onReanalyze && clip.roll_type !== 'photo' ? () => onReanalyze(clip.id) : undefined}
                 reanalyzing={reanalyzingIds?.has(clip.id)}
                 onOpen={onOpenPath ? () => onOpenPath(clip.library_path || clip.source_path) : undefined}
                 hasKeyframes={clip.has_keyframes}

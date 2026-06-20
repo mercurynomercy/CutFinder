@@ -116,6 +116,7 @@ export function SettingsPage({ onSave }: SettingsPageProps) {
 
   // Form inputs
   const [extensions, setExtensions] = useState('')
+  const [photoExtensions, setPhotoExtensions] = useState('')
 
   // Machine-global env settings (OMLX endpoint/key, model names). These live
   // in ~/.cutfinder/config.json — no .env needed. The API key is write-only:
@@ -227,6 +228,22 @@ export function SettingsPage({ onSave }: SettingsPageProps) {
     updateField('extensions', (prefs.extensions ?? []).filter((e: string) => e !== ext))
   }
 
+  const handleAddPhotoExtension = () => {
+    const ext = photoExtensions.trim().replace(/^\.*/, '.') // ensure leading dot
+    if (!ext || !prefs) return
+
+    const current = prefs.photo_extensions || []
+    if (current.includes(ext)) { setPhotoExtensions(''); return }
+
+    updateField('photo_extensions', [...current, ext])
+    setPhotoExtensions('')
+  }
+
+  const handleRemovePhotoExtension = (ext: string) => {
+    if (!prefs) return
+    updateField('photo_extensions', (prefs.photo_extensions ?? []).filter((e: string) => e !== ext))
+  }
+
   const handleRemoveSourceFolder = (folder: string) => {
     if (!prefs || !prefs.source_folders?.includes(folder)) return
     updateField('source_folders', prefs.source_folders.filter((f: string) => f !== folder))
@@ -301,6 +318,7 @@ export function SettingsPage({ onSave }: SettingsPageProps) {
 
   // Prepend dot to extensions for display, ensure they start with a dot
   const extDisplay = (prefs.extensions || []).map((e: string) => e.startsWith('.') ? e : `.${e}`)
+  const photoExtDisplay = (prefs.photo_extensions || []).map((e: string) => e.startsWith('.') ? e : `.${e}`)
 
   return (
     <div className="flex flex-1 overflow-auto p-6">
@@ -495,6 +513,26 @@ export function SettingsPage({ onSave }: SettingsPageProps) {
                 </div>
               </div>
 
+              {/* Photo extensions */}
+              <div className="mt-4">
+                <label className="mb-1 block text-sm text-[--text-secondary]">{t('settings.photoExtensions')}</label>
+                <p className="mb-1 text-xs text-[--text-muted]">{t('settings.photoExtensionsDesc')}</p>
+                <div className="mb-2 flex flex-wrap gap-1.5">
+                  {photoExtDisplay.map((ext, i) => (
+                    <ExtensionTag key={i} value={ext} onRemove={() => handleRemovePhotoExtension(ext)} />
+                  ))}
+                </div>
+                <div className="flex gap-2">
+                  <input
+                    type="text" value={photoExtensions} onChange={(e) => setPhotoExtensions(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') handleAddPhotoExtension() }}
+                    placeholder=".webp"
+                    className="flex-1 rounded-md border border-[--border] bg-[--surface-2] px-3 py-1.5 text-sm font-mono outline-none focus:border-[--primary]"
+                  />
+                  <Button size="sm" variant="secondary" onClick={handleAddPhotoExtension}>+</Button>
+                </div>
+              </div>
+
               {/* B-roll frame count */}
               <label className="mt-4 block text-sm text-[--text-secondary]">{t('settings.brollFrameCount')}</label>
               <p className="mb-1 text-xs text-[--text-muted]">{t('settings.brollFrameCountDesc')}</p>
@@ -549,7 +587,7 @@ export function SettingsPage({ onSave }: SettingsPageProps) {
               {/* Auto-suggest keyframes after scan */}
               <label className="mt-4 flex items-center gap-2 text-sm text-[--text-secondary]">
                 <input
-                  type="checkbox" checked={prefs.keyframe_auto ?? true}
+                  type="checkbox" checked={prefs.keyframe_auto ?? false}
                   onChange={(e) => updateField('keyframe_auto', e.target.checked)}
                   className="h-4 w-4 rounded border-[--border] bg-[--surface-2]"
                 />

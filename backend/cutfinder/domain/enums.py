@@ -4,10 +4,11 @@ from enum import Enum
 
 
 class RollType(str, Enum):
-    """A-roll or B-roll classification."""
+    """A-roll, B-roll, or Photo (still image) classification."""
 
     A = "a"
     B = "b"
+    PHOTO = "photo"
 
 
 class Source(str, Enum):

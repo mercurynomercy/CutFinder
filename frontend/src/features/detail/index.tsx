@@ -327,7 +327,7 @@ export function DetailPanel({ clipId, onClose, onOpenPath }: DetailPanelProps) {
               {/* ── Header: A/B roll label (left) + close (right) ── */}
               <div className="flex items-center justify-between border-b border-[--border] px-5 py-3">
                 <Badge type={clip.roll_type === 'b' ? 'b' : 'a'}>
-                  {clip.roll_type === 'b' ? 'B-roll' : 'A-roll'}
+                  {clip.roll_type === 'photo' ? t('detail.photo') : clip.roll_type === 'b' ? 'B-roll' : 'A-roll'}
                 </Badge>
                 <button
                   onClick={onClose}
@@ -408,11 +408,11 @@ export function DetailPanel({ clipId, onClose, onOpenPath }: DetailPanelProps) {
                   </div>
                 )}
 
-                {/* ── Description (editable, B-roll) ─────── */}
-                {clip.roll_type === 'b' && (
+                {/* ── Description (read-only, B-roll + photos) ─── */}
+                {(clip.roll_type === 'b' || clip.roll_type === 'photo') && (
                   <div>
                     <label className="mb-1 block text-xs font-medium uppercase tracking-wider text-[--text-muted]">
-                      {t('detail.descriptionBRoll')}
+                      {clip.roll_type === 'photo' ? t('detail.photoDescription') : t('detail.descriptionBRoll')}
                     </label>
                     <textarea
                       value={clip.description || ''}
@@ -435,7 +435,8 @@ export function DetailPanel({ clipId, onClose, onOpenPath }: DetailPanelProps) {
                   }} />
                 </div>
 
-                {/* ── Suggested cuts (keyframes) ─────────── */}
+                {/* ── Suggested cuts (keyframes) — not for photos ── */}
+                {clip.roll_type !== 'photo' && (
                 <div>
                   <div className="mb-1 flex items-center justify-between gap-2">
                     <label className="text-xs font-medium uppercase tracking-wider text-[--text-muted]">
@@ -476,6 +477,7 @@ export function DetailPanel({ clipId, onClose, onOpenPath }: DetailPanelProps) {
                     <p className="text-xs text-[--text-muted]">{t('detail.noKeyframes')}</p>
                   )}
                 </div>
+                )}
 
                 {/* ── Transcript (collapsible, A-roll only) */}
                 {clip.roll_type === 'a' && (
@@ -518,7 +520,9 @@ export function DetailPanel({ clipId, onClose, onOpenPath }: DetailPanelProps) {
 
               </div>
 
-              {/* ── Footer actions (sticky bottom) ─────── */}
+              {/* ── Footer actions (sticky bottom) — not for photos
+                   (no A/B classification, no re-analysis) ── */}
+              {clip.roll_type !== 'photo' && (
               <div className="flex items-center justify-between border-t border-[--border] px-5 py-3">
                 {/* A/B correction — compact segmented toggle. Switching type then
                     hitting re-analyze re-runs through the right pipeline. */}
@@ -552,6 +556,7 @@ export function DetailPanel({ clipId, onClose, onOpenPath }: DetailPanelProps) {
                   {t('detail.reanalyze')}
                 </button>
               </div>
+              )}
 
             </>
           ) : null}

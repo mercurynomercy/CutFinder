@@ -86,6 +86,17 @@ class TestCopyInto:
         assert dest == tmp_path / "2024-03-20" / "B-roll" / "B-0001.mov"
         assert dest.exists()
 
+    def test_copy_photo(self, tmp_path):
+        """A photo is renamed to photo-0001 in the photos subdirectory."""
+        src = _make_src_file(tmp_path, "IMG_1234.jpg")
+        writer = FsLibraryWriter(_make_config(tmp_path))
+
+        dest_str = writer.copy_into(src, "2026-05-01", "photo")
+        dest = Path(dest_str)
+
+        assert dest == tmp_path / "2026-05-01" / "photos" / "photo-0001.jpg"
+        assert dest.exists()
+
     def test_directories_created_auto(self, tmp_path):
         """Target directories are auto-created even if they don't exist yet."""
         src = _make_src_file(tmp_path, "deep.mp4")

@@ -170,6 +170,7 @@ def resolve_env() -> EnvSettings:
 # ---------------------------------------------------------------------------
 
 _DEFAULT_EXTENSIONS: list[str] = [".mov", ".mp4", ".m4v"]
+_DEFAULT_PHOTO_EXTENSIONS: list[str] = [".jpg", ".jpeg", ".png", ".heic"]
 _DEFAULT_TEXT_MODEL: str = "Qwen3.6-35B-A3B"
 _DEFAULT_VISION_MODEL: str = "Qwen3-VL-8B"
 _DEFAULT_WHISPER_MODEL: str = "mlx-community/whisper-large-v3-mlx"
@@ -188,6 +189,8 @@ class Prefs(BaseModel, frozen=True):
     vision_model: str = _DEFAULT_VISION_MODEL
     whisper_model: str = _DEFAULT_WHISPER_MODEL
     extensions: list[str] = _DEFAULT_EXTENSIONS[:]
+    # Still-image extensions cataloged as photos (separate "photo" roll type).
+    photo_extensions: list[str] = _DEFAULT_PHOTO_EXTENSIONS[:]
     broll_frame_count: int = Field(default=5, ge=1)
     vad_threshold: float = Field(default=0.35, gt=0, le=1)
     # Language for AI-generated summaries / visual descriptions ("zh" or "en").
@@ -195,7 +198,9 @@ class Prefs(BaseModel, frozen=True):
     # Keyframe recommendation: max ranked cut/frame suggestions per clip, and
     # whether to auto-queue a keyframes job after each scan completes.
     keyframe_count: int = Field(default=3, ge=1, le=10)
-    keyframe_auto: bool = True
+    # Off by default: keyframe recommendation is the most expensive step, so a
+    # scan stays fast unless the user opts in (Settings) or runs it per-clip.
+    keyframe_auto: bool = False
     # A-roll transcription strips BGM with Demucs before Whisper; off by
     # default. Subtitle export always separates regardless of this flag.
     vocal_separation: bool = False

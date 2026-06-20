@@ -49,6 +49,10 @@
 ---
 
 ### 待办 (TODO)
+- [x] [**21「扫描后自动整理关键帧」设置开关**](./21-keyframe-toggle.md) — 已实现：task 16 已有 `keyframe_auto` 基建（pref + 设置开关 + worker 接线），实测有效默认为「开」（`Prefs.keyframe_auto=True`）。按用户决策改为**默认关**：`config.Prefs`/`schemas.PrefsOut`/前端 checkbox 默认 + mock 全部 `False`。后端 58 测试通过。
+- [x] [**22 库文件删除 → 同步清理（DB + 缩略图 + 关键帧）**](./22-library-sync-delete.md) — 已实现「带确认的手动对账」：`Orchestrator.find_orphaned_clips()`（仅查副本是否在盘，源只读）+ `delete_clips()`（删 DB 行 + 缩略图 + 关键帧帧目录）；API `GET/POST /api/library/orphans`，**整库不可达 → `library_reachable=False` 不提议删除**；入口在顶部 ⋮ 菜单「清理已删除的文件」+ 二次确认（不必进设置）。后端 +4 单测、前端 +2 测试（App 菜单流程）。
+- [x] [**23 照片（静态图片）分析入库**](./23-photo-analysis.md) — 已实现：独立 **photo** roll 类型，归档到 `<库>/<date>/photos/photo-0001.<ext>`（源只读、保留时间）。新增 Pillow 适配器（`PillowImageProbe` 读 EXIF 拍摄时间+尺寸、`PillowThumbnailMaker` 出 JPEG 预览，HEIC 经 pillow-heif）；`Orchestrator._process_photo` 走预览→Qwen3-VL 描述/标签→归档，**无 VAD/转写/关键帧/重分析**。扫描合并视频+照片扩展名。前端：照片筛选项、详情面板降级（隐藏 A/B 切换、关键帧、重分析）、画廊角标。**真机验证** EXIF/HEIC/预览通过。后端 +9 单测（444）。
+- [x] [**24 刷新页面后进度条恢复（dashboard + 字幕导出）**](./24-progress-resume.md) — 已实现（纯前端）：后端已有 `GET /api/jobs`（含 kind/done/total）+ `GET /api/jobs/{id}/events` SSE。App 挂载时领回活跃的非字幕 job → 顶部进度条恢复（JobsPanel 自带轮询+SSE 重订阅）；字幕页挂载时领回活跃 subtitle job → 恢复进度条。前端 +2 测试。
 - [~] [**20 原生 macOS .app 外壳（Swift 包装器）**](./20-native-app.md) — **代码实现完成 + 自动校验通过，GUI/首装/签名待手动验收**。取代 shell 脚本启动器，换成 SwiftPM 构建的 Swift/AppKit 包装器（WKWebView 内嵌现有 web 前端），得到标准应用菜单、稳定 Dock 生命周期、点 Dock 图标重开 UI、代码签名/公证能力，并把「开启/关闭服务」「首次自动装齐依赖」做成原生体验。设计见 `detailed-design.md` §11 与 `ui-design.md` §9。
   - **已确认决策**：① UI 用 **WKWebView 内嵌**现有 web 前端；② 服务**启动即自动开启**，菜单可停止/重启；③ 首次启动**自动安装本地依赖**（uv / ffmpeg / Python env / whisper+demucs 模型），**OMLX 仅探测 + 引导**；④ 构建/测试用 **SwiftPM**（非 raw swiftc，以满足「完整单测」）。
   - **已落地**：`packaging/macapp/`（SwiftPM：`CutFinderCore` 纯逻辑库 + `CutFinder` AppKit 可执行）。`swift build`/`-c release` 零错误；`CutFinderCore` **30 项 XCTest 全绿**（ProvisionPlanner / OMLXProbe / PayloadPaths）。`scripts/build-app.sh` 升级为 前端→payload→`swift build -c release`→bundle→（有身份）codesign+hardened entitlements→dmg→（有 profile）公证；新增 `CutFinder.entitlements`；删除 `packaging/launcher.sh`。后端/前端零改动。

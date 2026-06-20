@@ -615,9 +615,12 @@ class SqliteRepository:
 
     def clip_ids_without_keyframes(self) -> list[int]:
         c = self._conn.cursor()
+        # Photos have no keyframes (no timeline), so they are excluded — both the
+        # post-scan auto-queue and "suggest all" skip them.
         c.execute(
             "SELECT id FROM clips"
             " WHERE status IN ('done', 'partial')"
+            " AND roll_type != 'photo'"
             " AND id NOT IN (SELECT DISTINCT clip_id FROM keyframes)"
             " ORDER BY id",
         )

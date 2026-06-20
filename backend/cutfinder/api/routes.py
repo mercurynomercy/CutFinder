@@ -73,7 +73,9 @@ def _build_router(ctx: Any) -> Any:
 
             config = load_config(ctx.library_path)
             source_folders = [Path(p).resolve() for p in (config.prefs.source_folders or [])]
-            extensions = set(config.prefs.extensions) if config.prefs.extensions else None
+            # Scan videos *and* photos (photos are cataloged as a "photo" roll type).
+            ext_list = list(config.prefs.extensions or []) + list(config.prefs.photo_extensions or [])
+            extensions = set(ext_list) if ext_list else None
 
             from cutfinder.pipeline.scanner import Scanner  # noqa: E402
 
@@ -465,6 +467,8 @@ def _build_router(ctx: Any) -> Any:
         clip = ctx.repository.get_clip(clip_id)
         if clip is None:
             raise HTTPException(status_code=404, detail="Clip not found")
+        if clip.roll_type == "photo":
+            raise HTTPException(status_code=400, detail="Re-analysis is not applicable to photos")
 
         job_id = await ctx.worker_queue.enqueue_reanalyze(clip_id)
         return {"job_id": job_id}
@@ -481,6 +485,8 @@ def _build_router(ctx: Any) -> Any:
         clip = ctx.repository.get_clip(clip_id)
         if clip is None:
             raise HTTPException(status_code=404, detail="Clip not found")
+        if clip.roll_type == "photo":
+            raise HTTPException(status_code=400, detail="Keyframes are not applicable to photos")
 
         job_id = await ctx.worker_queue.enqueue_keyframes([clip_id])
         return {"job_id": job_id}

@@ -56,6 +56,15 @@ export default function App() {
   // Confirmation dialog for pause→resume scan (WKWebView has no window.confirm).
   const [confirmPause, setConfirmPause] = useState(false)
 
+  // Library cleanup (remove catalog entries whose copy was deleted) — driven
+  // straight from the header menu, no need to open Settings.
+  const [confirmCleanup, setConfirmCleanup] = useState(false)
+  const [orphanIds, setOrphanIds] = useState<number[]>([])
+
+  // Raise an ambient toast (reuses JobsPanel's toast UI via a window event).
+  const showToast = (type: 'info' | 'success' | 'error', message: string) =>
+    window.dispatchEvent(new CustomEvent('cutfinder:toast', { detail: { type, message } }))
+
   // Cancel pause-resume dialog.
   const handleCancelResume = () => { setConfirmPause(false) }
 
@@ -64,6 +73,34 @@ export default function App() {
     setConfirmPause(false)
     await api.resumeJobs()
     await doScan()
+  }
+
+  // Check for catalog entries whose library copy was deleted; show a notice or
+  // open the confirm dialog. Library unreachable → skip (never wipe the catalog).
+  const handleCleanupLibrary = async () => {
+    setShowMenu(false)
+    try {
+      const { library_reachable, orphans } = await api.listOrphans()
+      if (!library_reachable) { showToast('info', t('settings.cleanupUnreachable')); return }
+      if (orphans.length === 0) { showToast('info', t('settings.cleanupNone')); return }
+      setOrphanIds(orphans.map((o) => o.id))
+      setConfirmCleanup(true)
+    } catch (err) {
+      console.error('Failed to check library for deleted files:', err)
+    }
+  }
+
+  const handleConfirmCleanup = async () => {
+    setConfirmCleanup(false)
+    try {
+      const { deleted } = await api.deleteOrphans(orphanIds)
+      showToast('success', t('settings.cleanupDone', { n: deleted }))
+      await refreshClips()
+    } catch (err) {
+      console.error('Failed to clean up deleted files:', err)
+    } finally {
+      setOrphanIds([])
+    }
   }
 
   const menuRef = useRef<HTMLDivElement>(null)
@@ -101,6 +138,28 @@ export default function App() {
       .catch(() => {}) // silently fail; empty gallery shows helpful message
       .finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
+  }, [])
+
+  // Re-attach to a job still running in the backend after a page refresh. The
+  // worker keeps processing, but the UI lost its in-memory job id so the top
+  // progress bar vanished. Adopt the active job so the bar reappears (JobsPanel
+  // polls + re-subscribes SSE on its own), then refresh the gallery when it
+  // ends. Subtitle jobs are restored by the subtitles page itself.
+  useEffect(() => {
+    let cancelled = false
+    api.listJobs()
+      .then(async ({ jobs }) => {
+        const active = jobs.find(
+          (j) => ['queued', 'running'].includes(j.status) && j.kind !== 'subtitle',
+        )
+        if (!active || cancelled) return
+        setActiveJobId(active.id)
+        await waitForJob(active.id)
+        if (!cancelled) await refreshClips()
+      })
+      .catch(() => {}) // no job queue / backend unreachable — nothing to restore
+    return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // Expose a custom event for e2e tests to navigate without clicking (avoids overlay issues).
@@ -396,6 +455,16 @@ export default function App() {
                   </svg>
                   {t('app.logs')}
                 </button>
+                <button
+                  role="menuitem"
+                  onClick={handleCleanupLibrary}
+                  className="flex w-full items-center gap-2.5 px-3 py-2 text-sm text-[--text-secondary] hover:bg-[--surface-3] hover:text-[--text-primary] transition-colors"
+                >
+                  <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" aria-hidden="true">
+                    <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+                  </svg>
+                  {t('settings.cleanupDeleted')}
+                </button>
                 <div className="my-1 h-px bg-[--border]" />
                 <button
                   role="menuitem"
@@ -462,6 +531,15 @@ export default function App() {
         message={t('scan.pausedConfirm')}
         onConfirm={handleConfirmResume}
         onCancel={handleCancelResume}
+      />
+
+      {/* Library cleanup: confirm deletion of orphaned catalog entries */}
+      <ConfirmDialog
+        open={confirmCleanup}
+        title={t('settings.cleanupDeleted')}
+        message={t('settings.cleanupConfirm', { n: orphanIds.length })}
+        onConfirm={handleConfirmCleanup}
+        onCancel={() => { setConfirmCleanup(false); setOrphanIds([]) }}
       />
     </div>
   )

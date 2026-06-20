@@ -34,8 +34,22 @@ import sys
 from pathlib import Path
 
 from ..config import AppConfig
+from ..domain.enums import RollType
 
 logger = logging.getLogger(__name__)
+
+
+def _roll_dir_and_prefix(roll_type: str) -> tuple[str, str]:
+    """Map a roll type to its library subfolder name and filename prefix.
+
+    ``"a"`` → ``("A-roll", "A")``, ``"b"`` → ``("B-roll", "B")``,
+    ``"photo"`` → ``("Photo", "P")``. Unknown values fall back to B-roll.
+    """
+    if roll_type == RollType.A.value:
+        return "A-roll", "A"
+    if roll_type == RollType.PHOTO.value:
+        return "photos", "photo"
+    return "B-roll", "B"
 
 
 # ── macOS birth-time (creation time) preservation ──────────────────
@@ -142,10 +156,8 @@ class FsLibraryWriter:
         if not src.is_file():
             raise FileNotFoundError(f"Source file does not exist: {src}")
 
-        # Determine target directory and filename prefix (A-roll → "A").
-        is_a_roll = roll_type == RollType.A.value
-        roll_dir = "A-roll" if is_a_roll else "B-roll"
-        prefix = "A" if is_a_roll else "B"
+        # Determine target directory and filename prefix per roll type.
+        roll_dir, prefix = _roll_dir_and_prefix(roll_type)
         target_dir = self._library_dir / date / roll_dir
         target_dir.mkdir(parents=True, exist_ok=True)
 
@@ -220,9 +232,11 @@ class FsLibraryWriter:
         """Return ``<target_dir>/<prefix>-NNNN<suffix>`` for the next free index.
 
         Scans ``target_dir`` for existing ``<prefix>-NNNN`` files and uses the
-        highest index + 1, so re-scans keep numbering monotonically.
+        highest index + 1, so re-scans keep numbering monotonically. When
+        *prefix* is empty (photos), names are just ``NNNN<suffix>``.
         """
-        index_re = re.compile(rf"^{re.escape(prefix)}-(\d+)$")
+        sep = "-" if prefix else ""
+        index_re = re.compile(rf"^{re.escape(prefix)}{re.escape(sep)}(\d+)$")
         max_idx = 0
         for entry in target_dir.iterdir():
             m = index_re.match(entry.stem)
@@ -231,11 +245,7 @@ class FsLibraryWriter:
 
         idx = max_idx + 1
         while True:
-            candidate = target_dir / f"{prefix}-{idx:04d}{suffix}"
+            candidate = target_dir / f"{prefix}{sep}{idx:04d}{suffix}"
             if not candidate.exists():
                 return candidate
             idx += 1
-
-
-# ── import RollType at module level (lazy to avoid circular dep)
-from ..domain.enums import RollType  # noqa: E402, isort: skip

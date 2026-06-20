@@ -19,8 +19,8 @@ export interface ThumbnailCardProps extends React.HTMLAttributes<HTMLDivElement>
   libraryPath?: string | null
   /** Clip id for click handler */
   clipId: number
-  /** A/B roll type badge display */
-  rollType?: 'a' | 'b'
+  /** A/B/photo roll type badge display */
+  rollType?: 'a' | 'b' | 'photo'
   /** Clip duration in seconds (displayed as label) */
   duration?: number | null
   /** Capture time ISO string (e.g. "2026-01-15T…") — displayed as YYYY-MM-DD */
@@ -186,8 +186,8 @@ const ThumbnailCard = React.forwardRef<HTMLDivElement, ThumbnailCardProps>(
         <div className="flex flex-1 flex-col gap-1.5 px-3 py-2">
           <div className="flex items-center gap-1.5">
             {rollType && (
-              <Badge type={rollType} className="shrink-0 px-1.5">
-                {rollType === 'a' ? 'A-roll' : 'B-roll'}
+              <Badge type={rollType === 'a' ? 'a' : 'b'} className="shrink-0 px-1.5">
+                {rollType === 'photo' ? t('card.photo') : rollType === 'a' ? 'A-roll' : 'B-roll'}
               </Badge>
             )}
             <p className="truncate text-xs text-[--text-secondary]" title={libraryPath || sourcePath}>

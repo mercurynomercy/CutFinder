@@ -59,12 +59,13 @@ function makeSettingsPrefs(overrides: Partial<SettingsPrefs> = {}): SettingsPref
     vision_model: overrides.vision_model ?? 'Qwen3-VL-8B',
     whisper_model: overrides.whisper_model ?? 'large-v3',
     extensions: overrides.extensions ?? ['.mp4', '.mov'],
+    photo_extensions: overrides.photo_extensions ?? ['.jpg', '.jpeg', '.png', '.heic'],
     broll_frame_count: overrides.broll_frame_count ?? 5,
     vad_threshold: overrides.vad_threshold ?? 0.48,
     vocal_separation: overrides.vocal_separation ?? false,
     output_language: overrides.output_language ?? 'zh',
     keyframe_count: overrides.keyframe_count ?? 3,
-    keyframe_auto: overrides.keyframe_auto ?? true,
+    keyframe_auto: overrides.keyframe_auto ?? false,
   }
 }
 
