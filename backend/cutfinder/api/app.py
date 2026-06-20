@@ -179,10 +179,18 @@ def _build_into(ctx: LibraryContext, library_path: Union[str, Path]) -> None:
         ),
     )
 
+    # When the work queue drains, unload the in-process models (whisper +
+    # demucs) so they stop occupying RAM while idle. They reload lazily on
+    # the next job. (OMLX-served models are managed by OMLX itself.)
+    def _release_idle_models() -> None:
+        MlxWhisperTranscriber.unload_cache()
+        vocal_separator.unload()
+
     worker_queue = WorkerQueue(
         orchestrator=orchestrator, repository=repository,
         keyframe_auto=prefs.keyframe_auto,
         subtitle_exporter=subtitle_exporter,
+        on_idle=_release_idle_models,
     )
 
     ctx.library_path = str(lib_dir)

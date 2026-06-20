@@ -120,6 +120,52 @@ class TestSequentialProcessing:
         assert orch.reanalyze_calls == [42]
 
 
+class TestIdleHook:
+    """Verify the on_idle callback fires once the queue drains."""
+
+    @pytest.mark.asyncio
+    async def test_on_idle_fires_when_queue_drains(self) -> None:
+        """After all items are processed, on_idle is invoked (unload models)."""
+        orch = _make_fake_orchestrator()
+        repo = FakeCatalogRepository()
+        calls: list[int] = []
+        queue = WorkerQueue(
+            orchestrator=orch, repository=repo, on_idle=lambda: calls.append(1),
+        )
+        await queue.start()
+
+        await queue.enqueue_scan(
+            [_make_candidate("/tmp/a.mp4"), _make_candidate("/tmp/b.mp4")],
+        )
+        job = repo.get_job(1)
+        while job is None or job.done < 2:
+            await asyncio.sleep(0.02)
+            job = repo.get_job(1)
+
+        # on_idle runs via asyncio.to_thread after the drain — let it land.
+        await asyncio.sleep(0.05)
+        await queue.stop()
+
+        assert len(calls) >= 1
+
+    @pytest.mark.asyncio
+    async def test_no_idle_hook_is_safe(self) -> None:
+        """A queue without on_idle processes normally (no error)."""
+        orch = _make_fake_orchestrator()
+        repo = FakeCatalogRepository()
+        queue = WorkerQueue(orchestrator=orch, repository=repo)
+        await queue.start()
+
+        job_id = await queue.enqueue_scan([_make_candidate("/tmp/a.mp4")])
+        job = repo.get_job(job_id)
+        while job is None or job.done < 1:
+            await asyncio.sleep(0.02)
+            job = repo.get_job(job_id)
+
+        await queue.stop()
+        assert orch.process_clip_calls  # processed successfully
+
+
 # ── 2. Progress event sequence (DoD #2) ─────────────────────────────
 
 class TestProgressEvents:

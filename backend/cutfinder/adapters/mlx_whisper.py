@@ -156,6 +156,28 @@ class MlxWhisperTranscriber(Transcriber):
         self._resolved_path = str(local)
         return self._resolved_path
 
+    @staticmethod
+    def unload_cache() -> None:
+        """Release the process-global mlx-whisper model from memory.
+
+        mlx-whisper caches the loaded model in a module-global
+        ``ModelHolder`` (class-level singleton), so it stays resident for
+        the whole process once loaded. Reset that cache and free MLX's
+        buffer cache so the unified-memory footprint is returned. Safe to
+        call when nothing is loaded (no-op).
+        """
+        try:
+            import mlx.core as mx  # type: ignore[import-untyped]
+            from mlx_whisper.transcribe import ModelHolder  # type: ignore[import-untyped]
+
+            if ModelHolder.model is not None:
+                logger.info("Unloading mlx-whisper model from memory")
+            ModelHolder.model = None
+            ModelHolder.model_path = None
+            mx.clear_cache()
+        except Exception:  # noqa: BLE001 — best-effort cleanup, never raise
+            logger.debug("Whisper unload skipped", exc_info=True)
+
     def transcribe(
         self,
         path: Path,

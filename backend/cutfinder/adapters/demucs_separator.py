@@ -99,6 +99,28 @@ class DemucsSeparator(VocalSeparator):
         model.eval()
         self._dmodel = model
 
+    def unload(self) -> None:
+        """Release the cached Demucs model from memory (idle cleanup).
+
+        Drops the model reference, runs a GC pass, and clears the MPS cache
+        so its unified-memory footprint is returned. Safe to call when no
+        model is loaded (no-op).
+        """
+        if self._dmodel is None:
+            return
+
+        import gc
+
+        self._dmodel = None
+        gc.collect()
+        try:
+            import torch
+
+            if torch.backends.mps.is_available():
+                torch.mps.empty_cache()
+        except Exception:  # noqa: BLE001 — best-effort cleanup, never raise
+            pass
+
     def isolate(
         self, path: Path, *, progress: Callable[[float], None] | None = None,
     ) -> np.ndarray:

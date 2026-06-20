@@ -131,6 +131,7 @@ class WorkerQueue:
         progress_callback: Callable[[Any], None] | None = None,
         keyframe_auto: bool = False,
         subtitle_exporter: Any | None = None,
+        on_idle: Callable[[], None] | None = None,
     ) -> None:
         self._queue: asyncio.Queue[Any] = asyncio.Queue()
         self._worker_task: asyncio.Task[None] | None = None
@@ -146,6 +147,10 @@ class WorkerQueue:
 
         # Reference to orchestrator (may be None)
         self._orchestrator = orchestrator
+
+        # Called once the queue drains (no items left) — used to unload
+        # idle models (whisper/demucs) so they stop occupying RAM.
+        self._on_idle = on_idle
 
         # Standalone subtitle export (decoupled from the catalog) + its results.
         self._subtitle_exporter = subtitle_exporter
@@ -527,9 +532,26 @@ class WorkerQueue:
                     await self._maybe_autoqueue_keyframes(job_id)
                 self._queue.task_done()
 
+                # Nothing left to process → release idle model memory.
+                if self._queue.empty():
+                    await self._run_idle_hook()
+
         except asyncio.CancelledError:
             # Normal shutdown — drain remaining items if possible
             pass
+
+    async def _run_idle_hook(self) -> None:
+        """Invoke the idle callback (e.g. unload models) when the queue drains.
+
+        Runs off the event loop since unloading can touch GC / GPU caches.
+        Errors are logged and swallowed — cleanup must never break the worker.
+        """
+        if self._on_idle is None:
+            return
+        try:
+            await asyncio.to_thread(self._on_idle)
+        except Exception as exc:  # noqa: BLE001 — cleanup must not break the worker
+            logger.warning("Idle hook error: %s", exc)
 
     async def _maybe_autoqueue_keyframes(self, scan_job_id: int) -> None:
         """When a scan job has just completed, enqueue keyframes for new clips."""
