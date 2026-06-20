@@ -9,8 +9,6 @@ dependencies = [
     "uvicorn[standard]",
     "pydantic>=2.0",
     "pydantic-settings",
-    # .env parsing for layered config resolution (config.py:resolve_env)
-    "python-dotenv",
     # OpenAI-compatible client for OMLX (text + vision)
     "openai",
     # Speech transcription — local mlx-whisper (separate from OMLX)

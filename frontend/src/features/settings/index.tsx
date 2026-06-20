@@ -464,8 +464,9 @@ export function SettingsPage({ onSave }: SettingsPageProps) {
                 <label className="block text-sm text-[--text-secondary]">{t('settings.whisperModel')}</label>
                 <p className="mb-1 text-xs text-[--text-muted]">{t('settings.whisperModelDesc')}</p>
                 <input
-                  type="text" value={prefs.whisper_model} readOnly
-                  className="w-full rounded-md border border-[--border] bg-[--surface-2] px-3 py-1.5 text-sm"
+                  type="text" value={prefs.whisper_model}
+                  onChange={(e) => updateField('whisper_model', e.target.value)}
+                  className="w-full rounded-md border border-[--border] bg-[--surface-2] px-3 py-1.5 text-sm outline-none focus:border-[--primary]"
                 />
               </div>
             </fieldset>

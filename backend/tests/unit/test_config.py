@@ -28,13 +28,12 @@ from cutfinder.config import (
 def _isolate_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Keep every test hermetic from the developer's real machine config.
 
-    ``resolve_env`` now reads ``~/.cutfinder/config.json`` and the repo-root
-    ``.env``; redirect both so tests aren't polluted by local state.
+    ``resolve_env`` reads ``~/.cutfinder/config.json``; redirect it so tests
+    aren't polluted by local state.
     """
     import cutfinder.config as cfg
 
     monkeypatch.setattr(cfg, "_GLOBAL_CONFIG_FILE", tmp_path / "global-config.json")
-    monkeypatch.setattr(cfg, "_read_dotenv", dict)
 
 
 @pytest.fixture()
@@ -84,9 +83,7 @@ class TestEnvSettings:
         monkeypatch.delenv("OMLX_BASE_URL", raising=False)
         monkeypatch.delenv("OMLX_API_KEY", raising=False)
 
-        # _env_file=None isolates the unit test from the repo-root .env, which
-        # EnvSettings otherwise always loads (see config._ROOT_ENV_FILE).
-        env = EnvSettings(_env_file=None)
+        env = EnvSettings()
         assert env.OMLX_BASE_URL == ""
         assert env.OMLX_API_KEY == ""
 
@@ -106,9 +103,6 @@ class TestGlobalSettings:
 
         target = tmp_path / ".cutfinder" / "config.json"
         monkeypatch.setattr(cfg, "_GLOBAL_CONFIG_FILE", target)
-        # Isolate from the real repo-root .env so env-vs-global precedence is
-        # driven only by what each test sets.
-        monkeypatch.setattr(cfg, "_read_dotenv", dict)
         return target
 
     def test_save_then_load_round_trip(self, global_file: Path) -> None:
@@ -155,13 +149,85 @@ class TestGlobalSettings:
         assert env.OMLX_BASE_URL == "http://global/v1"
         assert env.OMLX_API_KEY == "global-key"
 
+
+class TestGlobalPrefs:
+    """Machine-global typed pref overrides (whisper model + toggles)."""
+
+    @pytest.fixture()
+    def global_file(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+        import cutfinder.config as cfg
+
+        target = tmp_path / ".cutfinder" / "config.json"
+        monkeypatch.setattr(cfg, "_GLOBAL_CONFIG_FILE", target)
+        return target
+
+    def test_round_trip_preserves_native_types(self, global_file: Path) -> None:
+        """Booleans stay booleans; a stored ``False`` is still read back."""
+        from cutfinder.config import load_global_prefs, save_global_prefs
+
+        save_global_prefs(
+            {
+                "whisper_model": "mlx-community/whisper-large-v3-mlx",
+                "vocal_separation": True,
+                "keyframe_auto": False,
+                "bogus": "ignored",
+            }
+        )
+
+        loaded = load_global_prefs()
+        assert loaded == {
+            "whisper_model": "mlx-community/whisper-large-v3-mlx",
+            "vocal_separation": True,
+            "keyframe_auto": False,
+        }
+
+    def test_coexists_with_env_keys_no_clobber(self, global_file: Path) -> None:
+        """Saving prefs and env keys to the one file leaves both intact."""
+        from cutfinder.config import (
+            load_global_prefs,
+            load_global_settings,
+            save_global_prefs,
+            save_global_settings,
+        )
+
+        save_global_settings({"OMLX_BASE_URL": "http://x/v1"})
+        save_global_prefs({"vocal_separation": True})
+        save_global_settings({"TEXT_MODEL": "Qwen"})
+
+        assert load_global_settings() == {
+            "OMLX_BASE_URL": "http://x/v1",
+            "TEXT_MODEL": "Qwen",
+        }
+        assert load_global_prefs() == {"vocal_separation": True}
+
+    def test_load_config_overlays_global_over_per_library(
+        self, global_file: Path, tmp_path: Path
+    ) -> None:
+        """A global override wins over the value in the per-library file."""
+        import json as _json
+
+        from cutfinder.config import load_config, save_global_prefs
+
+        lib = tmp_path / "lib"
+        (lib / ".cutfinder").mkdir(parents=True)
+        (lib / ".cutfinder" / "config.json").write_text(
+            _json.dumps(
+                {"library_path": str(lib), "vocal_separation": False, "keyframe_auto": True}
+            ),
+            encoding="utf-8",
+        )
+        save_global_prefs({"vocal_separation": True, "keyframe_auto": False})
+
+        prefs = load_config(lib).prefs
+        assert prefs.vocal_separation is True
+        assert prefs.keyframe_auto is False
+
     def test_resolve_env_prefers_global_over_env(
         self, global_file: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """The Settings UI (global store) is authoritative over env vars.
 
-        ``make dev`` exports ``.env`` into the environment, so a stale env var
-        must not shadow what the user saved in the UI.
+        A stale OS env var must not shadow what the user saved in the UI.
         """
         from cutfinder.config import resolve_env, save_global_settings
 

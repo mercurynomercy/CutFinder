@@ -10,6 +10,44 @@ CutFinder takes a pile of **A-roll** (clips with spoken narration — Chinese by
 
 ---
 
+## Get started — `make app`
+
+The recommended way to run CutFinder is the native **`CutFinder.app`**: a small Swift/AppKit wrapper that hosts the UI in its own window (WKWebView, no browser tab), manages the local service, and **installs everything it needs on first launch**. One command builds it.
+
+> **One prerequisite lives outside the app:** [OMLX](https://github.com/jundot/omlx), a local Apple-Silicon model server (menu-bar app). Install it and load `Qwen3.6-35B-A3B` (text) + `Qwen3-VL-8B` (vision). CutFinder detects it on first run and **guides you if it's missing** — scanning / transcription / thumbnails still work without it; only A-roll summaries and B-roll tags need it.
+
+### 1. Build the app
+
+```bash
+git clone <repo> && cd CutFinder
+make app          # → dist/CutFinder.app (and dist/CutFinder.dmg)
+```
+
+`make app` compiles the Swift wrapper with **SwiftPM** and bundles a prebuilt frontend, so the build host needs the **Xcode Command Line Tools** (`xcode-select --install`) plus Node. Anyone running a *prebuilt* `.app` needs neither — the `.app` carries the UI and backend source, and one service serves both (no Node at runtime).
+
+### 2. Install & first launch
+
+Drag `dist/CutFinder.app` to `/Applications` and double-click:
+
+- **First launch self-installs everything.** A native setup screen shows progress while it syncs its runtime, installs `uv` and `ffmpeg` (auto `brew install` when Homebrew is present, otherwise it guides you), creates the Python environment (`uv sync`), and downloads the Whisper + Demucs models (~3 GB). Later launches start in a second.
+- **The service starts automatically** and the UI loads in the app's own window. The **Service menu (服务)** can Start / Stop / Restart the backend, or "Open in browser" if you prefer a tab.
+- **Standard Mac app behavior** — full application menu; closing the window keeps the service running; clicking the Dock icon reopens it; ⌘Q stops the service cleanly (no orphaned process).
+- The runtime lives in `~/Library/Application Support/CutFinder/` (**outside the .app bundle**, for clean updates/signing); logs are at `launch.log` there.
+
+> **Unsigned dev build?** When a Developer ID identity is present `make app` signs with **Hardened Runtime** (and notarizes + staples when `CUTFINDER_NOTARY_PROFILE` is set); otherwise it produces an unsigned dev build whose first open needs **right-click → Open**. Because the Python env and models live outside the bundle, only the small Swift binary is signed.
+
+### 3. Use it
+
+1. **Configure OMLX** — **Settings → OMLX connection** → fill in Base URL / API key → Save. Stored in `~/.cutfinder/config.json` (machine-wide; the Whisper model and the vocal-separation / auto-keyframe toggles are stored there too).
+2. **Bind a library** — **Settings → Set up your library** → pick an absolute path with the native picker. This is where the organized copies, thumbnails, and the SQLite catalog live (all under `<library>/.cutfinder/`). Takes effect with no restart.
+3. **Add source folders & scan** — point CutFinder at your footage folder(s) and run a scan. Each new clip is classified A-roll/B-roll, transcribed/tagged, thumbnailed, and copied into `<library>/YYYY-MM-DD/A-roll(or B-roll)/`. Re-scans only process new files (dedup by fingerprint) — originals are never touched.
+4. **Browse, search, correct** — the thumbnail wall groups clips by capture date; search/filter by filename, summary, tags, date, or type. Fix any wrong A/B verdict or tag — corrections are remembered.
+5. **Export subtitles** — pick a finished cut → re-transcribe (BGM stripped first) → export Final Cut Pro-native **iTT + SRT** into a folder you choose.
+
+> Prefer running from source (for development)? See [Run from source](#run-from-source-development) below.
+
+---
+
 ## What it does
 
 - **Automatic A-roll / B-roll classification** — detects the presence of spoken narration (Silero VAD). The verdict is correctable by hand, and corrections are remembered.
@@ -93,7 +131,9 @@ The text and vision models are both served by [OMLX](https://github.com/jundot/o
 
 ---
 
-## Setup & Run
+## Run from source (development)
+
+> For day-to-day development. To just **use** CutFinder, build the native app with [`make app`](#get-started--make-app) instead.
 
 ### 1. Install dependencies
 
@@ -102,7 +142,7 @@ git clone <repo> && cd CutFinder
 make setup                      # mise install + brew bundle + uv sync + npm install
 ```
 
-> OMLX can be configured in the **Settings page** (step 2) — no `.env` required. If you prefer a `.env`, run `cp .env.example .env` and fill in the values.
+> OMLX is configured in the **Settings page** (step 2) — no config file to edit by hand.
 
 > No mise? Run `brew install mise` first, or do it manually:
 > ```bash
@@ -112,21 +152,18 @@ make setup                      # mise install + brew bundle + uv sync + npm ins
 
 ### 2. Configure the OMLX connection
 
-Two things to configure: OMLX URL and API key. Either way works:
+Configure two things — OMLX URL and API key:
 
-- **Settings page (recommended, no `.env`)** — after launching, open http://localhost:5080 → **Settings** → **OMLX connection** → fill in Base URL / API key → Save. These are stored in `~/.cutfinder/config.json` (**shared machine-wide**, no need to re-enter per library) and take effect immediately.
+- **Settings page (recommended)** — after launching, open http://localhost:5080 → **Settings** → **OMLX connection** → fill in Base URL / API key → Save. These are stored in `~/.cutfinder/config.json` (**shared machine-wide**, no need to re-enter per library) and take effect immediately.
 
-- **`.env` (optional, for temporary overrides)** — place a `.env` in the **repo root**:
+- **OS environment variables (optional)** — export `OMLX_BASE_URL` / `OMLX_API_KEY` in your shell (handy for CI / one-off runs):
 
-  ```ini
-  # OMLX local inference server (OpenAI-compatible). Defaults to :8000; change to match your port.
-  OMLX_BASE_URL=http://localhost:8000/v1
-  OMLX_API_KEY=your-omlx-key
+  ```bash
+  export OMLX_BASE_URL=http://localhost:8000/v1
+  export OMLX_API_KEY=your-omlx-key
   ```
 
-  `make dev` / `make check-omlx` / `make test-integration` load it automatically; if you start the backend manually with `uvicorn`, export it first with `set -a; source .env; set +a`.
-
-> **Priority** (high → low): **Settings global config** (`~/.cutfinder/config.json`) > **env vars / `.env`**. The Settings page is authoritative — values saved there always win, even if `.env` sets the same key (note `make dev` exports `.env` into the environment, so both belong to the same "fallback" layer). `.env` / env vars only fill keys the Settings page hasn't set.
+> **Priority** (high → low): **Settings global config** (`~/.cutfinder/config.json`) > **OS env vars**. The Settings page is authoritative — values saved there always win, even if an env var sets the same key. Env vars only fill keys the Settings page hasn't set. (There is no `.env` file anymore.)
 
 ### 3. Verify OMLX is ready
 
@@ -136,7 +173,7 @@ make check-omlx                 # checks that the text/vision models are loaded
 #   All required text/vision models are present.
 ```
 
-> `make check-omlx` reads only `.env` / env vars, **not** the Settings global config. If you configure via the UI (no `.env`), skip this and verify in-app on your first scan, or run it ad-hoc: `OMLX_BASE_URL=... OMLX_API_KEY=... make check-omlx`.
+> `make check-omlx` resolves creds the same way the app does (`~/.cutfinder/config.json` > OS env vars), so it works whether you configured via the UI or via env vars.
 
 ### 4. Start the dev servers (recommended: one command for both)
 
@@ -153,16 +190,15 @@ Open **http://localhost:5080**. `Ctrl+C` stops both servers.
 The library directory holds the organized copies, thumbnails, and the SQLite catalog (all under `<library>/.cutfinder/`). Two ways:
 
 - **Settings page (recommended)** — open http://localhost:5080 → **Settings** → **Set up your library** → click **Choose…** to pick a directory with the macOS native picker (or type an absolute path). It takes effect **at runtime with no restart**, and the choice is remembered (persisted to `~/.cutfinder`).
-- **Env var** — add `CUTFINDER_LIBRARY=/path/to/library` to the root `.env`, then `make dev`.
+- **Env var** — set `CUTFINDER_LIBRARY=/path/to/library` in your shell before `make dev`.
 
 > Without a bound library the backend still starts, but directory-type endpoints return 503 and the Settings page shows the binding wizard until you bind one.
 
 ### Manual split start (for debugging)
 
 ```bash
-# Terminal 1 — backend (export .env first)
+# Terminal 1 — backend (OMLX comes from ~/.cutfinder/config.json or exported env vars)
 cd backend
-set -a; source ../.env; set +a
 CUTFINDER_LIBRARY=/path/to/library uv run uvicorn cutfinder.api.app:app --reload --port 5081
 
 # Terminal 2 — frontend
@@ -194,11 +230,10 @@ uv run mypy cutfinder/               # type check (strict, clean)
 uv run ruff check cutfinder/         # linting (clean)
 ```
 
-Integration tests **auto-skip** when `.env` / OMLX / sample clips are missing — no false failures. To actually exercise the OMLX chain:
+Integration tests **auto-skip** when OMLX / sample clips are missing — no false failures. To actually exercise the OMLX chain, configure OMLX (in the Settings UI or via env vars), then:
 
 ```bash
 cd backend
-set -a; source ../.env; set +a
 uv run pytest -m integration
 ```
 
@@ -215,8 +250,8 @@ npx playwright test             # e2e (auto-starts the Vite dev server)
 
 ```bash
 make test-unit         # backend unit tests (fast, tests/unit, no external deps) — use this day to day
-make test              # full backend (incl. -m integration; runs for real if OMLX/.env are present, may be slow)
-make test-integration  # only -m integration (auto-loads .env; needs ffmpeg/OMLX)
+make test              # full backend (incl. -m integration; runs for real when OMLX is configured, may be slow)
+make test-integration  # only -m integration (needs ffmpeg + a configured OMLX)
 make e2e               # Playwright e2e
 ```
 
@@ -237,46 +272,4 @@ make e2e               # Playwright e2e
 - [Task list `doc/tasks/`](./doc/tasks/progress.md) — per-module tasks and overall progress
 - [`CLAUDE.md`](./CLAUDE.md) — project constraints and architecture cheat-sheet for AI collaborators
 
----
-
-## Install as a macOS App (CutFinder.app)
-
-The easiest way to run CutFinder is the native **`CutFinder.app`** — a small Swift/AppKit wrapper that hosts the UI in a native window (WKWebView, no browser tab), manages the local service, and installs everything it needs on first launch.
-
-### Build the .app
-
-```bash
-make app          # → dist/CutFinder.app (and dist/CutFinder.dmg)
-```
-
-`make app` compiles the Swift wrapper with **SwiftPM**, so the build host needs the **Xcode Command Line Tools** (`xcode-select --install`) plus Node (to build the bundled frontend). Anyone running a *prebuilt* `.app` needs none of that.
-
-### Install & first launch
-
-Drag `dist/CutFinder.app` to `/Applications` and double-click:
-
-- **First launch self-installs everything.** A native setup screen shows progress while it syncs its runtime, installs `uv` and `ffmpeg` (auto `brew install` when Homebrew is present, otherwise it guides you), creates the Python environment (`uv sync`), and downloads the Whisper + Demucs models (~3 GB). Later launches start in a second.
-- **The service starts automatically** and the UI loads in the app's own window — no browser. Use the **Service menu (服务)** to Start / Stop / Restart the backend, or "Open in browser" if you prefer a tab.
-- **Standard Mac app behavior** — full application menu; closing the window keeps the service running; clicking the Dock icon reopens the window; ⌘Q stops the service cleanly (no orphaned process).
-- The runtime lives in `~/Library/Application Support/CutFinder/` (**outside the .app bundle**, for clean updates/signing); logs are at `launch.log` there. The `.app` bundles a **prebuilt frontend** + backend source — one service serves both the UI and the API, so **no Node is needed at runtime**.
-
-### Signing & notarization
-
-`make app` signs the app with **Developer ID + Hardened Runtime** automatically when a signing identity is present, and notarizes + staples it when `CUTFINDER_NOTARY_PROFILE` is set; otherwise it produces an **unsigned dev build** (first open needs right-click → **Open**). Because the Python env and models live outside the bundle, only the small Swift binary is signed.
-
-> ⚠️ Two things stay separate (they can't live inside the .app):
-> 1. **OMLX** is a third-party menu-bar model server — install it and load the `Qwen` text/vision models yourself. CutFinder detects it on first run and **guides you if it's missing** (scanning / transcription / thumbnails still work without it; only A-roll summaries and B-roll tags need it).
-> 2. The **Whisper** (~3 GB) and **Demucs `htdemucs`** models download automatically on first use (or pre-warm with `make models`).
->
 > Brand art sources are in `branding/`.
-
----
-
-## Roadmap
-
-- **v1**: requirements 0–7 (custom folders, preserve capture time, A/B detection, A-roll summary, date+type organization, tags, thumbnails, OMLX integration) — **done**.
-- **Beyond v1, done**: keyframe suggestions / cut points (requirement 8); self-installing **native `CutFinder.app` shell** (Swift/AppKit + WKWebView, `make app`) — standard app menu, stable Dock lifecycle, Dock-click reopens the window, auto-installs deps on first run, manages the service, and is code-signing/notarization-ready.
-- **Next / TODO**:
-  - **Export transcript as Final Cut Pro-importable subtitles** — A-roll already has time-coded `Segment`s, so iTT / SRT export is just timecode formatting (no model call). A backend `GET /api/clips/{id}/transcript.srt|.itt` + a detail-panel "Export subtitles" button would do it.
-  - **Final Cut Pro deep integration** (FCPXML / Keywords export; can merge with the above: subtitles as a caption track loaded into FCP with each clip).
-  - PyInstaller fully-offline bundle / Tauri native window.

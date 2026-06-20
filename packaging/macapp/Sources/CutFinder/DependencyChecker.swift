@@ -21,24 +21,24 @@ enum DependencyChecker {
         Shell.which(tool) != nil
     }
 
-    /// Heuristic check that whisper + demucs model caches are present. Models are
-    /// downloaded into the standard Hugging Face / torch caches under the user's
-    /// home; we treat their presence as "models ready".
+    /// Whether the whisper + demucs model weights are present.
+    ///
+    /// CutFinder stores models under `<runtime>/models/` (see
+    /// `cutfinder.config.WHISPER_MODELS_DIR` / `DEMUCS_MODELS_DIR`), *not* the
+    /// global `~/.cache` Hugging Face / torch caches. We check both there:
+    /// whisper at `models/whisper/whisper-large-v3-mlx`, demucs at
+    /// `models/demucs/checkpoints` (torch-hub layout). Both must exist to call
+    /// models present, so the download step is skipped (and stays offline) only
+    /// once both are actually on disk.
     static func modelsPresent(paths: PayloadPaths) -> Bool {
         let fm = FileManager.default
-        let home = paths.home
-        let hfCache = home
-            .appendingPathComponent(".cache", isDirectory: true)
-            .appendingPathComponent("huggingface", isDirectory: true)
-            .appendingPathComponent("hub", isDirectory: true)
-        let whisper = hfCache.appendingPathComponent("models--mlx-community--whisper-large-v3-mlx", isDirectory: true)
-        let demucs = home
-            .appendingPathComponent(".cache", isDirectory: true)
-            .appendingPathComponent("torch", isDirectory: true)
-            .appendingPathComponent("hub", isDirectory: true)
+        let models = paths.modelsDir
+        let whisper = models
+            .appendingPathComponent("whisper", isDirectory: true)
+            .appendingPathComponent("whisper-large-v3-mlx", isDirectory: true)
+        let demucs = models
+            .appendingPathComponent("demucs", isDirectory: true)
             .appendingPathComponent("checkpoints", isDirectory: true)
-        // Be lenient: either the whisper dir or any demucs checkpoint counts as
-        // "started"; require both signals to call models fully present.
         let whisperOK = fm.fileExists(atPath: whisper.path)
         let demucsOK = fm.fileExists(atPath: demucs.path)
         return whisperOK && demucsOK

@@ -252,7 +252,12 @@ def create_app(
     from cutfinder.api.library_routes import _build_router as library_router
     from cutfinder.api.routes import _build_router as main_router
     from cutfinder.api.settings_routes import _build_router as settings_router
-    from cutfinder.config import load_config, save_global_settings, save_prefs
+    from cutfinder.config import (
+        load_config,
+        save_global_prefs,
+        save_global_settings,
+        save_prefs,
+    )
 
     async def _reload_current_library() -> None:
         """Rebuild adapters for the active library so saved settings apply live."""
@@ -266,6 +271,7 @@ def create_app(
             save_prefs,
             lambda: ctx.library_path,
             save_global_settings,
+            save_global_prefs,
             _reload_current_library,
         )
     )

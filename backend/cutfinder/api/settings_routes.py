@@ -18,7 +18,7 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException
 
-from cutfinder.config import _GLOBAL_KEYS, Prefs
+from cutfinder.config import _GLOBAL_KEYS, _GLOBAL_PREF_KEYS, Prefs
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +32,7 @@ def _build_router(
     save_prefs_fn: Any,   # config.save_prefs(prefs, library_path) -> None
     get_library_fn: Any,  # callable that returns current library path or None
     save_global_fn: Any,  # config.save_global_settings(dict) -> None
+    save_global_prefs_fn: Any,  # config.save_global_prefs(dict) -> None
     reload_fn: Any = None,  # async () -> None: rebuild adapters for current lib
 ) -> APIRouter:
     """Construct and return the settings ``APIRouter``."""
@@ -67,11 +68,10 @@ def _build_router(
         """Apply a partial settings update.
 
         Per-library prefs are persisted via :func:`cutfinder.config.save_prefs`;
-        machine-global keys (OMLX endpoint/key, whisper path) are persisted via
+        machine-global keys (OMLX endpoint/key, model names) are persisted via
         :func:`cutfinder.config.save_global_settings` so they apply across all
-        libraries without a ``.env`` file. Only fields present in the request
-        body are touched. A masked ``OMLX_API_KEY`` is ignored so the stored
-        secret is never clobbered.
+        libraries. Only fields present in the request body are touched. A masked
+        ``OMLX_API_KEY`` is ignored so the stored secret is never clobbered.
         """
         library_path = get_library_fn()
         if not library_path:
@@ -86,6 +86,17 @@ def _build_router(
         if global_updates:
             try:
                 save_global_fn(global_updates)
+            except Exception as exc:  # noqa: BLE001
+                raise HTTPException(status_code=503, detail=f"Save error: {exc}") from exc
+
+        # Machine-global typed prefs (whisper model + toggles): one value for all
+        # libraries, persisted to the global store. They still flow through the
+        # per-library save below (harmless — load_config overlays the global
+        # value on top), but the global store is authoritative.
+        global_pref_updates = {k: v for k, v in body.items() if k in _GLOBAL_PREF_KEYS}
+        if global_pref_updates:
+            try:
+                save_global_prefs_fn(global_pref_updates)
             except Exception as exc:  # noqa: BLE001
                 raise HTTPException(status_code=503, detail=f"Save error: {exc}") from exc
 

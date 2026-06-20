@@ -238,7 +238,7 @@
 ```
 连接
   OMLX 接口   [http://localhost:8000/v1]   ● 已连接
-  （API Key 来自 .env，此处只显示状态）
+  （凭全局配置自动连接，此处只显示状态）
 模型
   文本模型    [Qwen3.6-35B-A3B        ▾]
   视觉模型    [Qwen3-VL-8B-Instruct   ▾]

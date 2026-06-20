@@ -17,6 +17,19 @@ from fastapi.testclient import TestClient
 from cutfinder.api.app import create_app
 
 
+@pytest.fixture(autouse=True)
+def _isolate_global_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Redirect the machine-global config file into a temp dir.
+
+    Settings reads/writes (including the global pref overlay for whisper model
+    and the toggles) now touch ``~/.cutfinder/config.json``; isolate it so tests
+    never read from — or worse, write to — the developer's real config.
+    """
+    monkeypatch.setattr(
+        "cutfinder.config._GLOBAL_CONFIG_FILE", tmp_path / "global-config.json"
+    )
+
+
 @pytest.fixture
 def omlx_env(monkeypatch: pytest.MonkeyPatch) -> None:
     """Provide the OMLX env vars EnvSettings requires (no network used)."""

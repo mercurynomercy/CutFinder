@@ -5,14 +5,8 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 PIDFILE="$ROOT/.dev-pids"
 
-# Load OMLX endpoint/key (and optional CUTFINDER_LIBRARY) from the root .env so
-# the backend can reach the model server. EnvSettings reads these at startup.
-if [ -f "$ROOT/.env" ]; then
-  set -a
-  # shellcheck disable=SC1091
-  . "$ROOT/.env"
-  set +a
-fi
+# OMLX endpoint/key come from the Settings UI (~/.cutfinder/config.json) or OS
+# env vars exported in your shell; no .env file is read.
 
 _cleaned=0
 

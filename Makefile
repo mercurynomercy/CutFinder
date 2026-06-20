@@ -44,14 +44,14 @@ frontend-deps:
 	cd frontend && npm install
 
 # ── 2. dev — start both backend and frontend servers in one command ─
-# No .env is required: configure OMLX in the Settings UI (stored in
-# ~/.cutfinder/config.json). A .env, if present, is read as a fallback only.
+# Configure OMLX in the Settings UI (stored in ~/.cutfinder/config.json) or via
+# OS env vars (OMLX_BASE_URL / OMLX_API_KEY); no .env file is read.
 dev: uv-sync frontend-deps
 	@bash scripts/dev.sh
 
 # ── 3. models — pre-download MLX Whisper + Demucs models into <repo>/models/ ──
 models: uv-sync
-	cd backend && set -a && [ -f ../.env ] && . ../.env; set +a; $(UV) run python ../scripts/download_whisper.py; $(UV) run python ../scripts/download_demucs.py
+	cd backend && $(UV) run python ../scripts/download_whisper.py; $(UV) run python ../scripts/download_demucs.py
 
 # ── 4. check-omlx — verify OMLX endpoint & models are ready ────
 check-omlx: uv-sync

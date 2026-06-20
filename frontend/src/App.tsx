@@ -67,7 +67,6 @@ export default function App() {
   }
 
   const menuRef = useRef<HTMLDivElement>(null)
-  const menuRef = useRef<HTMLDivElement>(null)
 
   // Light / dark toggle — persists and updates <html data-theme>.
   const toggleTheme = () => {

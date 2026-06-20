@@ -7,7 +7,9 @@ non-empty summary + tags.
 Marked ``@pytest.mark.integration`` so they are skipped by default;
 run with ``-m integration``.
 
-Requires: local OMLX server running at the URL from .env.
+Requires: a local OMLX server whose endpoint/key are configured in
+``~/.cutfinder/config.json`` (Settings UI) or via ``OMLX_BASE_URL`` /
+``OMLX_API_KEY`` environment variables.
 """
 
 from __future__ import annotations
@@ -20,26 +22,14 @@ openai = pytest.importorskip("openai")
 
 
 def _load_config() -> __import__("cutfinder.config", fromlist=["AppConfig"]).AppConfig:
-    """Load config from .env file for real OMLX calls."""
-    from pathlib import Path
+    """Resolve OMLX creds (global store / OS env) for real OMLX calls."""
+    from cutfinder.config import AppConfig, Prefs, resolve_env
 
-    root = Path(__file__).resolve().parents[3]  # repo root
-    env_path = root / ".env"
+    env = resolve_env()
+    if not (env.OMLX_BASE_URL and env.OMLX_API_KEY):
+        pytest.skip("OMLX not configured (set it in the Settings UI or via env vars)")
 
-    if not env_path.exists():
-        pytest.skip(".env file missing; cannot load OMLX config")
-
-    # pydantic-settings reads .env via EnvSettings
-    from cutfinder.config import EnvSettings, Prefs
-
-    try:
-        env = EnvSettings()
-    except ValueError as e:
-        pytest.skip(f"Cannot load OMLX config: {e}")
-
-    return __import__("cutfinder.config", fromlist=["AppConfig"]).AppConfig(
-        env=env, prefs=Prefs()
-    )
+    return AppConfig(env=env, prefs=Prefs())
 
 
 @pytest.mark.integration

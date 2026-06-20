@@ -30,13 +30,12 @@ sys.path.insert(0, str(_REPO_ROOT))
 def _isolate_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Keep every test hermetic from the developer's real machine config.
 
-    Redirect ``~/.cutfinder/config.json`` and stub out dotenv so tests
-    aren't polluted by local state.
+    Redirect ``~/.cutfinder/config.json`` so tests aren't polluted by local
+    state.
     """
     import cutfinder.config as cfg
 
     monkeypatch.setattr(cfg, "_GLOBAL_CONFIG_FILE", tmp_path / "global-config.json")
-    monkeypatch.setattr(cfg, "_read_dotenv", lambda: {})
 
 
 @pytest.fixture()
