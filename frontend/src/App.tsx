@@ -9,7 +9,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { ClipSummary } from '@/api/client'
 import { api } from '@/api/client'
 import { Filters, type FiltersState as FilterState } from '@/features/filters'
-import { Gallery } from '@/features/gallery'
+import { Gallery, groupKeys } from '@/features/gallery'
 import { DetailPanel, type DetailPanelProps as DetailPanelPropsType } from '@/features/detail'
 import { JobsPanel, type JobsPanelProps } from '@/features/jobs'
 import { JobsQueuePage } from '@/features/jobs-queue'
@@ -49,6 +49,7 @@ export default function App() {
   const [appliedFilters, setAppliedFilters] = useState<Partial<FilterState>>({})
   const [reanalyzingIds, setReanalyzingIds] = useState<Set<number>>(new Set())
   const [sortBy, setSortBy] = useState<'date-newest' | 'date-oldest'>('date-newest')
+  const [collapsedDates, setCollapsedDates] = useState<Set<string>>(new Set())
   const [searchQuery, setSearchQuery] = useState('')
   const [theme, setTheme] = useState<Theme>(getStoredTheme)
   const [showMenu, setShowMenu] = useState(false)
@@ -205,6 +206,11 @@ export default function App() {
     const db = b.capture_time || b.created_at || ''
     return sortBy === 'date-newest' ? db.localeCompare(da) : da.localeCompare(db)
   })
+
+  // Whether every date group is currently collapsed — drives the toggle-all label.
+  const dateGroupKeys = groupKeys(sortedClips)
+  const allDatesCollapsed = dateGroupKeys.length > 0 && dateGroupKeys.every((k) => collapsedDates.has(k))
+  const toggleAllDates = () => setCollapsedDates(allDatesCollapsed ? new Set() : new Set(dateGroupKeys))
 
   // Called from the Scan button. Checks pause state first; if paused, shows a dialog.
   const handleScan = async () => {
@@ -494,17 +500,31 @@ export default function App() {
           <div className="flex min-h-0 min-w-0 flex-1 flex-col">
             <div className="flex h-11 shrink-0 items-center justify-between border-b border-[--border] px-4">
               <span className="text-xs text-[--text-muted]">{t('gallery.clipsCount', { n: sortedClips.length })}</span>
-              <label className="flex items-center gap-2 text-xs text-[--text-muted]">
-                {t('gallery.sort')}
-                <select
-                  value={sortBy}
-                  onChange={(e) => setSortBy(e.target.value as 'date-newest' | 'date-oldest')}
-                  className="rounded-md border border-[--border] bg-[--surface-2] px-2 py-1 text-xs text-[--text-primary] outline-none transition-colors focus:border-[--primary]"
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={toggleAllDates}
+                  className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs text-[--text-muted] transition-colors hover:bg-[--surface-2] hover:text-[--text-primary]"
                 >
-                  <option value="date-newest">{t('gallery.sortDateNewest')}</option>
-                  <option value="date-oldest">{t('gallery.sortDateOldest')}</option>
-                </select>
-              </label>
+                  <svg
+                    className={`h-3 w-3 transition-transform ${allDatesCollapsed ? '-rotate-90' : ''}`}
+                    fill="none" viewBox="0 0 24 24" aria-hidden="true"
+                  >
+                    <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+                  </svg>
+                  {allDatesCollapsed ? t('gallery.expandAll') : t('gallery.collapseAll')}
+                </button>
+                <label className="flex items-center gap-2 text-xs text-[--text-muted]">
+                  {t('gallery.sort')}
+                  <select
+                    value={sortBy}
+                    onChange={(e) => setSortBy(e.target.value as 'date-newest' | 'date-oldest')}
+                    className="rounded-md border border-[--border] bg-[--surface-2] px-2 py-1 text-xs text-[--text-primary] outline-none transition-colors focus:border-[--primary]"
+                  >
+                    <option value="date-newest">{t('gallery.sortDateNewest')}</option>
+                    <option value="date-oldest">{t('gallery.sortDateOldest')}</option>
+                  </select>
+                </label>
+              </div>
             </div>
             <Gallery
               clips={sortedClips}
@@ -513,6 +533,14 @@ export default function App() {
               onReanalyze={handleReanalyzeClip}
               reanalyzingIds={reanalyzingIds}
               onOpenPath={handleOpenPath}
+              collapsedDates={collapsedDates}
+              onToggleDate={(key) =>
+                setCollapsedDates((prev) => {
+                  const next = new Set(prev)
+                  next.has(key) ? next.delete(key) : next.add(key)
+                  return next
+                })
+              }
             />
           </div>
         </div>

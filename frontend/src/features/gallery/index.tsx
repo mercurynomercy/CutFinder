@@ -11,6 +11,8 @@ Usage:
   <Gallery clips={clips} selectedClipId={selected} onSelect={(id) => setSelected(id)} />
 */
 
+import { useState } from 'react'
+
 import type { ClipSummary } from '@/api/client'
 import { ThumbnailCard } from '@/components/ThumbnailCard'
 import { useI18n } from '@/i18n'
@@ -53,6 +55,16 @@ export interface GalleryProps {
   reanalyzingIds?: Set<number>
   /** Called to open a path: a clip's video file, or a date folder in Finder. */
   onOpenPath?: (path: string) => void
+  /** Controlled set of collapsed date-group keys. Omit to let Gallery manage its own. */
+  collapsedDates?: Set<string>
+  /** Called with a group key to toggle its collapsed state (required when controlled). */
+  onToggleDate?: (key: string) => void
+}
+
+/** Ordered, de-duplicated date-group keys for the given clips — lets a parent
+ *  drive a "collapse/expand all" control without re-deriving the grouping. */
+export function groupKeys(clips: ClipSummary[]): string[] {
+  return groupByDate(clips).map((g) => g.key)
 }
 
 /** Derive the date folder (`<library>/<date>`) from a group's clips, or null
@@ -97,9 +109,24 @@ function groupByDate(clips: ClipSummary[]): { key: string; label: string; items:
   return groups
 }
 
-export function Gallery({ clips, selectedClipId, onSelect, onReanalyze, reanalyzingIds, onOpenPath }: GalleryProps) {
+export function Gallery({ clips, selectedClipId, onSelect, onReanalyze, reanalyzingIds, onOpenPath, collapsedDates, onToggleDate }: GalleryProps) {
   const { t } = useI18n()
+  const [internalCollapsed, setInternalCollapsed] = useState<Set<string>>(new Set())
+  const collapsed = collapsedDates ?? internalCollapsed
+
   if (clips.length === 0) return <EmptyState />
+
+  const toggle = (key: string) => {
+    if (onToggleDate) {
+      onToggleDate(key)
+      return
+    }
+    setInternalCollapsed((prev) => {
+      const next = new Set(prev)
+      next.has(key) ? next.delete(key) : next.add(key)
+      return next
+    })
+  }
 
   const groups = groupByDate(clips)
 
@@ -107,11 +134,26 @@ export function Gallery({ clips, selectedClipId, onSelect, onReanalyze, reanalyz
     <div className="min-h-0 flex-1 space-y-6 overflow-y-auto p-4">
       {groups.map(({ key, label, items }) => {
         const folder = groupFolder(items)
+        const isCollapsed = collapsed.has(key)
         return (
         <section key={key}>
           <h2 className="sticky top-0 z-10 mb-3 -ml-2 flex w-fit items-baseline gap-2 rounded-lg bg-[color-mix(in_srgb,var(--bg-canvas)_85%,transparent)] px-2 py-1 backdrop-blur-sm">
-            <span className="text-sm font-semibold text-[--text-primary]">{key === UNKNOWN_DATE ? t('gallery.unknownDate') : label}</span>
-            <span className="text-xs text-[--text-muted]">{items.length}</span>
+            <button
+              onClick={() => toggle(key)}
+              aria-expanded={!isCollapsed}
+              title={isCollapsed ? t('gallery.expand') : t('gallery.collapse')}
+              aria-label={isCollapsed ? t('gallery.expand') : t('gallery.collapse')}
+              className="flex items-baseline gap-2 rounded text-left transition-colors hover:text-[--text-primary]"
+            >
+              <svg
+                className={`h-3 w-3 self-center text-[--text-muted] transition-transform ${isCollapsed ? '-rotate-90' : ''}`}
+                fill="none" viewBox="0 0 24 24" aria-hidden="true"
+              >
+                <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+              </svg>
+              <span className="text-sm font-semibold text-[--text-primary]">{key === UNKNOWN_DATE ? t('gallery.unknownDate') : label}</span>
+              <span className="text-xs text-[--text-muted]">{items.length}</span>
+            </button>
             {onOpenPath && folder && (
               <button
                 onClick={() => onOpenPath(folder)}
@@ -125,6 +167,7 @@ export function Gallery({ clips, selectedClipId, onSelect, onReanalyze, reanalyz
               </button>
             )}
           </h2>
+          {!isCollapsed && (
           <div className="grid auto-rows-min grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
             {items.map((clip) => (
               <ThumbnailCard
@@ -148,6 +191,7 @@ export function Gallery({ clips, selectedClipId, onSelect, onReanalyze, reanalyz
               />
             ))}
           </div>
+          )}
         </section>
         )
       })}

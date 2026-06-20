@@ -80,6 +80,10 @@ const en = {
   'gallery.emptyDesc': 'Add source folders and run a scan to see your footage here.',
   'gallery.unknownDate': 'Unknown date',
   'gallery.openFolder': 'Open in Finder',
+  'gallery.collapse': 'Collapse',
+  'gallery.expand': 'Expand',
+  'gallery.collapseAll': 'Collapse all',
+  'gallery.expandAll': 'Expand all',
 
   // Thumbnail card
   'card.reanalyze': 'Re-analyze',
@@ -320,6 +324,10 @@ const zh: Record<Key, string> = {
   'gallery.emptyDesc': '添加素材文件夹并扫描，素材会显示在这里。',
   'gallery.unknownDate': '未知日期',
   'gallery.openFolder': '在 Finder 中打开',
+  'gallery.collapse': '收起',
+  'gallery.expand': '展开',
+  'gallery.collapseAll': '全部收起',
+  'gallery.expandAll': '全部展开',
 
   'card.reanalyze': '重新分析',
   'card.photo': '照片',
