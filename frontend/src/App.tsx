@@ -50,6 +50,8 @@ export default function App() {
   const [sortBy, setSortBy] = useState<'date-newest' | 'date-oldest'>('date-newest')
   const [searchQuery, setSearchQuery] = useState('')
   const [theme, setTheme] = useState<Theme>(getStoredTheme)
+  const [showMenu, setShowMenu] = useState(false)
+  const menuRef = useRef<HTMLDivElement>(null)
 
   // Light / dark toggle — persists and updates <html data-theme>.
   const toggleTheme = () => {
@@ -57,6 +59,21 @@ export default function App() {
     applyTheme(next)
     setTheme(next)
   }
+
+  // Close the header overflow menu on outside click or Escape.
+  useEffect(() => {
+    if (!showMenu) return
+    const onDown = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setShowMenu(false)
+    }
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setShowMenu(false) }
+    document.addEventListener('mousedown', onDown)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onDown)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [showMenu])
 
   const clipsRef = useRef(clips)
   clipsRef.current = clips
@@ -300,62 +317,86 @@ export default function App() {
             </svg>
             {t('app.keyframes')}
           </button>
-          <button
-            onClick={() => setShowSubtitles(true)}
-            className="rounded-md p-1.5 text-[--text-secondary] hover:bg-[--surface-3] transition-colors"
-            aria-label={t('app.subtitles')}
-            title={t('app.subtitles')}
-          >
-            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24">
-              <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3.75 6.75A2.25 2.25 0 016 4.5h12a2.25 2.25 0 012.25 2.25v8.25A2.25 2.25 0 0118 17.25H8.25L4.5 21V6.75z" />
-              <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7.5 10.5h3m3 0h3m-9 3h6" />
-            </svg>
-          </button>
-          <button
-            onClick={toggleTheme}
-            className="rounded-md p-1.5 text-[--text-secondary] hover:bg-[--surface-3] transition-colors"
-            aria-label={theme === 'dark' ? t('app.themeToLight') : t('app.themeToDark')}
-            title={theme === 'dark' ? t('app.themeToLight') : t('app.themeToDark')}
-          >
-            {theme === 'dark' ? (
-              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" aria-hidden="true">
-                <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 3v2.25m6.364.386l-1.591 1.591M21 12h-2.25m-.386 6.364l-1.591-1.591M12 18.75V21m-4.773-4.227l-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0z" />
+          <div className="relative" ref={menuRef}>
+            <button
+              onClick={() => setShowMenu((v) => !v)}
+              className="rounded-md p-1.5 text-[--text-secondary] hover:bg-[--surface-3] transition-colors"
+              aria-label={t('app.menu')}
+              aria-haspopup="menu"
+              aria-expanded={showMenu}
+              title={t('app.menu')}
+            >
+              <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M12 6.75a1.5 1.5 0 110-3 1.5 1.5 0 010 3zM12 13.5a1.5 1.5 0 110-3 1.5 1.5 0 010 3zM12 20.25a1.5 1.5 0 110-3 1.5 1.5 0 010 3z" />
               </svg>
-            ) : (
-              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" aria-hidden="true">
-                <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21.752 15.002A9.718 9.718 0 0118 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 003 11.25C3 16.635 7.365 21 12.75 21a9.753 9.753 0 009.002-5.998z" />
-              </svg>
+            </button>
+            {showMenu && (
+              <div
+                role="menu"
+                className="absolute right-0 top-full z-50 mt-1.5 w-52 overflow-hidden rounded-lg border border-[--border] bg-[--surface-1] py-1 shadow-lg"
+              >
+                <button
+                  role="menuitem"
+                  onClick={() => { setShowMenu(false); setShowSubtitles(true) }}
+                  className="flex w-full items-center gap-2.5 px-3 py-2 text-sm text-[--text-secondary] hover:bg-[--surface-3] hover:text-[--text-primary] transition-colors"
+                >
+                  <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" aria-hidden="true">
+                    <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3.75 6.75A2.25 2.25 0 016 4.5h12a2.25 2.25 0 012.25 2.25v8.25A2.25 2.25 0 0118 17.25H8.25L4.5 21V6.75z" />
+                    <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7.5 10.5h3m3 0h3m-9 3h6" />
+                  </svg>
+                  {t('app.subtitles')}
+                </button>
+                <button
+                  role="menuitem"
+                  onClick={() => { setShowMenu(false); toggleTheme() }}
+                  className="flex w-full items-center gap-2.5 px-3 py-2 text-sm text-[--text-secondary] hover:bg-[--surface-3] hover:text-[--text-primary] transition-colors"
+                >
+                  {theme === 'dark' ? (
+                    <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" aria-hidden="true">
+                      <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 3v2.25m6.364.386l-1.591 1.591M21 12h-2.25m-.386 6.364l-1.591-1.591M12 18.75V21m-4.773-4.227l-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0z" />
+                    </svg>
+                  ) : (
+                    <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" aria-hidden="true">
+                      <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21.752 15.002A9.718 9.718 0 0118 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 003 11.25C3 16.635 7.365 21 12.75 21a9.753 9.753 0 009.002-5.998z" />
+                    </svg>
+                  )}
+                  {theme === 'dark' ? t('app.themeToLight') : t('app.themeToDark')}
+                </button>
+                <button
+                  role="menuitem"
+                  onClick={() => { setShowMenu(false); setShowJobs(true) }}
+                  className="flex w-full items-center gap-2.5 px-3 py-2 text-sm text-[--text-secondary] hover:bg-[--surface-3] hover:text-[--text-primary] transition-colors"
+                >
+                  <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" aria-hidden="true">
+                    <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M6 6.878V6a2.25 2.25 0 012.25-2.25h7.5A2.25 2.25 0 0118 6v.878m-12 0c.235-.083.487-.128.75-.128h10.5c.263 0 .515.045.75.128m-12 0A2.25 2.25 0 004.5 9v.878m13.5-3A2.25 2.25 0 0119.5 9v.878m0 0a2.246 2.246 0 00-.75-.128H5.25c-.263 0-.515.045-.75.128m15 0A2.25 2.25 0 0121 12v6a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 18v-6c0-.98.626-1.813 1.5-2.122" />
+                  </svg>
+                  {t('app.taskQueue')}
+                </button>
+                <button
+                  role="menuitem"
+                  onClick={() => { setShowMenu(false); setShowLogs(true) }}
+                  className="flex w-full items-center gap-2.5 px-3 py-2 text-sm text-[--text-secondary] hover:bg-[--surface-3] hover:text-[--text-primary] transition-colors"
+                >
+                  <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" aria-hidden="true">
+                    <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8.25 7.5h7.5M8.25 11.25h7.5M8.25 15h4.5M6 3.75h12A2.25 2.25 0 0120.25 6v12A2.25 2.25 0 0118 20.25H6A2.25 2.25 0 013.75 18V6A2.25 2.25 0 016 3.75z" />
+                  </svg>
+                  {t('app.logs')}
+                </button>
+                <div className="my-1 h-px bg-[--border]" />
+                <button
+                  role="menuitem"
+                  onClick={() => { setShowMenu(false); setShowSettings(true) }}
+                  className="flex w-full items-center gap-2.5 px-3 py-2 text-sm text-[--text-secondary] hover:bg-[--surface-3] hover:text-[--text-primary] transition-colors"
+                >
+                  <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" aria-hidden="true">
+                    <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.24-.438.613-.431.992a6.759 6.759 0 010 .255c-.007.378.138.75.43.99l1.005.828c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.02-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.992a6.932 6.932 0 010-.255c.007-.378-.138-.75-.43-.99l-1.004-.828a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.49l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.281z" />
+                    <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                  {t('app.settings')}
+                </button>
+              </div>
             )}
-          </button>
-          <button
-            onClick={() => setShowLogs(true)}
-            className="rounded-md p-1.5 text-[--text-secondary] hover:bg-[--surface-3] transition-colors"
-            aria-label={t('app.logs')}
-            title={t('app.logs')}
-          >
-            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24">
-              <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8.25 7.5h7.5M8.25 11.25h7.5M8.25 15h4.5M6 3.75h12A2.25 2.25 0 0120.25 6v12A2.25 2.25 0 0118 20.25H6A2.25 2.25 0 013.75 18V6A2.25 2.25 0 016 3.75z" />
-            </svg>
-          </button>
-          <button
-            onClick={() => setShowJobs(true)}
-            className="rounded-md p-1.5 text-[--text-secondary] hover:bg-[--surface-3] transition-colors"
-            aria-label={t('app.taskQueue')}
-          >
-            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24">
-              <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M6 6.878V6a2.25 2.25 0 012.25-2.25h7.5A2.25 2.25 0 0118 6v.878m-12 0c.235-.083.487-.128.75-.128h10.5c.263 0 .515.045.75.128m-12 0A2.25 2.25 0 004.5 9v.878m13.5-3A2.25 2.25 0 0119.5 9v.878m0 0a2.246 2.246 0 00-.75-.128H5.25c-.263 0-.515.045-.75.128m15 0A2.25 2.25 0 0121 12v6a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 18v-6c0-.98.626-1.813 1.5-2.122" />
-            </svg>
-          </button>
-          <button
-            onClick={() => setShowSettings(true)}
-            className="rounded-md p-1.5 text-[--text-secondary] hover:bg-[--surface-3] transition-colors"
-            aria-label={t('app.settings')}
-          >
-            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24">
-              <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.24-.438.613-.431.992a6.759 6.759 0 010 .255c-.007.378.138.75.43.99l1.005.828c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.02-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.992a6.932 6.932 0 010-.255c.007-.378-.138-.75-.43-.99l-1.004-.828a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.49l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.281z" />
-              <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-            </svg>
-          </button>
+          </div>
         </div>
       </header>
 
