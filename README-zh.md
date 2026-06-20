@@ -1,12 +1,15 @@
 # CutFinder
 
+<p align="center">
+  <img src="branding/full-logo.png" alt="CutFinder logo" width="200"/>
+</p>
+
+
 > 本地运行的 Vlog 视频素材（footage）智能分类与检索工具。灵感来自 [Argus](https://github.com/discoposse/argus)。
 
 **English docs → [README.md](./README.md)**
 
 把一堆 A-roll（有中文解说）和 B-roll（纯空镜）自动**分类、打标签、生成简介与缩略图**，让你之后能按日期 / 类型 / 标签 / 台词快速找回任意一段素材。面向 macOS（Apple Silicon）+ Final Cut Pro 工作流，**全程离线、AI 全本地**。
-
-> **状态：核心功能已打通并可端到端运行。** 后端适配器、编排层、API 装配层（`create_app`）、前端均已实现并接通；`make test-unit`（367 单元测试）、前端 `vitest`（190 项）、`npm run build`（类型干净）、`make check-omlx`、`make dev` 均可跑通。模型推理链路（文本/视觉/转写/VAD）通过真实 OMLX + 本地集成测试验证（见[测试](#测试)）。
 
 ---
 
@@ -66,6 +69,10 @@ make app          # → dist/CutFinder.app（以及 dist/CutFinder.dmg）
 - **设置页绑定素材库**：首次使用选/填一个绝对路径即可绑定库，**运行时热生效、无需重启**（也支持 `CUTFINDER_LIBRARY` 环境变量）。设置页每项选项均有中文说明文字。
 - **扫描后自动刷新**：Scan 完成后自动轮询任务状态并刷新缩略图墙，无需手动操作。
 - **深色专业界面**：近黑面板让缩略图突出，A-roll/B-roll 以颜色+图标区分，贴近 FCP 调性（见 [`doc/ui-design.md`](./doc/ui-design.md)）。
+
+<p align="center">
+  <img src="doc/images/example.png" alt="CutFinder UI — 按日期分组的缩略图墙、筛选面板与详情面板"/>
+</p>
 
 ### 不破坏原素材（核心约束）
 

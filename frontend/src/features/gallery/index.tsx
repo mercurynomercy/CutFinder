@@ -109,7 +109,7 @@ export function Gallery({ clips, selectedClipId, onSelect, onReanalyze, reanalyz
         const folder = groupFolder(items)
         return (
         <section key={key}>
-          <h2 className="sticky top-0 z-10 mb-3 flex items-baseline gap-2 bg-[--bg-canvas]/95 py-1 backdrop-blur-sm">
+          <h2 className="sticky top-0 z-10 mb-3 -ml-2 flex w-fit items-baseline gap-2 rounded-lg bg-[color-mix(in_srgb,var(--bg-canvas)_85%,transparent)] px-2 py-1 backdrop-blur-sm">
             <span className="text-sm font-semibold text-[--text-primary]">{key === UNKNOWN_DATE ? t('gallery.unknownDate') : label}</span>
             <span className="text-xs text-[--text-muted]">{items.length}</span>
             {onOpenPath && folder && (
