@@ -30,6 +30,8 @@ function statusLabel(t: I18n['t'], status: string): string {
       return t('jobs.statusQueued')
     case 'running':
       return t('jobs.statusRunning')
+    case 'paused':
+      return t('jobs.statusPaused')
     case 'done':
       return t('jobs.statusDone')
     case 'failed':
@@ -45,6 +47,7 @@ const STATUS_BADGE: Record<string, string> = {
   queued: 'bg-[--surface-3] text-[--text-secondary]',
   pending: 'bg-[--surface-3] text-[--text-secondary]',
   running: 'bg-[--primary]/15 text-[--primary]',
+  paused: 'bg-[--warning]/15 text-[--warning]',
   done: 'bg-[--success]/15 text-[--success]',
   failed: 'bg-[--error]/15 text-[--error]',
   cancelled: 'bg-[--surface-3] text-[--text-muted]',
@@ -95,6 +98,24 @@ function JobRow({ job, paused, onChanged }: { job: JobStatus; paused: boolean; o
     }
   }
 
+  const handleResume = async () => {
+    setBusy(true)
+    try {
+      await api.resumeJob(job.id)
+      onChanged()
+    } catch {
+      // ignore — refresh keeps the list consistent
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  // A restart-interrupted scan/keyframes job can be resumed (both are idempotent
+  // — they re-derive only the remaining work). Reanalyze can't (its target clip
+  // isn't recoverable after the in-memory queue is lost).
+  const canResume = job.status === 'paused' && job.kind !== 'reanalyze'
+  const pct = job.total > 0 ? Math.min(100, Math.round((job.done / job.total) * 100)) : 0
+
   return (
     <tr className="border-b border-[--border]">
       <td className="px-4 py-3 text-sm tabular-nums text-[--text-muted]">
@@ -108,21 +129,39 @@ function JobRow({ job, paused, onChanged }: { job: JobStatus; paused: boolean; o
           {statusText}
         </span>
       </td>
-      <td className="px-4 py-3 text-sm tabular-nums text-[--text-secondary]">
+      <td className="px-4 py-3 text-sm text-[--text-secondary]">
         {job.total === 0 && job.status === 'done' ? (
           <span className="text-[--text-muted]">{t('jobs.noNewFiles')}</span>
         ) : (
-          <>
-            {job.done}/{job.total}
-            {job.failed > 0 && (
-              <span className="ml-2 text-[--error]">{t('jobs.failedN', { n: job.failed })}</span>
-            )}
-          </>
+          <div className="w-32">
+            <div className="flex items-baseline justify-between tabular-nums">
+              <span>{job.done}/{job.total}</span>
+              {job.failed > 0 && (
+                <span className="text-[--error]">{t('jobs.failedN', { n: job.failed })}</span>
+              )}
+            </div>
+            <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-[--surface-3]">
+              <div
+                className={`h-full rounded-full transition-all duration-500 ease-out ${
+                  job.status === 'done' ? 'bg-[--success]'
+                    : job.status === 'failed' ? 'bg-[--error]'
+                    : job.status === 'paused' ? 'bg-[--warning]'
+                    : 'bg-[--primary]'
+                }`}
+                style={{ width: `${pct}%` }}
+              />
+            </div>
+          </div>
         )}
       </td>
       <td className="px-4 py-3 text-sm text-[--text-muted]">{formatTime(job.started_at)}</td>
       <td className="px-4 py-3 text-right">
         <div className="flex justify-end gap-2">
+          {canResume && (
+            <Button size="sm" variant="secondary" onClick={handleResume} disabled={busy}>
+              {t('jobs.resume')}
+            </Button>
+          )}
           {job.failed > 0 && (
             <Button size="sm" variant="secondary" onClick={handleRetry} disabled={busy}>
               {t('jobs.retryFailed')}

@@ -26,6 +26,7 @@ class JobStatus(str, Enum):
     DONE = "done"
     FAILED = "failed"
     CANCELLED = "cancelled"
+    PAUSED = "paused"  # interrupted by app restart; resumable
 
 
 class DateSource(str, Enum):

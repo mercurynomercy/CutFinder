@@ -129,6 +129,13 @@ class CatalogRepository(Protocol):
     def delete_job(self, job_id: int) -> None:
         """Delete a job and its recorded failed items."""
 
+    def reset_interrupted_jobs(self) -> int:
+        """Mark non-terminal jobs as ``paused`` after a restart.
+
+        The worker queue is in-memory, so any job left ``queued``/``running``
+        when the app stopped can no longer make progress. Returns the count.
+        """
+
     def record_failed_item(self, item: JobFailedItem) -> None:
         """Record one failed queue item for later retry."""
 

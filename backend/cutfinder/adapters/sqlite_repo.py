@@ -708,6 +708,15 @@ class SqliteRepository:
         c.execute("DELETE FROM jobs WHERE id = ?", (job_id,))
         self._conn.commit()
 
+    def reset_interrupted_jobs(self) -> int:
+        c = self._conn.cursor()
+        c.execute(
+            "UPDATE jobs SET status = 'paused'"
+            " WHERE status IN ('queued', 'running', 'pending')"
+        )
+        self._conn.commit()
+        return c.rowcount
+
     def record_failed_item(self, item: JobFailedItem) -> None:
         c = self._conn.cursor()
         c.execute("""
