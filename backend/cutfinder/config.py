@@ -25,6 +25,13 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 # Keys that live in the machine-global store / environment (not per-library).
 _GLOBAL_KEYS = ("OMLX_BASE_URL", "OMLX_API_KEY", "TEXT_MODEL", "VISION_MODEL")
 
+# Typed Prefs fields the UI stores machine-globally (in ~/.cutfinder/config.json)
+# instead of per library, so one value applies across every library. Unlike
+# _GLOBAL_KEYS (env-style strings) these keep their native JSON types (the
+# toggles stay booleans). load_config overlays them on top of the per-library
+# prefs; the settings route persists them via save_global_prefs.
+_GLOBAL_PREF_KEYS = ("whisper_model", "vocal_separation", "keyframe_auto")
+
 # Repo root, anchored to this file (backend/cutfinder/config.py -> repo root).
 # Used so the root ``.env`` is found even when the process runs from backend/.
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -83,11 +90,12 @@ class EnvSettings(BaseSettings):
 # ── Machine-global settings (UI-editable, no .env required) ──────────
 
 
-def load_global_settings() -> dict[str, str]:
-    """Read the machine-global settings from ``~/.cutfinder/config.json``.
+def _read_global_file() -> dict[str, Any]:
+    """Return the raw machine-global config dict (all keys), or ``{}``.
 
-    Returns only the recognised :data:`_GLOBAL_KEYS` with truthy values; a
-    missing or unreadable file yields an empty dict.
+    A missing or unreadable/non-object file yields an empty dict. Callers
+    filter to the key set they own so the env keys and the typed pref keys can
+    coexist in the one file without clobbering each other.
     """
     if not _GLOBAL_CONFIG_FILE.is_file():
         return {}
@@ -95,20 +103,57 @@ def load_global_settings() -> dict[str, str]:
         data = json.loads(_GLOBAL_CONFIG_FILE.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _write_global_file(data: dict[str, Any]) -> None:
+    """Write *data* to ``~/.cutfinder/config.json`` (creating the dir)."""
+    _GLOBAL_CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
+    _GLOBAL_CONFIG_FILE.write_text(
+        json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8"
+    )
+
+
+def load_global_settings() -> dict[str, str]:
+    """Read the machine-global env settings from ``~/.cutfinder/config.json``.
+
+    Returns only the recognised :data:`_GLOBAL_KEYS` with truthy values; a
+    missing or unreadable file yields an empty dict.
+    """
+    data = _read_global_file()
     return {k: str(data[k]) for k in _GLOBAL_KEYS if data.get(k)}
 
 
 def save_global_settings(updates: dict[str, str]) -> None:
     """Merge *updates* into ``~/.cutfinder/config.json`` (creating it if needed).
 
-    Only recognised :data:`_GLOBAL_KEYS` are persisted; other keys are ignored.
+    Only recognised :data:`_GLOBAL_KEYS` are persisted; other keys (including the
+    typed global pref keys) already in the file are preserved.
     """
-    current = load_global_settings()
-    current.update({k: v for k, v in updates.items() if k in _GLOBAL_KEYS})
-    _GLOBAL_CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
-    _GLOBAL_CONFIG_FILE.write_text(
-        json.dumps(current, indent=2, ensure_ascii=False), encoding="utf-8"
-    )
+    data = _read_global_file()
+    data.update({k: v for k, v in updates.items() if k in _GLOBAL_KEYS})
+    _write_global_file(data)
+
+
+def load_global_prefs() -> dict[str, Any]:
+    """Read the machine-global typed pref overrides (:data:`_GLOBAL_PREF_KEYS`).
+
+    Membership-based (not truthiness) so a stored ``false`` toggle is honoured;
+    a missing key just means "no global override, use the per-library value".
+    """
+    data = _read_global_file()
+    return {k: data[k] for k in _GLOBAL_PREF_KEYS if k in data}
+
+
+def save_global_prefs(updates: dict[str, Any]) -> None:
+    """Merge typed pref *updates* (:data:`_GLOBAL_PREF_KEYS`) into the global file.
+
+    Native JSON types are preserved (booleans stay booleans); other keys
+    already in the file (the env keys) are left untouched.
+    """
+    data = _read_global_file()
+    data.update({k: v for k, v in updates.items() if k in _GLOBAL_PREF_KEYS})
+    _write_global_file(data)
 
 
 def _read_dotenv() -> dict[str, str]:
@@ -260,6 +305,10 @@ def load_config(library_path: str | Path) -> AppConfig:
             "Missing required preference: 'library_path'. "
             "Please set it in your config or via the UI."
         )
+
+    # Overlay machine-global pref overrides (whisper model + toggles) so one
+    # value applies across all libraries; they win over the per-library file.
+    prefs_dict.update(load_global_prefs())
 
     prefs = Prefs(**prefs_dict)
 
