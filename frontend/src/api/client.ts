@@ -284,6 +284,11 @@ export const api = {
     return _fetch(`/api/jobs/${id}/retry`, { method: 'POST' })
   },
 
+  /** POST /api/jobs/{id}/resume — resume a restart-interrupted scan job. */
+  resumeJob(id: number): Promise<{ job_id: number }> {
+    return _fetch(`/api/jobs/${id}/resume`, { method: 'POST' })
+  },
+
   /** POST /api/jobs/pause — globally pause processing. */
   pauseJobs(): Promise<{ paused: boolean }> {
     return _fetch('/api/jobs/pause', { method: 'POST' })
