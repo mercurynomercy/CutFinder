@@ -42,11 +42,14 @@
 | `--primary-fg` | `#FFFFFF` | 主色按钮上的文字 |
 | `--primary-soft` | `#6366F1`@16% | 选中底色 / 高亮区 |
 
-### 内容类型（A/B-roll，务必配图标+文字）
+### 内容类型（A/B-roll / 照片，务必配图标+文字）
 | Token | 值 | 含义 | 图标 |
 |---|---|---|---|
 | `--roll-a` | `#F59E0B` 琥珀 | A-roll（有解说） | 麦克风 |
 | `--roll-b` | `#2DD4BF` 青 | B-roll（纯画面） | 胶片/视频 |
+| `--roll-photo` | `#F472B6` 玫红 | 照片 | 图片 |
+
+> 浅色主题下加深以保证对比：`--roll-photo` = `#BE185D`。每个 token 均配 `*-soft` 底色变量（如 `--roll-photo-soft`）。
 
 ### 语义状态
 | Token | 值 | 用途 |

@@ -164,8 +164,8 @@ const ThumbnailCard = React.forwardRef<HTMLDivElement, ThumbnailCardProps>(
             </div>
           )}
 
-          {/* Duration label (bottom-right) */}
-          {duration !== null && duration !== undefined ? (
+          {/* Duration label (bottom-right) — not for photos (no playback time) */}
+          {rollType !== 'photo' && duration !== null && duration !== undefined ? (
             <div className="absolute bottom-2 right-2 rounded bg-black/70 px-1.5 py-0.5 text-xs font-medium text-white tabular-numbers">
               {formatDuration(duration)}
             </div>
@@ -186,7 +186,7 @@ const ThumbnailCard = React.forwardRef<HTMLDivElement, ThumbnailCardProps>(
         <div className="flex flex-1 flex-col gap-1.5 px-3 py-2">
           <div className="flex items-center gap-1.5">
             {rollType && (
-              <Badge type={rollType === 'a' ? 'a' : 'b'} className="shrink-0 px-1.5">
+              <Badge type={rollType} className="shrink-0 px-1.5">
                 {rollType === 'photo' ? t('card.photo') : rollType === 'a' ? 'A-roll' : 'B-roll'}
               </Badge>
             )}

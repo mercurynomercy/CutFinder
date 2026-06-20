@@ -152,6 +152,54 @@ def _build_router(ctx: Any) -> Any:
             raise HTTPException(status_code=400, detail="No failed items to retry")
         return {"job_id": job_id}
 
+    @router.post("/jobs/{job_id}/resume")
+    async def resume_job(job_id: int) -> dict[str, Any]:
+        """Resume a paused (restart-interrupted) scan or keyframes job.
+
+        Re-derives the remaining work and re-enqueues under the same job id.
+        Both kinds are idempotent — a scan dedups by fingerprint, keyframes only
+        target clips that still lack suggestions — so resuming continues where
+        the interrupted run left off without redoing finished items.
+        """
+        if ctx.repository is None or ctx.worker_queue is None:
+            raise HTTPException(status_code=503, detail="Job queue not available")
+
+        job = ctx.repository.get_job(job_id)
+        if job is None:
+            raise HTTPException(status_code=404, detail="Job not found")
+        if job.status != "paused":
+            raise HTTPException(status_code=400, detail="Job is not paused")
+
+        kind = getattr(job, "kind", "scan")
+
+        if kind == "scan":
+            if not ctx.library_path:
+                raise HTTPException(status_code=404, detail="No library configured")
+
+            import asyncio as _asyncio  # noqa: E402
+            from cutfinder.config import load_config  # noqa: E402
+            from cutfinder.pipeline.scanner import Scanner  # noqa: E402
+
+            config = load_config(ctx.library_path)
+            source_folders = [Path(p).resolve() for p in (config.prefs.source_folders or [])]
+            ext_list = list(config.prefs.extensions or []) + list(config.prefs.photo_extensions or [])
+            extensions = set(ext_list) if ext_list else None
+
+            scanner = Scanner(repository=ctx.repository)
+            candidates_obj = await _asyncio.to_thread(scanner.scan, source_folders, extensions)
+            ctx.repository.update_job(job_id, status="queued", total=len(candidates_obj), done=0, failed=0)
+            await ctx.worker_queue.enqueue_scan(candidates_obj, job_id=job_id)
+            logger.info("Resumed scan job %d with %d remaining candidate(s)", job_id, len(candidates_obj))
+        elif kind == "keyframes":
+            clip_ids = ctx.repository.clip_ids_without_keyframes()
+            ctx.repository.update_job(job_id, status="queued", total=len(clip_ids), done=0, failed=0)
+            await ctx.worker_queue.enqueue_keyframes(clip_ids, job_id=job_id)
+            logger.info("Resumed keyframes job %d with %d remaining clip(s)", job_id, len(clip_ids))
+        else:
+            raise HTTPException(status_code=400, detail=f"Cannot resume a {kind} job")
+
+        return {"job_id": job_id}
+
     @router.post("/jobs/pause")
     async def pause_jobs() -> dict[str, Any]:
         """Globally pause the worker (in-flight item finishes first)."""

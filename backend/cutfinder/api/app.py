@@ -144,6 +144,13 @@ def _build_into(ctx: LibraryContext, library_path: Union[str, Path]) -> None:
     conn = sqlite3.connect(str(db_path), check_same_thread=False)
     repository = SqliteRepository(conn)
 
+    # The worker queue is in-memory: any job left running/queued when the app
+    # last stopped can't resume on its own. Mark them 'paused' so the UI shows
+    # a real state (resumable) instead of a phantom "scanning…" that never ends.
+    n_paused = repository.reset_interrupted_jobs()
+    if n_paused:
+        logger.info("Marked %d interrupted job(s) as paused at bind", n_paused)
+
     # The model is downloaded into <repo>/models/whisper/ on first use and
     # loaded offline thereafter (see MlxWhisperTranscriber._resolve_model_path).
     whisper_model = prefs.whisper_model

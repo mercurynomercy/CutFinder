@@ -11,22 +11,27 @@ import { cn } from '@/lib/cn'
 // ── Badge (A/B roll type) ────────────────────────────────────────
 
 export interface BadgeProps extends React.HTMLAttributes<HTMLSpanElement> {
-  /** `'a'` or `'b'` — determines color */
-  type: 'a' | 'b'
+  /** `'a'`, `'b'`, or `'photo'` — determines color */
+  type: 'a' | 'b' | 'photo'
 }
 
 export function Badge({ className, type, children, ...props }: BadgeProps) {
-  const isA = type === 'a'
+  const color =
+    type === 'a'
+      ? 'bg-[--roll-a-soft] text-[--roll-a]'
+      : type === 'b'
+        ? 'bg-[--roll-b-soft] text-[--roll-b]'
+        : 'bg-[--roll-photo-soft] text-[--roll-photo]'
   return (
     <span
       className={cn(
         'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium',
-        isA ? 'bg-[--roll-a-soft] text-[--roll-a]' : 'bg-[--roll-b-soft] text-[--roll-b]',
+        color,
         className,
       )}
       {...props}
     >
-      {children ?? (isA ? 'A' : 'B')}
+      {children ?? (type === 'a' ? 'A' : type === 'b' ? 'B' : '照片')}
     </span>
   )
 }
