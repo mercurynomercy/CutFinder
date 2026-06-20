@@ -168,7 +168,7 @@ class PrefsOut(BaseModel):
     broll_frame_count: int = 5
     vad_threshold: float = 0.4
     keyframe_count: int = 3
-    keyframe_auto: bool = True
+    keyframe_auto: bool = False
     vocal_separation: bool = False
 
 

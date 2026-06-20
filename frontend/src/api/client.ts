@@ -33,7 +33,7 @@ export interface JobStatus {
   failed: number
   started_at: string | null
   finished_at?: string | null
-  kind?: 'scan' | 'reanalyze' | 'keyframes'
+  kind?: 'scan' | 'reanalyze' | 'keyframes' | 'subtitle'
 }
 
 export interface JobsQueueResponse {
@@ -44,7 +44,7 @@ export interface JobsQueueResponse {
 export interface ClipSummary {
   id: number
   source_path: string
-  roll_type: 'a' | 'b' // or string if not yet classified
+  roll_type: 'a' | 'b' | 'photo' // or string if not yet classified
   duration_s: number | null
   thumbnail_path: string | null
   // Optional: always sent by the list endpoint, but omitted in some views/fixtures.
@@ -105,6 +105,7 @@ export interface SettingsPrefs {
   vision_model: string
   whisper_model: string
   extensions: string[]
+  photo_extensions: string[]
   broll_frame_count: number
   vad_threshold: number
   vocal_separation: boolean
@@ -142,6 +143,7 @@ export interface UpdateSettingsBody {
   vision_model?: string
   whisper_model?: string
   extensions?: string[]
+  photo_extensions?: string[]
   broll_frame_count?: number
   vad_threshold?: number
   vocal_separation?: boolean
@@ -310,6 +312,19 @@ export const api = {
   /** POST /api/library — bind a library path at runtime. */
   setLibrary(path: string): Promise<{ status: string; library_path: string }> {
     return _fetch('/api/library', { method: 'POST', body: JSON.stringify({ path }) })
+  },
+
+  /** GET /api/library/orphans — catalog entries whose library copy was deleted. */
+  listOrphans(): Promise<{
+    library_reachable: boolean
+    orphans: Array<{ id: number; source_path: string; library_path: string | null; roll_type: string }>
+  }> {
+    return _fetch('/api/library/orphans')
+  },
+
+  /** POST /api/library/orphans/delete — delete the given clip ids + derived files. */
+  deleteOrphans(clipIds: number[]): Promise<{ deleted: number }> {
+    return _fetch('/api/library/orphans/delete', { method: 'POST', body: JSON.stringify({ clip_ids: clipIds }) })
   },
 
   /** POST /api/pick-folder — open a native macOS folder chooser; path is null if cancelled. */

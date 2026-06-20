@@ -4,6 +4,12 @@
   <img src="branding/full-logo.png" alt="CutFinder logo" width="200"/>
 </p>
 
+## Example
+
+<p align="center">
+  <img src="doc/images/example.png" alt="CutFinder UI — thumbnail wall with date grouping, filters and detail panel"/>
+</p>
+
 > A local, offline tool that automatically classifies, tags, summarizes, and organizes your Vlog footage. Inspired by [Argus](https://github.com/discoposse/argus).
 
 **中文文档 → [README-zh.md](./README-zh.md)**
@@ -42,7 +48,7 @@ Drag `dist/CutFinder.app` to `/Applications` and double-click:
 
 1. **Configure OMLX** — **Settings → OMLX connection** → fill in Base URL / API key → Save. Stored in `~/.cutfinder/config.json` (machine-wide; the Whisper model and the vocal-separation / auto-keyframe toggles are stored there too).
 2. **Bind a library** — **Settings → Set up your library** → pick an absolute path with the native picker. This is where the organized copies, thumbnails, and the SQLite catalog live (all under `<library>/.cutfinder/`). Takes effect with no restart.
-3. **Add source folders & scan** — point CutFinder at your footage folder(s) and run a scan. Each new clip is classified A-roll/B-roll, transcribed/tagged, thumbnailed, and copied into `<library>/YYYY-MM-DD/A-roll(or B-roll)/`. Re-scans only process new files (dedup by fingerprint) — originals are never touched.
+3. **Add source folders & scan** — point CutFinder at your footage folder(s) and run a scan. Each new clip is classified A-roll/B-roll, transcribed/tagged, thumbnailed, and copied into `<library>/YYYY-MM-DD/A-roll(or B-roll)/`. **Photos (`.jpg/.jpeg/.png/.heic`) are cataloged too** — as a separate **Photo** type, copied into `<library>/YYYY-MM-DD/photos/`. Re-scans only process new files (dedup by fingerprint) — originals are never touched.
 4. **Browse, search, correct** — the thumbnail wall groups clips by capture date; search/filter by filename, summary, tags, date, or type. Fix any wrong A/B verdict or tag — corrections are remembered.
 5. **Export subtitles** — pick a finished cut → re-transcribe (BGM stripped first) → export Final Cut Pro-native **iTT + SRT** into a folder you choose.
 
@@ -55,24 +61,23 @@ Drag `dist/CutFinder.app` to `/Applications` and double-click:
 - **Automatic A-roll / B-roll classification** — detects the presence of spoken narration (Silero VAD). The verdict is correctable by hand, and corrections are remembered.
 - **A-roll summary + tags** — `mlx-whisper` transcribes the Chinese narration → a Qwen text model summarizes it. The full transcript is stored and searchable.
 - **B-roll visual tags + description** — extracted frames are sent to a vision model that describes what's on screen.
+- **Photo cataloging** — still photos (`.jpg/.jpeg/.png/.heic`; HEIC decoded via `pillow-heif`) are scanned alongside video and cataloged as a separate **Photo** type: a JPEG preview is sent to the vision model for a description + tags, EXIF capture time dates them (falling back to file time), and the original is copied to `<library>/YYYY-MM-DD/photos/photo-0001.ext`. Photos have no transcript, keyframes, or re-analysis. The supported photo extensions are editable in Settings.
 - **Switchable interface language (EN / ZH)** — the entire UI can be flipped between **English and Chinese** in Settings (defaults to English, remembered per device), fully independent of the AI output language below.
 - **Switchable AI output language** — summaries / visual descriptions can be generated in **Chinese or English** (defaults to Chinese), chosen in Settings.
-- **Auto-organize and rename by capture date + type** — copies land in `<library>/YYYY-MM-DD/A-roll(or B-roll)/` and are renamed in order as `A-0001.ext` / `B-0001.ext` (counted per date/type folder). Even when AI analysis fails, the original is still filed by date + type (status flagged `partial`); the AI summary/tags are best-effort. The detail panel shows the new copy path (File destination); the original source path is collapsed under Source file.
+- **Auto-organize and rename by capture date + type** — copies land in `<library>/YYYY-MM-DD/A-roll(or B-roll)/` (photos in `.../photos/`) and are renamed in order as `A-0001.ext` / `B-0001.ext` / `photo-0001.ext` (counted per date/type folder). Even when AI analysis fails, the original is still filed by date + type (status flagged `partial`); the AI summary/tags are best-effort. The detail panel shows the new copy path (File destination); the original source path is collapsed under Source file.
 - **Thumbnail wall + multi-dimensional search** — clips are **grouped by capture date** (one block per date with a sticky date header). A search box in the left sidebar filters live by filename / summary / description / tags, plus filters by date / type / tag (collapsible filter panel) and newest/oldest sort. The tag filter is sorted by frequency, searchable, and collapses when there are many tags. Clips with incomplete analysis (`partial`) carry a "partial" badge on the thumbnail.
 - **One-click Open / Reveal in Finder** — thumbnails and the detail panel open the video in the default player; date-group headers open that date's folder in Finder (macOS `open`).
 - **Re-analyze a single clip** — re-run the AI with one click (when changing models or unhappy with the result), preserving your manual corrections and tags. If the A/B verdict was wrong, toggle the type in the detail panel — the copy is **moved** to the correct A-roll/B-roll folder and renamed, and `library_path` is updated.
-- **Keyframe suggestions (cut points + highlight frames)** — for each clip, up to N ranked editing suggestions (default 3, configurable): **A-roll uses the text model over the transcript**, **B-roll uses Qwen3-VL over sampled frames**. Each suggestion carries in/out timecodes, a representative frame, and a one-line rationale. Suggestions can auto-queue after a scan (a Settings toggle) or be generated on demand in the detail panel; gallery cards show a "has suggestions" badge.
+- **Keyframe suggestions (cut points + highlight frames)** — for each clip, up to N ranked editing suggestions (default 3, configurable): **A-roll uses the text model over the transcript**, **B-roll uses Qwen3-VL over sampled frames**. Each suggestion carries in/out timecodes, a representative frame, and a one-line rationale. Suggestions can auto-queue after a scan (a Settings toggle, **off by default** since it's the most expensive step) or be generated on demand in the detail panel; gallery cards show a "has suggestions" badge.
 - **Subtitle export for finished cuts** — pick any edited video → re-transcribe with `mlx-whisper` (vocals isolated first to strip BGM) → export Final Cut Pro-native **iTT + SRT** into a folder you choose (source video stays read-only, subtitle language follows the AI output language, transcribe-only — no translation). The export shows a **live progress bar synced to the real backend progress**, advancing through two phases: vocal separation, then transcription.
 - **Capture-date display** — both thumbnail cards and the detail panel show each clip's capture time (embedded capture time preferred, falling back to file creation time).
 - **Task queue management** — a dedicated Task Queue page lists every scan / re-analyze job, with delete, retry-failed, and global pause/resume; scanning prompts you when the queue is paused.
+- **Progress bars survive a refresh** — the scan/keyframe progress bar and the subtitle-export progress bar re-attach to jobs still running in the backend after a page reload (the work never stopped, only the UI lost track), so you don't have to re-trigger anything.
+- **Library cleanup** — if you delete copies straight from the library folder, the header **⋮ menu → "Clean up deleted files"** removes their orphaned catalog entries (plus thumbnails/keyframes) after a confirmation; if the library is unreachable (e.g. an external drive is unmounted) it's skipped so the catalog is never wiped. Original source files are never touched.
 - **Native folder picker** — choosing the footage folder / library in Settings opens the macOS native picker and returns a real absolute path (browser pickers can't).
 - **Bind your library in Settings** — pick or type one absolute path on first use; it takes effect **at runtime with no restart** (a `CUTFINDER_LIBRARY` env var also works).
 - **Auto-refresh after scan** — when a scan finishes, the app polls job status and refreshes the thumbnail wall automatically.
 - **Dark professional UI** — near-black panels make thumbnails pop; A-roll/B-roll are distinguished by color + icon, close to FCP's feel (see [`doc/ui-design.md`](./doc/ui-design.md)).
-
-<p align="center">
-  <img src="doc/images/example.png" alt="CutFinder UI — thumbnail wall with date grouping, filters and detail panel"/>
-</p>
 
 ### Never touch the originals (core constraints)
 
@@ -92,7 +97,7 @@ API layer (FastAPI, thin)                          :5081
    │  create_app() wires real adapters into a mutable LibraryContext (library bound at runtime)
 Orchestration (Pipeline Orchestrator + background queue/SSE progress)
    │  depends only on interfaces (Protocols)
-Adapters ── ffmpeg/ffprobe · Silero VAD · mlx-whisper · OMLX (text + vision) · SQLite
+Adapters ── ffmpeg/ffprobe · Silero VAD · mlx-whisper · OMLX (text + vision) · Pillow (photos) · SQLite
 ```
 
 Every external dependency hides behind an interface; business logic depends only on those interfaces, so modules are independently swappable and testable. See [`doc/detailed-design.md`](./doc/detailed-design.md).
@@ -103,6 +108,7 @@ Every external dependency hides behind an interface; business logic depends only
 |---|---|---|
 | A-roll summary/tags (text) | `Qwen3.6-35B-A3B` | OMLX (OpenAI-compatible API) |
 | B-roll visual recognition (vision) | `Qwen3-VL-8B` | OMLX (same API, frames sent as base64) |
+| Photo description + tags (vision) | `Qwen3-VL-8B` | OMLX (a JPEG preview of the photo sent as base64) |
 | A-roll speech transcription | `mlx-whisper` (default `mlx-community/whisper-large-v3-mlx`) | Separate process (OMLX does not serve audio) |
 | A/B speech detection | Silero VAD | Local |
 | Vocal separation (strip BGM before transcribing) | Demucs (`htdemucs`, ~80 MB) | Local (torch/MPS); isolates vocals, then transcribes |
@@ -230,7 +236,7 @@ You don't have to run this — both models are **downloaded automatically on fir
 ```bash
 cd backend
 
-uv run pytest tests/unit             # unit tests only (367, no external services, seconds)
+uv run pytest tests/unit             # unit tests only (438, no external services, seconds)
 uv run pytest -m integration         # integration tests (need a real OMLX / ffmpeg / sample clips)
 uv run mypy cutfinder/               # type check (strict, clean)
 uv run ruff check cutfinder/         # linting (clean)

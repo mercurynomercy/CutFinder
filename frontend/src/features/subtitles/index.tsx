@@ -69,6 +69,32 @@ export function SubtitlesPage({ onClose }: SubtitlesPageProps) {
   const [elapsed, setElapsed] = useState(0)
   const [progress, setProgress] = useState(0)
 
+  // Re-attach to a subtitle job still running in the backend after a page
+  // refresh: the worker keeps transcribing even though the UI lost its job id,
+  // so resume the progress bar instead of showing an idle form.
+  useEffect(() => {
+    let cancelled = false
+    api.listJobs()
+      .then(async ({ jobs }) => {
+        const active = jobs.find(
+          (j) => j.kind === 'subtitle' && ['queued', 'running'].includes(j.status),
+        )
+        if (!active || cancelled) return
+        setJobId(active.id)
+        setPhase('running')
+        const status = await waitForJob(active.id, setProgress)
+        if (cancelled) return
+        if (status !== 'done') { setPhase('error'); return }
+        const result = await api.getSubtitleResult(active.id)
+        if (cancelled) return
+        setFiles(result.files)
+        setPhase('done')
+      })
+      .catch(() => {}) // backend unreachable / no jobs — nothing to restore
+    return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   // Tick an elapsed timer while a job is running so the user sees it's working
   // (Whisper transcription of a long video can take minutes with no sub-step).
   useEffect(() => {

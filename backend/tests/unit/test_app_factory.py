@@ -76,6 +76,7 @@ def test_create_app_with_library_serves_settings(
         "vision_model",
         "whisper_model",
         "extensions",
+        "photo_extensions",
         "broll_frame_count",
         "vad_threshold",
         "output_language",
@@ -157,3 +158,42 @@ def test_set_library_binds_at_runtime(
 
         # Missing path → 422.
         assert client.post("/api/library", json={}).status_code == 422
+
+
+def test_library_orphans_reconcile_flow(tmp_path: Path, omlx_env: None) -> None:
+    """GET /library/orphans flags clips whose copy vanished; POST deletes them."""
+    import datetime as _dt
+
+    from cutfinder.domain.models import Clip
+
+    app = create_app(tmp_path)
+    ctx = app.state.library_context
+    with TestClient(app) as client:
+        # No clips yet → reachable library, nothing orphaned.
+        resp = client.get("/api/library/orphans")
+        assert resp.status_code == 200
+        assert resp.json() == {"library_reachable": True, "orphans": []}
+
+        # Two clips: one whose copy exists, one whose copy is gone.
+        present = tmp_path / "present.mp4"
+        present.write_bytes(b"x")
+        ctx.repository.upsert_clip(Clip(
+            fingerprint="keep", source_path="/src/keep.mp4", roll_type="a",
+            status="done", created_at=_dt.datetime.now(_dt.timezone.utc),
+            library_path=str(present),
+        ))
+        gone_id = ctx.repository.upsert_clip(Clip(
+            fingerprint="gone", source_path="/src/gone.mp4", roll_type="b",
+            status="done", created_at=_dt.datetime.now(_dt.timezone.utc),
+            library_path=str(tmp_path / "deleted.mp4"),
+        ))
+
+        orphans = client.get("/api/library/orphans").json()
+        assert orphans["library_reachable"] is True
+        assert [o["id"] for o in orphans["orphans"]] == [gone_id]
+
+        # Bad payload → 422; valid delete removes the row.
+        assert client.post("/api/library/orphans/delete", json={"clip_ids": "nope"}).status_code == 422
+        deleted = client.post("/api/library/orphans/delete", json={"clip_ids": [gone_id]}).json()
+        assert deleted == {"deleted": 1}
+        assert client.get("/api/library/orphans").json()["orphans"] == []

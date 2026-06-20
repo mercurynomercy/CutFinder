@@ -97,4 +97,25 @@ describe('SettingsPage', () => {
     await waitFor(() => expect(saved).not.toBeNull())
     expect(saved!.vocal_separation).toBe(true)
   })
+
+  it('lets the user add and remove photo extensions', async () => {
+    let saved: Record<string, unknown> | null = null
+    server.use(
+      http.put(`${API}/settings`, async ({ request }) => {
+        saved = (await request.json()) as Record<string, unknown>
+        return HttpResponse.json({ status: 'ok' })
+      }),
+    )
+
+    render(<SettingsPage />)
+    // Default photo extensions render as removable tags.
+    expect(await screen.findByText('.heic')).toBeInTheDocument()
+
+    const input = screen.getByPlaceholderText('.webp')
+    await userEvent.type(input, 'webp{enter}')
+    await userEvent.click(screen.getByRole('button', { name: /save settings/i }))
+
+    await waitFor(() => expect(saved).not.toBeNull())
+    expect(saved!.photo_extensions).toEqual(['.jpg', '.jpeg', '.png', '.heic', '.webp'])
+  })
 })

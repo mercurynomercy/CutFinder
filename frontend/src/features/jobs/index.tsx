@@ -147,6 +147,17 @@ export function JobsPanel({ activeJobId }: JobsPanelProps) {
   const { toasts, addToast } = useToast()
   const { events } = useJobEvents(activeJobId)
 
+  // Allow other parts of the app to raise an ambient toast (e.g. library
+  // cleanup) via a window event, reusing this panel's toast UI.
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const d = (e as CustomEvent).detail as { type?: ToastItem['type']; message?: string } | undefined
+      if (d?.message) addToast(d.type ?? 'info', d.message)
+    }
+    window.addEventListener('cutfinder:toast', handler)
+    return () => window.removeEventListener('cutfinder:toast', handler)
+  }, [addToast])
+
   // Toast on notable events.
   useEffect(() => {
     if (events.length === 0) return

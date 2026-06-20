@@ -83,6 +83,7 @@ const en = {
 
   // Thumbnail card
   'card.reanalyze': 'Re-analyze',
+  'card.photo': 'Photo',
   'card.reanalyzing': 'Re-analyzing…',
   'card.openVideo': 'Open video',
   'card.partial': 'Partial',
@@ -94,6 +95,7 @@ const en = {
   'filters.collapse': 'Collapse filters',
   'filters.type': 'Type',
   'filters.all': 'All',
+  'filters.photo': 'Photo',
   'filters.date': 'Date',
   'filters.allDates': 'All dates',
   'filters.tags': 'Tags',
@@ -110,6 +112,8 @@ const en = {
   'detail.captureDateFromFile': 'Capture date (from file time)',
   'detail.summaryARoll': 'Summary (A-roll)',
   'detail.descriptionBRoll': 'Description (B-roll)',
+  'detail.photo': 'Photo',
+  'detail.photoDescription': 'Description',
   'detail.transcript': 'Transcript',
   'detail.sourceFile': 'Source file',
   'detail.metadata': 'Metadata',
@@ -224,6 +228,8 @@ const en = {
   'settings.processingOptions': 'Processing options',
   'settings.supportedExtensions': 'Supported extensions',
   'settings.supportedExtensionsDesc': 'Only files with these extensions are processed during scans',
+  'settings.photoExtensions': 'Photo extensions',
+  'settings.photoExtensionsDesc': 'Files with these extensions are cataloged as photos',
   'settings.brollFrameCount': 'B-roll frame count',
   'settings.brollFrameCountDesc':
     'Number of frames extracted for B-roll visual analysis — more is more accurate but slower',
@@ -250,6 +256,11 @@ const en = {
   'settings.validationNum': 'Must be a number between 0 and 1',
   'settings.switchLibraryConfirm':
     'Switch library to:\n{path}\n\nThe app will use that folder\'s catalog database, thumbnails, and settings (each library is independent). The current library is not modified. Continue?',
+  'settings.cleanupDeleted': 'Clean up deleted files',
+  'settings.cleanupNone': 'Nothing to clean up — every catalog entry still has its file.',
+  'settings.cleanupUnreachable': 'The library folder is unreachable (e.g. an external drive is unmounted). Skipped to avoid wiping the catalog.',
+  'settings.cleanupConfirm': '{n} catalog entr(ies) point to files that no longer exist. Delete these entries (and their thumbnails/keyframes)? Source files are not affected.',
+  'settings.cleanupDone': 'Removed {n} entr(ies).',
   'confirm.confirm': 'OK',
   'confirm.cancel': 'Cancel',
 } as const
@@ -311,6 +322,7 @@ const zh: Record<Key, string> = {
   'gallery.openFolder': '在 Finder 中打开',
 
   'card.reanalyze': '重新分析',
+  'card.photo': '照片',
   'card.reanalyzing': '重新分析中…',
   'card.openVideo': '打开视频',
   'card.partial': '部分',
@@ -321,6 +333,7 @@ const zh: Record<Key, string> = {
   'filters.collapse': '收起筛选',
   'filters.type': '类型',
   'filters.all': '全部',
+  'filters.photo': '照片',
   'filters.date': '日期',
   'filters.allDates': '全部日期',
   'filters.tags': '标签',
@@ -336,6 +349,8 @@ const zh: Record<Key, string> = {
   'detail.captureDateFromFile': '拍摄日期（来自文件时间）',
   'detail.summaryARoll': '摘要（A-roll）',
   'detail.descriptionBRoll': '描述（B-roll）',
+  'detail.photo': '照片',
+  'detail.photoDescription': '描述',
   'detail.transcript': '转写文本',
   'detail.sourceFile': '源文件',
   'detail.metadata': '元数据',
@@ -444,6 +459,8 @@ const zh: Record<Key, string> = {
   'settings.processingOptions': '处理选项',
   'settings.supportedExtensions': '支持的扩展名',
   'settings.supportedExtensionsDesc': '扫描时只处理这些后缀的视频文件',
+  'settings.photoExtensions': '照片扩展名',
+  'settings.photoExtensionsDesc': '这些后缀的文件会作为照片入库',
   'settings.brollFrameCount': 'B-roll 帧数',
   'settings.brollFrameCountDesc': 'B-roll 视觉分析时提取的视频帧数，越多越准确但处理更慢',
   'settings.vadThreshold': 'VAD 阈值 (0–1)',
@@ -467,6 +484,11 @@ const zh: Record<Key, string> = {
   'settings.validationNum': '必须是 0 到 1 之间的数字',
   'settings.switchLibraryConfirm':
     '切换素材库到:\n{path}\n\n应用将改用这个目录的目录数据库、缩略图和设置（每个库各自独立）。当前库不会被修改。是否继续？',
+  'settings.cleanupDeleted': '清理已删除的文件',
+  'settings.cleanupNone': '无需清理 — 每条目录记录的文件都还在。',
+  'settings.cleanupUnreachable': '素材库目录不可达（例如外接盘未挂载）。已跳过，以免误删整个目录。',
+  'settings.cleanupConfirm': '有 {n} 条目录记录指向的文件已不存在。删除这些记录（及其缩略图/关键帧）？原始文件不受影响。',
+  'settings.cleanupDone': '已清理 {n} 条记录。',
   'confirm.confirm': '确定',
   'confirm.cancel': '取消',
 }

@@ -127,6 +127,7 @@ def _build_into(ctx: LibraryContext, library_path: Union[str, Path]) -> None:
         FfmpegFrameExtractor,
         FfmpegThumbnailMaker,
     )
+    from cutfinder.adapters.pillow_image import PillowImageProbe, PillowThumbnailMaker
     from cutfinder.adapters.demucs_separator import DemucsSeparator
     from cutfinder.adapters.ffmpeg_probe import FfmpegProbe
     from cutfinder.adapters.fs_library import FsLibraryWriter
@@ -169,6 +170,9 @@ def _build_into(ctx: LibraryContext, library_path: Union[str, Path]) -> None:
         thumbnail_dir=cutfinder_dir / "thumbnails",
         keyframe_dir=cutfinder_dir / "keyframes",
         keyframe_count=prefs.keyframe_count,
+        image_probe=PillowImageProbe(),
+        image_thumbnail_maker=PillowThumbnailMaker(),
+        photo_extensions={e.lower() for e in prefs.photo_extensions},
     )
 
     # Surface each per-clip pipeline step (probe/thumbnail/vad/analysis/copy)

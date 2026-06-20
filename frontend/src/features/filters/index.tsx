@@ -25,7 +25,7 @@ function clipDate(c: { capture_time?: string | null; created_at?: string }): str
 
 export interface FiltersState {
   date: string | null
-  roll_type: 'a' | 'b' | null
+  roll_type: 'a' | 'b' | 'photo' | null
   tag: string | null
 }
 
@@ -149,12 +149,12 @@ export function Filters({ onFilterChange, onSearch }: FiltersProps) {
           {t('filters.type')}
         </label>
         <div className="flex gap-1.5">
-          {([['all', t('filters.all')], ['a', 'A-roll'], ['b', 'B-roll']] as const).map(([value, label]) => {
+          {([['all', t('filters.all')], ['a', 'A-roll'], ['b', 'B-roll'], ['photo', t('filters.photo')]] as const).map(([value, label]) => {
             const isActive = value === 'all' ? filters.roll_type === null : filters.roll_type === value
             return (
               <button
                 key={value}
-                onClick={() => updateFilter('roll_type', value === 'all' ? null : (value as 'a' | 'b'))}
+                onClick={() => updateFilter('roll_type', value === 'all' ? null : (value as 'a' | 'b' | 'photo'))}
                 className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
                   isActive
                     ? 'bg-[--primary] text-white'

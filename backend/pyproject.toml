@@ -19,6 +19,9 @@ dependencies = [
     "onnxruntime",
     # Vocal separation — Demucs (strip BGM before transcription, see adapters/demucs_separator.py)
     "demucs",
+    # Still-photo probe + JPEG preview (EXIF capture time; HEIC via pillow-heif).
+    "pillow",
+    "pillow-heif",
     # HTTP client for SSE streaming (uvicorn handles server-side; httpx used in tests)
     "httpx",
 ]

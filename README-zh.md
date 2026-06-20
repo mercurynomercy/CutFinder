@@ -4,6 +4,11 @@
   <img src="branding/full-logo.png" alt="CutFinder logo" width="200"/>
 </p>
 
+## 截图
+
+<p align="center">
+  <img src="doc/images/example.png" alt="CutFinder UI — 按日期分组的缩略图墙、筛选面板与详情面板"/>
+</p>
 
 > 本地运行的 Vlog 视频素材（footage）智能分类与检索工具。灵感来自 [Argus](https://github.com/discoposse/argus)。
 
@@ -43,7 +48,7 @@ make app          # → dist/CutFinder.app（以及 dist/CutFinder.dmg）
 
 1. **配置 OMLX** —— **设置 → OMLX 连接** → 填入 Base URL / API key → 保存。存到 `~/.cutfinder/config.json`（**全机共享**；Whisper 模型、人声分离 / 自动关键帧开关也存在这里）。
 2. **绑定素材库** —— **设置 → 设置素材库** → 用原生选择器选一个绝对路径。整理后的副本、缩略图和 SQLite 目录都放在这里（全在 `<library>/.cutfinder/` 下）。**改了无需重启**即时生效。
-3. **添加源文件夹并扫描** —— 把 CutFinder 指向你的素材文件夹，运行扫描。每个新片段会被判定 A-roll/B-roll、转写/打标、生成缩略图，并复制到 `<library>/YYYY-MM-DD/A-roll(或 B-roll)/`。重新扫描只处理新文件（按指纹去重）—— 原始文件永不改动。
+3. **添加源文件夹并扫描** —— 把 CutFinder 指向你的素材文件夹，运行扫描。每个新片段会被判定 A-roll/B-roll、转写/打标、生成缩略图，并复制到 `<library>/YYYY-MM-DD/A-roll(或 B-roll)/`。**照片（`.jpg/.jpeg/.png/.heic`）也会一并入库** —— 作为独立的 **照片** 类型，复制到 `<library>/YYYY-MM-DD/photos/`。重新扫描只处理新文件（按指纹去重）—— 原始文件永不改动。
 4. **浏览、检索、纠正** —— 缩略图墙按拍摄日期分组；可按文件名、简介、标签、日期、类型检索/筛选。判错的 A/B 或标签可手动改 —— 改动会被记住。
 5. **导出字幕** —— 选一个剪好的成片 → 重新转写（先去掉 BGM）→ 导出 Final Cut Pro 原生的 **iTT + SRT** 到你选的文件夹。
 
@@ -56,23 +61,22 @@ make app          # → dist/CutFinder.app（以及 dist/CutFinder.dmg）
 - **自动区分 A-roll / B-roll**：检测有无人声解说（Silero VAD），可手动纠正且会被记住。
 - **A-roll 简介 + 标签**：`mlx-whisper` 转写中文解说 → Qwen 文本模型总结，转写全文一并保存可搜索。
 - **B-roll 画面标签 + 描述**：抽帧交给视觉模型识别画面内容。
+- **照片入库**：静态照片（`.jpg/.jpeg/.png/.heic`；HEIC 经 `pillow-heif` 解码）与视频一起扫描，作为独立的 **照片** 类型入库：把一张 JPEG 预览交给视觉模型出描述 + 标签，按 EXIF 拍摄时间归档（缺失则回退文件时间），原图复制到 `<library>/YYYY-MM-DD/photos/photo-0001.ext`。照片没有转写、关键帧、重分析。支持的照片后缀可在「设置」里编辑。
 - **界面语言可选（中 / 英）**：整套 UI 文案可在「设置」页切换**英文 / 中文**（默认英文，按设备记忆），与下面的 **AI 输出语言**相互独立、互不影响。
 - **AI 输出语言可选**：简介/画面描述可在「设置」页切换**中文 / 英文**（默认中文）。
-- **按拍摄日期 + 类型自动归档并重命名**：复制到 `库/YYYY-MM-DD/A-roll(或 B-roll)/`，并按类型顺序重命名为 `A-0001.ext` / `B-0001.ext`（每个日期/类型目录各自计数）。即使 AI 分析失败，原文件仍按日期+类型归档（状态标为 `partial`），AI 简介/标签为尽力而为。详情面板显示新副本路径（File destination），原始源路径折叠在 Source file 里。
+- **按拍摄日期 + 类型自动归档并重命名**：复制到 `库/YYYY-MM-DD/A-roll(或 B-roll)/`（照片在 `.../photos/`），并按类型顺序重命名为 `A-0001.ext` / `B-0001.ext` / `photo-0001.ext`（每个日期/类型目录各自计数）。即使 AI 分析失败，原文件仍按日期+类型归档（状态标为 `partial`），AI 简介/标签为尽力而为。详情面板显示新副本路径（File destination），原始源路径折叠在 Source file 里。
 - **缩略图墙 + 多维检索**：按拍摄日期**分组展示**（每个日期一个区块，带粘性日期标题），左侧侧栏内置搜索框（按文件名 / 简介 / 描述 / 标签即时过滤），并支持按日期 / 类型 / 标签筛选（可折叠过滤面板）与按拍摄日期的新/旧排序；标签过滤按使用频率排序、可搜索、超量折叠。分析未完成的片段（`partial`）在缩略图上有「部分」标记，一眼可辨。
 - **一键打开 / 在 Finder 中查看**：缩略图与详情面板可一键用默认播放器打开视频；日期分组标题可一键在 Finder 中打开该日期文件夹（macOS `open`）。
 - **重新分析单个片段**：换模型或结果不佳时一键重跑 AI，保留你的手动纠正与标签。分类判错时，可在详情面板切换 A/B 类型——副本会自动**移动**到正确的 A-roll/B-roll 目录并重命名，`library_path` 同步更新。
-- **关键帧推荐（剪辑切点 + 精选帧）**：为每段素材给出最多 N 条（默认 3，可配置）排序的剪辑建议——**A-roll 由文本模型基于转写选段**、**B-roll 由 Qwen3-VL 基于采样帧挑选**，每条含 in/out 时码、代表帧与一句理由。扫描完成后可自动排队（设置开关），也可在详情面板按需生成；画廊卡片有「已有建议」角标。
+- **关键帧推荐（剪辑切点 + 精选帧）**：为每段素材给出最多 N 条（默认 3，可配置）排序的剪辑建议——**A-roll 由文本模型基于转写选段**、**B-roll 由 Qwen3-VL 基于采样帧挑选**，每条含 in/out 时码、代表帧与一句理由。扫描完成后可自动排队（设置开关，**默认关**，因其最贵），也可在详情面板按需生成；画廊卡片有「已有建议」角标。
 - **片段拍摄日期显示**：缩略图卡片和详情面板均展示片段的拍摄时间（优先使用嵌入 capture time，回退到文件创建时间）。
 - **任务队列管理**：单独的「任务队列」页可查看所有扫描/重分析任务，支持删除、重试失败项、全局暂停/恢复；队列暂停时扫描会自动提示并可选恢复。
+- **进度条刷新后不丢**：刷新页面后，扫描/关键帧进度条与字幕导出进度条会自动重新挂接到后台仍在跑的任务（活儿没停，只是 UI 一度丢了引用），不必重新触发。
+- **素材库清理**：如果你直接在素材库目录里删了副本，顶部 **⋮ 菜单 →「清理已删除的文件」** 会在二次确认后清掉它们残留的目录记录（及缩略图/关键帧）；若素材库不可达（如外接盘未挂载）则跳过，绝不误删整个目录。原始源文件永不被动。
 - **原生文件夹选择**：设置页选「素材文件夹 / 素材库」时弹出 macOS 原生选择框，返回真实绝对路径（浏览器选择器拿不到绝对路径）。
 - **设置页绑定素材库**：首次使用选/填一个绝对路径即可绑定库，**运行时热生效、无需重启**（也支持 `CUTFINDER_LIBRARY` 环境变量）。设置页每项选项均有中文说明文字。
 - **扫描后自动刷新**：Scan 完成后自动轮询任务状态并刷新缩略图墙，无需手动操作。
 - **深色专业界面**：近黑面板让缩略图突出，A-roll/B-roll 以颜色+图标区分，贴近 FCP 调性（见 [`doc/ui-design.md`](./doc/ui-design.md)）。
-
-<p align="center">
-  <img src="doc/images/example.png" alt="CutFinder UI — 按日期分组的缩略图墙、筛选面板与详情面板"/>
-</p>
 
 ### 不破坏原素材（核心约束）
 
@@ -92,19 +96,20 @@ API 层 (FastAPI，薄)                       :5081
    │  create_app() 把真实适配器装配到可变 LibraryContext（库可运行时热绑定）
 编排层 (Pipeline Orchestrator + 后台队列/SSE 进度)
    │  只依赖接口(Protocol)
-适配器层 ── ffmpeg/ffprobe · Silero VAD · mlx-whisper · OMLX(文本+视觉) · SQLite
+适配器层 ── ffmpeg/ffprobe · Silero VAD · mlx-whisper · OMLX(文本+视觉) · Pillow(照片) · SQLite
 ```
 
 每个外部依赖都藏在接口后面，业务逻辑只依赖接口 → 模块可独立替换与测试。详见 [`doc/detailed-design.md`](./doc/detailed-design.md)。
 
 ### 模型服务
 
-| 用途 | 模型（OMLX 上的 id） | 运行方式 |
-|---|---|---|
-| A-roll 简介/标签（文本） | `Qwen3.6-35B-A3B` | OMLX（OpenAI 兼容接口） |
-| B-roll 画面识别（视觉） | `Qwen3-VL-8B` | OMLX（同接口，base64 传帧） |
-| A-roll 语音转写 | `mlx-whisper`（默认 `mlx-community/whisper-large-v3-mlx`） | 独立进程（OMLX 不托管音频） |
-| A/B 人声检测 | Silero VAD | 本地 |
+| 用途                     | 模型（OMLX 上的 id）                                       | 运行方式                    |
+| ------------------------ | ---------------------------------------------------------- | --------------------------- |
+| A-roll 简介/标签（文本） | `Qwen3.6-35B-A3B`                                          | OMLX（OpenAI 兼容接口）     |
+| B-roll 画面识别（视觉）  | `Qwen3-VL-8B`                                              | OMLX（同接口，base64 传帧） |
+| 照片描述 + 标签（视觉）  | `Qwen3-VL-8B`                                              | OMLX（照片的 JPEG 预览以 base64 传入） |
+| A-roll 语音转写          | `mlx-whisper`（默认 `mlx-community/whisper-large-v3-mlx`） | 独立进程（OMLX 不托管音频） |
+| A/B 人声检测             | Silero VAD                                                 | 本地                        |
 
 文本与视觉模型都由 [OMLX](https://github.com/jundot/omlx)（Apple Silicon 本地推理服务器，菜单栏 App）托管。
 
@@ -116,14 +121,14 @@ API 层 (FastAPI，薄)                       :5081
 
 ### 必需
 
-| 依赖 | 说明 |
-|------|------|
-| **macOS + Apple Silicon** | AI 推理依赖 Metal GPU，无法在 Docker / x86_macOS 上运行 |
-| [OMLX](https://github.com/jundot/omlx) ≥ 0.1 | Apple Silicon 本地模型服务器（菜单栏 App），需预加载 `Qwen3.6-35B-A3B`（文本）和 `Qwen3-VL-8B`（视觉）两个模型 |
-| [uv](https://docs.astral.sh/uv/) | Python 依赖管理（`pip install uv`） |
-| **Python ≥ 3.12** | uv 会自动按 `mise.toml` 拉取 3.12 虚拟环境 |
-| **Node.js ≥ 20** + `npm` | 前端开发服务器与构建工具 |
-| [ffmpeg](https://ffmpeg.org/) (`ffprobe` + `ffmpeg`) | 视频元数据提取与缩略图生成（Homebrew: `brew install ffmpeg`） |
+| 依赖                                                 | 说明                                                                                                           |
+| ---------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| **macOS + Apple Silicon**                            | AI 推理依赖 Metal GPU，无法在 Docker / x86_macOS 上运行                                                        |
+| [OMLX](https://github.com/jundot/omlx) ≥ 0.1         | Apple Silicon 本地模型服务器（菜单栏 App），需预加载 `Qwen3.6-35B-A3B`（文本）和 `Qwen3-VL-8B`（视觉）两个模型 |
+| [uv](https://docs.astral.sh/uv/)                     | Python 依赖管理（`pip install uv`）                                                                            |
+| **Python ≥ 3.12**                                    | uv 会自动按 `mise.toml` 拉取 3.12 虚拟环境                                                                     |
+| **Node.js ≥ 20** + `npm`                             | 前端开发服务器与构建工具                                                                                       |
+| [ffmpeg](https://ffmpeg.org/) (`ffprobe` + `ffmpeg`) | 视频元数据提取与缩略图生成（Homebrew: `brew install ffmpeg`）                                                  |
 
 ### 可选
 
@@ -148,6 +153,7 @@ make setup                      # mise install + brew bundle + uv sync + npm ins
 > OMLX 配置在**设置页**里填（见步骤 2），不用手改配置文件。
 
 > 没有 mise？先 `brew install mise`，或手动执行：
+>
 > ```bash
 > cd backend && uv sync           # Python 依赖（含 pytest / mypy / ruff，已随 uv sync 安装）
 > cd ../frontend && npm install   # Vite + React + Tailwind
@@ -225,7 +231,7 @@ make models                     # 预下载 mlx-whisper large-v3-mlx + Demucs ht
 ```bash
 cd backend
 
-uv run pytest tests/unit             # 仅单元测试（367 项，无需外部服务，秒级）
+uv run pytest tests/unit             # 仅单元测试（438 项，无需外部服务，秒级）
 uv run pytest -m integration         # 集成测试（需真实 OMLX / ffmpeg / 样片）
 uv run mypy cutfinder/               # 类型检查（strict，clean）
 uv run ruff check cutfinder/         # linting（clean）

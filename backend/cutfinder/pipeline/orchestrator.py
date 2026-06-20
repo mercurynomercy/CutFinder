@@ -51,6 +51,7 @@ from cutfinder.domain.models import (
     VideoMetadata,
     VisionResult,
 )
+from cutfinder.domain.enums import RollType
 from cutfinder.ports.ai import Summarizer, VisionTagger as _VisionTaggerPort
 from cutfinder.ports.library import LibraryWriter
 from cutfinder.ports.media import FrameExtractor, ThumbnailMaker
@@ -157,10 +158,21 @@ class Orchestrator:
         keyframe_dir: Path | None = None,
         keyframe_count: int = 3,
         keyframe_sample_count: int = 12,
+        image_probe: MetadataProbe | None = None,
+        image_thumbnail_maker: ThumbnailMaker | None = None,
+        photo_extensions: set[str] | None = None,
     ) -> None:
         self.probe = probe
         self.thumbnail_maker = thumbnail_maker
         self.frame_extractor = frame_extractor
+
+        # Still-photo support: a Pillow-based probe + JPEG preview maker. When
+        # absent, photo files fall through to the regular (video) pipeline.
+        self.image_probe = image_probe
+        self.image_thumbnail_maker = image_thumbnail_maker
+        self.photo_extensions = {
+            e.lower() for e in (photo_extensions or {".jpg", ".jpeg", ".png", ".heic"})
+        }
 
         # Default speech detector returns 0.0 (no speech → B-roll) if not injected
         self.speech_detector: SpeechDetector = (
@@ -230,6 +242,10 @@ class Orchestrator:
 
         """
         emit = self.progress_callback  # local for speed in hot path
+
+        # Still photos take a separate, simpler pipeline (no audio/VAD/transcript).
+        if self._is_photo(candidate.path) and self.image_probe is not None:
+            return self._process_photo(candidate)
 
         # ── Idempotency check ───────────────────────────────────
         if self.repository.exists_fingerprint(candidate.fingerprint):
@@ -355,6 +371,100 @@ class Orchestrator:
 
         return clip_id
 
+    def _is_photo(self, path: str) -> bool:
+        """True if *path*'s extension is a configured still-photo type."""
+        return Path(path).suffix.lower() in self.photo_extensions
+
+    def _process_photo(self, candidate: ClipCandidate) -> int | None:
+        """Catalog a still photo: EXIF probe → JPEG preview → vision tags → file.
+
+        Photos have no audio, so there is no VAD/transcript/keyframes step. A
+        downscaled JPEG preview serves as both the thumbnail and the vision-model
+        input (and decodes HEIC). The original is copied, read-only, into
+        ``<library>/<date>/photos/``. AI tagging is best-effort: a failure still
+        files the photo, just without a description/tags.
+        """
+        emit = self.progress_callback
+
+        # ── Idempotency (shared semantics with the video path) ──
+        if self.repository.exists_fingerprint(candidate.fingerprint):
+            existing = self._find_clip_by_fp(candidate.fingerprint)
+            if existing and existing.status == "done":
+                logger.info("Skipping already-processed photo: %s", candidate.path)
+                return existing.id
+
+        # ── 1. Probe image metadata (dimensions + EXIF capture time) ──
+        try:
+            assert self.image_probe is not None  # guarded by caller
+            meta = self.image_probe.probe(Path(candidate.path))
+            emit(ProgressEvent(step="probe", ok=True, detail=str(meta)))
+        except Exception as exc:  # noqa: BLE001 — error isolation
+            self._mark_error(candidate, "probe", str(exc))
+            return None
+
+        # ── 2. JPEG preview (thumbnail + vision input) ──
+        preview_path = ""
+        try:
+            if self.image_thumbnail_maker is not None:
+                out_dir = self.thumbnail_dir or Path(tempfile.gettempdir())
+                out_dir.mkdir(parents=True, exist_ok=True)
+                preview_path = str(self.image_thumbnail_maker.make(
+                    Path(candidate.path), out_dir / f"{candidate.fingerprint}.jpg",
+                ))
+            emit(ProgressEvent(step="thumbnail", ok=True, detail=preview_path))
+        except Exception as exc:  # noqa: BLE001 — error isolation
+            self._mark_error(candidate, "thumbnail", str(exc))
+            return None
+
+        # ── 3. Vision tags + description (best-effort) ──
+        analysis_error: str | None = None
+        vision_result: VisionResult | None = None
+        try:
+            if self.vision_tagger is not None and preview_path:
+                vision_result = self.vision_tagger.describe([Path(preview_path)])
+            emit(ProgressEvent(step="photo-analysis", ok=True))
+        except Exception as exc:  # noqa: BLE001 — organize anyway, just untagged
+            analysis_error = str(exc)
+            logger.warning("Photo analysis failed for %s: %s", candidate.path, exc)
+            emit(ProgressEvent(step="analysis", ok=False, detail=analysis_error))
+
+        # ── 4. Copy original into <date>/photos/ (read-only source) ──
+        library_path: str | None = None
+        date_str = meta.capture_time.strftime("%Y-%m-%d") if meta.capture_time else "unknown"
+        try:
+            if self.library_writer is not None:
+                library_path = self.library_writer.copy_into(
+                    Path(candidate.path), date_str, RollType.PHOTO.value,
+                )
+            emit(ProgressEvent(step="copy", ok=True, detail=library_path))
+            record_copy = getattr(self.repository, "record_copy", None)
+            if callable(record_copy):
+                record_copy(candidate.path, date_str, RollType.PHOTO.value)
+        except Exception as exc:  # noqa: BLE001 — catalog even if the copy fails
+            logger.warning("Library copy failed for photo %s: %s", candidate.path, exc)
+            emit(ProgressEvent(step="copy", ok=False, detail=str(exc)))
+
+        # ── 5. Upsert ──
+        now = _dt.datetime.now(_dt.timezone.utc)
+        description_text = vision_result.description if vision_result is not None else None
+        auto_tags = list(vision_result.tags) if vision_result is not None else []
+
+        clip_id = self.repository.upsert_clip(self._build_clip(
+            candidate=candidate, meta=meta, thumbnail_path=preview_path,
+            roll_type=RollType.PHOTO.value,
+            status="partial" if analysis_error else "done",
+            processed_at=now.isoformat(), description_text=description_text,
+            error=analysis_error, library_path=library_path,
+        ))
+        if clip_id is not None and auto_tags:
+            self.repository.set_tags(clip_id, [Tag(name=t, source="auto") for t in auto_tags])
+        if clip_id is not None:
+            self.repository.update_analysis(
+                clip_id, AnalysisResult(roll_type=RollType.PHOTO.value, vision_result=vision_result),
+            )
+        emit(ProgressEvent(clip_id=clip_id, step="persist", ok=True))
+        return clip_id
+
     def reanalyze(self, clip_id: int) -> bool:
         """Force-re-run AI analysis for an existing clip without re-copying.
 
@@ -450,6 +560,49 @@ class Orchestrator:
         self.repository.save_keyframes(clip_id, suggestions)
         emit(ProgressEvent(clip_id=clip_id, step="keyframes", ok=True, detail=f"{len(suggestions)} suggestion(s)"))
         return True
+
+    # ── Library reconciliation (req: sync-delete) ─────────────────
+
+    def find_orphaned_clips(self) -> list[ClipSummary]:
+        """Clips whose organised library copy no longer exists on disk.
+
+        The user may delete copies straight from the library folder; this finds
+        the catalog rows left pointing at a now-missing file so the UI can offer
+        to clean them up. Only the library *copy* is inspected — never the
+        read-only source.
+        """
+        orphaned: list[ClipSummary] = []
+        for s in self.repository.query_clips(ClipFilter()):
+            lp = getattr(s, "library_path", None)
+            if lp and not Path(lp).exists():
+                orphaned.append(s)
+        return orphaned
+
+    def delete_clips(self, clip_ids: list[int]) -> int:
+        """Delete catalog rows + their on-disk derived files for *clip_ids*.
+
+        Removes the thumbnail JPEG and the per-clip keyframe frame directory
+        (both live under ``<library>/.cutfinder/``), then the DB record. Source
+        files are never touched. Returns the number of clips deleted.
+        """
+        import shutil
+
+        deleted = 0
+        for cid in clip_ids:
+            clip = self.repository.get_clip(cid)
+            if clip is None:
+                continue
+            thumb = getattr(clip, "thumbnail_path", None)
+            if thumb:
+                try:
+                    Path(thumb).unlink(missing_ok=True)
+                except OSError as exc:
+                    logger.warning("Could not delete thumbnail for clip %s: %s", cid, exc)
+            if self.keyframe_dir is not None:
+                shutil.rmtree(self.keyframe_dir / str(cid), ignore_errors=True)
+            self.repository.delete_clip(cid)
+            deleted += 1
+        return deleted
 
     def _keyframe_out_dir(self, clip_id: int) -> Path:
         """Per-clip dir for persisted keyframe images (cleared before regen)."""
