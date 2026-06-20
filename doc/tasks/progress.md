@@ -49,7 +49,7 @@
 ---
 
 ### 待办 (TODO)
-- [ ] **20 · 原生 macOS .app 外壳（Swift 包装器）** — 已设计、待实现。取代 shell 脚本启动器（`packaging/launcher.sh` + `scripts/build-app.sh`，现靠脚本留前台 + 转发 SIGTERM 撑 Dock 生命周期），换成最小 Swift/AppKit 包装器，得到标准应用菜单、稳定 Dock 生命周期、点 Dock 图标重开 UI、代码签名/公证能力，并把「开启/关闭服务」「首次自动装齐依赖」做成原生体验。设计见 `detailed-design.md` §11 与 `ui-design.md` §9。
+- [ ] [**20 原生 macOS .app 外壳（Swift 包装器）**](./20-native-app.md) — 已设计、待实现。取代 shell 脚本启动器（`packaging/launcher.sh` + `scripts/build-app.sh`，现靠脚本留前台 + 转发 SIGTERM 撑 Dock 生命周期），换成最小 Swift/AppKit 包装器，得到标准应用菜单、稳定 Dock 生命周期、点 Dock 图标重开 UI、代码签名/公证能力，并把「开启/关闭服务」「首次自动装齐依赖」做成原生体验。设计见 `detailed-design.md` §11 与 `ui-design.md` §9。
   - **已确认决策**：① UI 用 **WKWebView 内嵌**现有 web 前端（无浏览器/标签页）；② 服务**启动即自动开启**，菜单可停止/重启；③ 首次启动**自动安装本地依赖**（uv / ffmpeg / Python env / whisper+demucs 模型），**OMLX 仅探测 + 引导**（独立菜单栏 App，无法静默安装，缺失不阻断、弹下载引导）。
   - **要点**：Swift 二进制作 `CFBundleExecutable`、uvicorn 为其子进程（绝不 `exec`）→ Dock tile 稳定、⌘Q 先停服务无孤儿；venv/模型建在 Application Support（bundle 外）→ 签名只需签 Swift Mach-O，Hardened Runtime + JIT/Metal/disable-library-validation entitlements，Developer ID 直分发(DMG)+公证。后端/前端零改动。
   - **落地**：新增 `packaging/macapp/`（swiftc 编译，无 .xcodeproj），`scripts/build-app.sh` 升级为 编译→组 bundle→签名→dmg→公证；删除 `packaging/launcher.sh`。测试以 Provisioner 步骤判定 + OMLX 探测纯函数单测 + 手动验收清单覆盖。
