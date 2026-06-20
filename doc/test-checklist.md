@@ -12,7 +12,7 @@
 - [ ] OMLX 已启动，且已加载 `Qwen3.6-35B-A3B`（文本）与 `Qwen3-VL-8B`（视觉）
 - [ ] `make check-omlx` → 输出 `OMLX OK` 且必需模型齐全
 - [ ] `ffmpeg -version` 与 `ffprobe -version` 可用
-- [ ] 根目录 `.env` 已填 `OMLX_BASE_URL` / `OMLX_API_KEY`
+- [ ] `~/.cutfinder/config.json` 已填 `OMLX_BASE_URL` / `OMLX_API_KEY`（或 OS env vars 已设置）
 - [ ] `make dev` 启动成功；后端 http://localhost:5081（FastAPI）、前端 http://localhost:5080（Vite）都能打开
 
 ## 1. 自动化测试 & 构建 (先跑一遍做基线)

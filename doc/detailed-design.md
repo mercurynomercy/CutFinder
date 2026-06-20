@@ -59,7 +59,6 @@ cutfinder/
 ├── mise.toml                    # 钉死 Python/Node 版本
 ├── Brewfile                     # 系统依赖(ffmpeg)
 ├── Makefile                     # setup/dev/models/check-omlx/test...
-├── .env.example                 # OMLX 端点/密钥模板(.env 进 .gitignore)
 ├── backend/
 │   ├── pyproject.toml + uv.lock # uv 管理依赖
 │   ├── cutfinder/
@@ -112,10 +111,10 @@ cutfinder/
 ### 3.1 Config（配置）
 - **职责**：提供类型安全的配置对象；区分**密钥/端点**与**用户偏好**两类来源。
 - **两类来源**：
-  - **密钥/端点 → `.env`**（`pydantic-settings` 读取，不入库不进 git）：`OMLX_BASE_URL`、`OMLX_API_KEY`。
+  - **密钥/端点 → 全局配置 / OS env vars**（`pydantic-settings` 读取，不入库不进 git）：`OMLX_BASE_URL`、`OMLX_API_KEY`。
   - **用户偏好 → JSON**（`<库>/.cutfinder/config.json`）：`source_folders`、`library_path`、`text_model`、`vision_model`、`whisper_model`、`extensions`（默认 `.mov .mp4 .m4v`）、`broll_frame_count`（默认 3）、`vad_threshold`（默认 0.15）。
-- **接口**：`load_config() -> AppConfig`、`save_prefs(Prefs)`。`AppConfig` 合并 `.env` 与 JSON 两部分；`.env` 缺失时给出明确报错（OMLX 必填）。
-- **独立测**：用 `monkeypatch` 注入环境变量 + 临时 JSON，断言合并结果、默认值、`.env` 缺失时报错。
+- **接口**：`resolve_env() -> EnvSettings`（全局配置优先，OS env 覆盖）、`load_config() -> AppConfig`、`save_prefs(Prefs)`。`AppConfig` 合并全局配置/OS env 与 JSON 两部分；全部缺失时给出明确报错（OMLX 必填）。
+- **独立测**：用 `monkeypatch` OS env + 临时 JSON，断言合并结果、默认值；全局配置缺失时报错。
 
 ### 3.2 MetadataProbe（元数据探测，适配器）
 - **接口**（`ports/probe.py`）：
@@ -165,7 +164,7 @@ cutfinder/
       def summarize(self, transcript_text: str) -> SummaryResult: ...
   ```
   `SummaryResult`：`summary: str`（中文简介）、`tags: list[str]`。
-- **真实实现**：OpenAI 客户端指向 OMLX（`base_url=OMLX_BASE_URL`、`api_key=OMLX_API_KEY`，均来自 `.env`；`model=text_model` 默认 `Qwen3.6-35B-A3B`）。用**结构化输出**（JSON）约束返回 `{summary, tags}`。
+- **真实实现**：OpenAI 客户端指向 OMLX（`base_url=OMLX_BASE_URL`、`api_key=OMLX_API_KEY`，来自全局配置 / OS env；`model=text_model` 默认 `Qwen3.6-35B-A3B`）。用**结构化输出**（JSON）约束返回 `{summary, tags}`。
 - **独立测**：fake 返回固定 `SummaryResult`；适配器集成测试需本机 OMLX，打 `integration` 标记。
 
 ### 3.7 VisionTagger（B-roll 画面识别，适配器→OMLX）
@@ -175,7 +174,7 @@ cutfinder/
       def describe(self, frame_paths: list[Path]) -> VisionResult: ...
   ```
   `VisionResult`：`description: str`（中文画面描述）、`tags: list[str]`。
-- **真实实现**：把抽帧读成 **base64**，按 OpenAI 视觉消息格式（`image_url` data URI）发给 OMLX（同样用 `.env` 的 `OMLX_BASE_URL`/`OMLX_API_KEY`，`model=vision_model` 默认 `Qwen3-VL-8B-Instruct`），一次请求带多帧；结构化输出 `{description, tags}`。
+- **真实实现**：把抽帧读成 **base64**，按 OpenAI 视觉消息格式（`image_url` data URI）发给 OMLX（同样用全局配置 / OS env 的 `OMLX_BASE_URL`/`OMLX_API_KEY`，`model=vision_model` 默认 `Qwen3-VL-8B-Instruct`），一次请求带多帧；结构化输出 `{description, tags}`。
 - **独立测**：fake 返回固定结果；适配器集成测试需本机 OMLX。
 
 ### 3.8 LibraryWriter（库文件组织，适配器）
@@ -435,8 +434,8 @@ CREATE VIRTUAL TABLE clips_fts USING fts5(
 | `source_folders` | 空 | 用户指定，可多个（JSON） |
 | `library_path` | 空 | 复制目标库（JSON） |
 | `extensions` | `.mov .mp4 .m4v` | 扫描白名单（JSON） |
-| `OMLX_BASE_URL` | `http://localhost:8000/v1` | OMLX 接口（**`.env`**） |
-| `OMLX_API_KEY` | 无（必填） | OMLX 鉴权（**`.env`**，不进 git） |
+| `OMLX_BASE_URL` | `http://localhost:8000/v1` | OMLX 接口（全局配置 / OS env） |
+| `OMLX_API_KEY` | 无（必填） | OMLX 鉴权（全局配置 / OS env，不进 git） |
 | `text_model` | `Qwen3.6-35B-A3B` | A-roll 简介/标签（JSON） |
 | `vision_model` | `Qwen3-VL-8B-Instruct` | B-roll 画面识别(量化在 OMLX 选) |
 | `whisper_model` | `large-v3` | 独立 mlx-whisper |
@@ -462,33 +461,22 @@ CREATE VIRTUAL TABLE clips_fts USING fts5(
 | **Brewfile** | 系统级 `ffmpeg`，`brew bundle` 一键装 |
 | **npm/pnpm** (`frontend/package.json` + lockfile) | 前端依赖 |
 | **Makefile** | 把上面串成少数几条命令 |
-| **`.env`** | OMLX 端点与密钥（见下），不进 git |
 
-### `.env`（密钥/端点，单独文件）
-
-仓库提交 `.env.example`，真实 `.env` 进 `.gitignore`：
-
-```dotenv
-# .env.example —— 复制为 .env 后填写
-OMLX_BASE_URL=http://localhost:8000/v1
-OMLX_API_KEY=your-omlx-key
-```
-
-后端用 `pydantic-settings` 自动读取；缺失则启动时明确报错。OMLX 是独立菜单栏 App，需单独安装并自行加载文本/视觉模型。
+OMLX 端点与密钥通过全局配置（`~/.cutfinder/config.json`）或 OS env vars 注入，后端用 `pydantic-settings` 自动读取；缺失则启动时明确报错。OMLX 是独立菜单栏 App，需单独安装并自行加载文本/视觉模型。
 
 ### Makefile 目标
 
 | 命令 | 作用 |
 |---|---|
-| `make setup` | `mise install` → `brew bundle` → `uv sync` → 前端依赖安装 → 提示复制 `.env.example` |
+| `make setup` | `mise install` → `brew bundle` → `uv sync` → 前端依赖安装 |
 | `make dev` | 同时起后端（FastAPI/uvicorn）与前端（Vite dev server） |
 | `make models` | 拉取并缓存 `mlx-whisper` 模型（视觉/文本模型在 OMLX 侧加载） |
-| `make check-omlx` | 用 `.env` 的端点/密钥探测 OMLX `/v1/models`，确认接口与所需模型就绪 |
+| `make check-omlx` | 用全局配置/OS env 的端点/密钥探测 OMLX `/v1/models`，确认接口与所需模型就绪 |
 | `make test` | 后端 `pytest`（不含集成）+ 前端 `vitest` |
 | `make test-integration` | `pytest -m integration`（需本机 ffmpeg/whisper/OMLX 与样本素材） |
 | `make e2e` | Playwright（后端以假适配器 + 预置 DB 启动） |
 
-**换机流程**：装好 OMLX App → `git clone` → 复制 `.env.example` 为 `.env` 并填 key → `mise install && make setup` → `make check-omlx` → `make dev`。
+**换机流程**：装好 OMLX App → `git clone` → 在 `~/.cutfinder/config.json`（或 OS env）中填入 OMLX key → `mise install && make setup` → `make check-omlx` → `make dev`。
 
 ### 独立测
 - Makefile/脚本无需单测；`make check-omlx` 的探测逻辑（解析 `/v1/models`、校验所需模型是否在列）放在一个小函数里，用假 HTTP 响应做单元测试。
