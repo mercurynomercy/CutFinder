@@ -479,13 +479,60 @@ export function SettingsPage({ onSave }: SettingsPageProps) {
                 {t('settings.whisperDesc')}
               </p>
               <div className="mt-3 space-y-4">
-                <label className="block text-sm text-[--text-secondary]">{t('settings.whisperModel')}</label>
-                <p className="mb-1 text-xs text-[--text-muted]">{t('settings.whisperModelDesc')}</p>
-                <input
-                  type="text" value={prefs.whisper_model}
-                  onChange={(e) => updateField('whisper_model', e.target.value)}
-                  className="w-full rounded-md border border-[--border] bg-[--surface-2] px-3 py-1.5 text-sm outline-none focus:border-[--primary]"
-                />
+                {/* Engine selector — governs all A-roll speech work */}
+                <div>
+                  <label className="block text-sm text-[--text-secondary]">{t('settings.speechEngine')}</label>
+                  <p className="mb-1 text-xs text-[--text-muted]">{t('settings.speechEngineDesc')}</p>
+                  <select
+                    value={prefs.transcription_engine ?? 'whisper'}
+                    onChange={(e) => updateField('transcription_engine', e.target.value as 'whisper' | 'qwen')}
+                    aria-label={t('settings.speechEngine')}
+                    className="w-full rounded-md border border-[--border] bg-[--surface-2] px-3 py-1.5 text-sm outline-none focus:border-[--primary]"
+                  >
+                    <option value="whisper">{t('settings.engineWhisper')}</option>
+                    <option value="qwen">{t('settings.engineQwen')}</option>
+                  </select>
+                </div>
+
+                {(prefs.transcription_engine ?? 'whisper') === 'whisper' ? (
+                  <div>
+                    <label className="block text-sm text-[--text-secondary]">{t('settings.whisperModel')}</label>
+                    <p className="mb-1 text-xs text-[--text-muted]">{t('settings.whisperModelDesc')}</p>
+                    <input
+                      type="text" value={prefs.whisper_model}
+                      onChange={(e) => updateField('whisper_model', e.target.value)}
+                      className="w-full rounded-md border border-[--border] bg-[--surface-2] px-3 py-1.5 text-sm outline-none focus:border-[--primary]"
+                    />
+                  </div>
+                ) : (
+                  <>
+                    <div>
+                      <label className="block text-sm text-[--text-secondary]">{t('settings.qwenAsrModel')}</label>
+                      <input
+                        type="text" value={prefs.qwen_asr_model ?? ''}
+                        onChange={(e) => updateField('qwen_asr_model', e.target.value)}
+                        className="mt-1 w-full rounded-md border border-[--border] bg-[--surface-2] px-3 py-1.5 text-sm font-mono outline-none focus:border-[--primary]"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm text-[--text-secondary]">{t('settings.qwenAlignerModel')}</label>
+                      <input
+                        type="text" value={prefs.qwen_aligner_model ?? ''}
+                        onChange={(e) => updateField('qwen_aligner_model', e.target.value)}
+                        className="mt-1 w-full rounded-md border border-[--border] bg-[--surface-2] px-3 py-1.5 text-sm font-mono outline-none focus:border-[--primary]"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm text-[--text-secondary]">{t('settings.qwenMaxChunk')}</label>
+                      <p className="mb-1 text-xs text-[--text-muted]">{t('settings.qwenMaxChunkDesc')}</p>
+                      <input
+                        type="number" min={5} max={300} step={5} value={prefs.qwen_max_chunk_s ?? 60}
+                        onChange={(e) => updateField('qwen_max_chunk_s', parseFloat(e.target.value))}
+                        className="w-full rounded-md border border-[--border] bg-[--surface-2] px-3 py-1.5 text-sm outline-none focus:border-[--primary]"
+                      />
+                    </div>
+                  </>
+                )}
               </div>
             </fieldset>
 

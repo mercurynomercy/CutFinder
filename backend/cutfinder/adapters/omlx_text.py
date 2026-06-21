@@ -94,7 +94,6 @@ Sentences:
 
 _CUTS_PROMPTS = {"zh": _CUTS_PROMPT_ZH, "en": _CUTS_PROMPT_EN}
 
-
 # ── OmlxSummarizer ───────────────────────────────────────────────
 
 class OmlxSummarizer(Summarizer):
@@ -320,3 +319,4 @@ class OmlxSummarizer(Summarizer):
             if len(out) >= n:
                 break
         return out
+

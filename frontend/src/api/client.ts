@@ -104,6 +104,10 @@ export interface SettingsPrefs {
   text_model: string
   vision_model: string
   whisper_model: string
+  transcription_engine: 'whisper' | 'qwen'
+  qwen_asr_model: string
+  qwen_aligner_model: string
+  qwen_max_chunk_s: number
   extensions: string[]
   photo_extensions: string[]
   broll_frame_count: number
@@ -142,6 +146,10 @@ export interface UpdateSettingsBody {
   text_model?: string
   vision_model?: string
   whisper_model?: string
+  transcription_engine?: 'whisper' | 'qwen'
+  qwen_asr_model?: string
+  qwen_aligner_model?: string
+  qwen_max_chunk_s?: number
   extensions?: string[]
   photo_extensions?: string[]
   broll_frame_count?: number
@@ -343,7 +351,12 @@ export const api = {
   },
 
   /** POST /api/subtitles/export — transcribe a video and write subtitle files. */
-  exportSubtitles(body: { video_path: string; out_dir: string; formats: string[]; language?: string }): Promise<{ job_id: number }> {
+  exportSubtitles(body: {
+    video_path: string
+    out_dir: string
+    formats: string[]
+    language?: string
+  }): Promise<{ job_id: number }> {
     return _fetch('/api/subtitles/export', { method: 'POST', body: JSON.stringify(body) })
   },
 

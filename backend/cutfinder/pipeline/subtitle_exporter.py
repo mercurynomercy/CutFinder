@@ -1,12 +1,13 @@
 """SubtitleExporter — re-transcribe a finished video and write subtitle files.
 
 This is a standalone tool, decoupled from the catalog: it does *not* reuse any
-stored transcript. The chosen video is re-transcribed with mlx-whisper aligned
-to its own timeline, then exported as iTT (Final Cut Pro native) and/or SRT.
+stored transcript. The chosen video is re-transcribed with the configured speech
+engine (whisper or Qwen3-ASR + ForcedAligner) on its own timeline, then exported
+as iTT (Final Cut Pro native) and/or SRT.
 
 The source video is read-only; only new subtitle files are created. No
-translation happens anywhere — *language* is purely the Whisper language hint
-and the subtitle filename suffix.
+translation happens anywhere — *language* is purely the transcription language
+hint and the subtitle filename suffix.
 """
 
 from __future__ import annotations
@@ -33,7 +34,11 @@ class SubtitleExporter:
         Transcriber used to re-transcribe the video on its own timeline.
     """
 
-    def __init__(self, probe: MetadataProbe, transcriber: Transcriber) -> None:
+    def __init__(
+        self,
+        probe: MetadataProbe,
+        transcriber: Transcriber,
+    ) -> None:
         self._probe = probe
         self._transcriber = transcriber
 
@@ -61,7 +66,7 @@ class SubtitleExporter:
         transcript = self._transcriber.transcribe(
             video_path, language=language, progress=on_progress,
         )
-        segments = transcript.segments
+        segments = list(transcript.segments)
 
         written: list[Path] = []
         for fmt in formats:

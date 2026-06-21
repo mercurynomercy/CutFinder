@@ -153,8 +153,10 @@ cutfinder/
       def transcribe(self, path: Path) -> Transcript: ...
   ```
   `Transcript`：`full_text: str`、`segments: list[Segment(start_s, end_s, text)]`。
-- **真实实现**：`mlx-whisper`（large-v3，中文），**独立进程，不走 OMLX**。
-- **转写前人声分离**（见 §3.14）：构造可注入 `VocalSeparator`；注入时先抽干声去 BGM 再转写，分离失败回落原始音频。两条路径都补 whisper 防幻觉 kwargs（如 `condition_on_previous_text=False`）。`transcribe()` 端口签名不变——是否分离由构造时是否注入 separator 决定。
+- **真实实现（两种引擎，由 `transcription_engine` 偏好选择，均为本地独立进程、不走 OMLX）**：
+  - **`mlx-whisper`**（large-v3，中文）—— `adapters/mlx_whisper.py`。
+  - **Qwen3-ASR + Qwen3-ForcedAligner**（经 `mlx-audio` 本地运行）—— `adapters/qwen_transcriber.py`：先按 Silero VAD 把音频切成 ≤`qwen_max_chunk_s`（默认 60，上限 300，受对齐器约 400 秒时间戳范围限制）的片段，逐段用 Qwen3-ASR 出准确中文/中英文本、用 ForcedAligner 出逐字时间戳，偏移回整段时间轴后再归并成字幕 cue。中文更准且时间轴不漂移；OMLX 无法经 HTTP 托管对齐器，故必须本地跑，模型下载到 `models/qwen/`。该选择作用于所有 A-roll 语音处理（编目转写、关键帧、字幕导出）。
+- **转写前人声分离**（见 §3.14）：构造可注入 `VocalSeparator`；注入时先抽干声去 BGM 再转写，分离失败回落原始音频。whisper 路径补防幻觉 kwargs（如 `condition_on_previous_text=False`），Qwen 路径用 `repetition_penalty` + 按片段时长限制 `max_tokens` 防止 ASR 复读。`transcribe()` 端口签名不变——是否分离由构造时是否注入 separator 决定。
 - **独立测**：fake 返回固定文本；适配器集成测试用一段短中文语音样本。
 
 ### 3.6 Summarizer（A-roll 文本总结，适配器→OMLX）

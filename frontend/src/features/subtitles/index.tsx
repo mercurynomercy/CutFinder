@@ -131,7 +131,11 @@ export function SubtitlesPage({ onClose }: SubtitlesPageProps) {
     setFiles([])
     setProgress(0)
     try {
-      const { job_id } = await api.exportSubtitles({ video_path: videoPath, out_dir: outDir, formats })
+      const { job_id } = await api.exportSubtitles({
+        video_path: videoPath,
+        out_dir: outDir,
+        formats,
+      })
       setJobId(job_id)
       const status = await waitForJob(job_id, setProgress)
       if (status !== 'done') {

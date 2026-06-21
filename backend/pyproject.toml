@@ -13,6 +13,8 @@ dependencies = [
     "openai",
     # Speech transcription — local mlx-whisper (separate from OMLX)
     "mlx-whisper",
+    # Qwen3-ASR + ForcedAligner speech engine (see adapters/qwen_transcriber.py)
+    "mlx-audio",
     # Speech detection — Silero VAD (ONNX path, see adapters/silero_vad.py)
     "torch>=2.0",
     "silero-vad",
@@ -67,7 +69,7 @@ disallow_untyped_defs = false
 
 # Third-party packages without type stubs / py.typed markers.
 [[tool.mypy.overrides]]
-module = ["silero_vad.*", "demucs.*", "torchaudio.*"]
+module = ["silero_vad.*", "demucs.*", "torchaudio.*", "mlx_audio.*"]
 ignore_missing_imports = true
 
 [tool.ruff]

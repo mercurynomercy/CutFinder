@@ -20,6 +20,7 @@ Examples
 from __future__ import annotations
 
 import asyncio
+import functools
 import logging
 import time
 from dataclasses import dataclass, field
@@ -771,9 +772,12 @@ class WorkerQueue:
         try:
             paths = (
                 await asyncio.to_thread(
-                    self._subtitle_exporter.export,
-                    Path(req.video_path), Path(req.out_dir), req.formats, req.language,
-                    on_progress=on_progress,
+                    functools.partial(
+                        self._subtitle_exporter.export,
+                        Path(req.video_path), Path(req.out_dir), req.formats,
+                        req.language,
+                        on_progress=on_progress,
+                    )
                 )
                 if self._subtitle_exporter else []
             )

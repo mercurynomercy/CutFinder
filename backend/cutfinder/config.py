@@ -32,7 +32,17 @@ _GLOBAL_KEYS = ("OMLX_BASE_URL", "OMLX_API_KEY", "TEXT_MODEL", "VISION_MODEL")
 # _GLOBAL_KEYS (env-style strings) these keep their native JSON types (the
 # toggles stay booleans). load_config overlays them on top of the per-library
 # prefs; the settings route persists them via save_global_prefs.
-_GLOBAL_PREF_KEYS = ("whisper_model", "vocal_separation", "keyframe_auto")
+_GLOBAL_PREF_KEYS = (
+    "whisper_model",
+    "vocal_separation",
+    "keyframe_auto",
+    # Speech engine (whisper vs Qwen3-ASR+aligner) and its Qwen model/chunk
+    # settings are machine-global, like whisper_model — one value for all libraries.
+    "transcription_engine",
+    "qwen_asr_model",
+    "qwen_aligner_model",
+    "qwen_max_chunk_s",
+)
 
 # Repo root, anchored to this file (backend/cutfinder/config.py -> repo root).
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -43,6 +53,9 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 MODELS_DIR = _REPO_ROOT / "models"
 WHISPER_MODELS_DIR = MODELS_DIR / "whisper"
 DEMUCS_MODELS_DIR = MODELS_DIR / "demucs"
+# Qwen3-ASR + ForcedAligner MLX models for the "qwen" speech engine, downloaded
+# here on first use and loaded offline thereafter (see adapters/qwen_transcriber.py).
+QWEN_MODELS_DIR = MODELS_DIR / "qwen"
 
 # Machine-global settings written by the UI. These are shared across all
 # libraries (the OMLX endpoint/key are machine-wide, not per-library) so the
@@ -174,6 +187,8 @@ _DEFAULT_PHOTO_EXTENSIONS: list[str] = [".jpg", ".jpeg", ".png", ".heic"]
 _DEFAULT_TEXT_MODEL: str = "Qwen3.6-35B-A3B"
 _DEFAULT_VISION_MODEL: str = "Qwen3-VL-8B"
 _DEFAULT_WHISPER_MODEL: str = "mlx-community/whisper-large-v3-mlx"
+_DEFAULT_QWEN_ASR_MODEL: str = "mlx-community/Qwen3-ASR-1.7B-8bit"
+_DEFAULT_QWEN_ALIGNER_MODEL: str = "mlx-community/Qwen3-ForcedAligner-0.6B-8bit"
 
 
 class Prefs(BaseModel, frozen=True):
@@ -188,6 +203,16 @@ class Prefs(BaseModel, frozen=True):
     text_model: str = _DEFAULT_TEXT_MODEL
     vision_model: str = _DEFAULT_VISION_MODEL
     whisper_model: str = _DEFAULT_WHISPER_MODEL
+    # Speech engine for all A-roll work (catalog transcription, keyframes, and
+    # subtitle export): "whisper" (mlx-whisper) or "qwen" (local Qwen3-ASR +
+    # ForcedAligner, more accurate for Chinese / zh-en mixed audio).
+    transcription_engine: Literal["whisper", "qwen"] = "whisper"
+    qwen_asr_model: str = _DEFAULT_QWEN_ASR_MODEL
+    qwen_aligner_model: str = _DEFAULT_QWEN_ALIGNER_MODEL
+    # Max seconds of audio per VAD-merged chunk fed to Qwen3-ASR + aligner.
+    # Kept well under the aligner's ~400s timestamp range; larger = fewer cue
+    # boundaries and faster, smaller = finer alignment.
+    qwen_max_chunk_s: float = Field(default=60.0, gt=0, le=300)
     extensions: list[str] = _DEFAULT_EXTENSIONS[:]
     # Still-image extensions cataloged as photos (separate "photo" roll type).
     photo_extensions: list[str] = _DEFAULT_PHOTO_EXTENSIONS[:]
@@ -205,7 +230,10 @@ class Prefs(BaseModel, frozen=True):
     # default. Subtitle export always separates regardless of this flag.
     vocal_separation: bool = False
 
-    @field_validator("text_model", "vision_model", "whisper_model", mode="before")
+    @field_validator(
+        "text_model", "vision_model", "whisper_model",
+        "qwen_asr_model", "qwen_aligner_model", mode="before",
+    )
     @classmethod
     def _blank_falls_back_to_default(
         cls, value: object, info: ValidationInfo

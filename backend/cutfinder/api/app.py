@@ -160,14 +160,33 @@ def _build_into(ctx: LibraryContext, library_path: Union[str, Path]) -> None:
     # the vocal_separation pref is on.
     vocal_separator = DemucsSeparator()
 
+    # Speech engine: "whisper" (mlx-whisper) or "qwen" (local Qwen3-ASR +
+    # ForcedAligner). The choice governs all A-roll speech work — catalog
+    # transcription, keyframe reasoning (via the stored transcript), and
+    # subtitle export — so build one factory and reuse it for both consumers.
+    use_qwen = prefs.transcription_engine == "qwen"
+
+    def _make_transcriber(separator: Any | None) -> Any:
+        if use_qwen:
+            from cutfinder.adapters.qwen_transcriber import QwenTranscriber
+
+            return QwenTranscriber(
+                asr_model=prefs.qwen_asr_model,
+                aligner_model=prefs.qwen_aligner_model,
+                language=prefs.output_language,
+                separator=separator,
+                vad_threshold=prefs.vad_threshold,
+                max_chunk_s=prefs.qwen_max_chunk_s,
+            )
+        return MlxWhisperTranscriber(model=whisper_model, separator=separator)
+
     orchestrator = Orchestrator(
         probe=FfmpegProbe(),
         thumbnail_maker=FfmpegThumbnailMaker(),
         frame_extractor=FfmpegFrameExtractor(default_count=prefs.broll_frame_count),
         speech_detector=SileroSpeechDetector(threshold=prefs.vad_threshold),
-        transcriber=MlxWhisperTranscriber(
-            model=whisper_model,
-            separator=vocal_separator if prefs.vocal_separation else None,
+        transcriber=_make_transcriber(
+            vocal_separator if prefs.vocal_separation else None
         ),
         summarizer=OmlxSummarizer(config),
         vision_tagger=OmlxVisionTagger(config),
@@ -191,16 +210,19 @@ def _build_into(ctx: LibraryContext, library_path: Union[str, Path]) -> None:
     # timeline (never reuses a stored transcript).
     subtitle_exporter = SubtitleExporter(
         probe=FfmpegProbe(),
-        transcriber=MlxWhisperTranscriber(
-            model=whisper_model, separator=vocal_separator
-        ),
+        transcriber=_make_transcriber(vocal_separator),
     )
 
     # When the work queue drains, unload the in-process models (whisper +
     # demucs) so they stop occupying RAM while idle. They reload lazily on
     # the next job. (OMLX-served models are managed by OMLX itself.)
     def _release_idle_models() -> None:
-        MlxWhisperTranscriber.unload_cache()
+        if use_qwen:
+            from cutfinder.adapters.qwen_transcriber import QwenTranscriber
+
+            QwenTranscriber.unload_cache()
+        else:
+            MlxWhisperTranscriber.unload_cache()
         vocal_separator.unload()
 
     worker_queue = WorkerQueue(

@@ -97,12 +97,16 @@ Text and vision models are **both served by OMLX** (github.com/jundot/omlx), a l
 - **B-roll visual tags + description:** `Qwen3-VL-8B-Instruct` (vision; send extracted frames as base64 images using the standard OpenAI vision message format).
 - OMLX handles load/unload and memory (LRU eviction, model pinning, per-model TTL), so both models can be configured to coexist.
 
-**Whisper is the exception:** OMLX does **not** serve audio. A-roll Chinese transcription runs as a **separate local `mlx-whisper` process** (large-v3), not through OMLX. A/B classification uses a lightweight **Silero VAD** speech-presence check, also separate.
+**Speech is the exception (OMLX does not serve audio):** A-roll transcription runs as a **separate local process**, selectable via the machine-global `transcription_engine` pref (Settings → Speech engine). One choice governs *all* A-roll speech work — catalog transcription, keyframe reasoning over the stored transcript, and subtitle export:
+- **`whisper`** — `mlx-whisper` large-v3 (default `mlx-community/whisper-large-v3-mlx`). See `adapters/mlx_whisper.py`.
+- **`qwen`** — local **Qwen3-ASR + Qwen3-ForcedAligner** via `mlx-audio` (`adapters/qwen_transcriber.py`): VAD-chunk the audio → Qwen3-ASR per chunk for accurate Chinese/zh-en text → ForcedAligner for real per-character timestamps → group into cues. More accurate on Chinese and gives non-drifting subtitle timing. The aligner caps at ~400s/call, so chunks are bounded (`qwen_max_chunk_s`, default 60, max 300). **OMLX cannot serve the ForcedAligner over HTTP** (its `/audio/transcriptions` has no text param), so it must run locally. Models download into `models/qwen/`.
+
+A/B classification uses a lightweight **Silero VAD** speech-presence check, also separate.
 
 ### Per-clip pipeline
 
 Scan source folder(s) → dedup by fingerprint → ffprobe metadata + ffmpeg thumbnail → Silero VAD speech check:
-- **Speech present → A-roll:** mlx-whisper full Chinese transcript (stored) → Qwen3.6 (via OMLX) summary + tags.
+- **Speech present → A-roll:** the configured speech engine produces the full transcript (stored) → Qwen3.6 (via OMLX) summary + tags.
 - **No speech → B-roll:** ffmpeg keyframes → Qwen3-VL (via OMLX, base64) visual tags + description.
 
 Then write metadata/type/summary/tags/transcript/thumbnail path to SQLite and copy the original into the dated library folder. A/B verdicts and tags are AI-generated but **user-correctable**, and corrections are remembered.
