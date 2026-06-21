@@ -16,6 +16,9 @@
 
 把一堆 A-roll（有中文解说）和 B-roll（纯空镜）自动**分类、打标签、生成简介与缩略图**，让你之后能按日期 / 类型 / 标签 / 台词快速找回任意一段素材。面向 macOS（Apple Silicon）+ Final Cut Pro 工作流，**全程离线、AI 全本地**。
 
+> ### ⚠️ 仅支持 Apple Silicon（M 系列）芯片的 Mac（M1 及以上）
+> CutFinder **只能跑在 M 系列芯片的 Mac 上**。因为所有模型都用 Apple 的 **MLX** 框架在本地运行 —— OMLX（文本/视觉）、`mlx-whisper` / Qwen3-ASR + ForcedAligner（语音）**都只支持 Apple Silicon**。Intel Mac、Windows、Linux **均不支持**。
+
 ---
 
 ## 快速开始 —— `make app`

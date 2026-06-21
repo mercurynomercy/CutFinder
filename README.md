@@ -16,6 +16,9 @@
 
 CutFinder takes a pile of **A-roll** (clips with spoken narration — Chinese by default) and **B-roll** (pure visuals, no narration) and automatically **classifies, tags, summarizes, and thumbnails** every clip, so you can later find any shot by date, type, tag, or spoken line. Built for macOS (Apple Silicon) + Final Cut Pro workflows — **fully offline, all AI runs on your own machine.**
 
+> ### ⚠️ Requires an Apple Silicon Mac (M1 or newer)
+> CutFinder runs **only on M-series Macs**. Every model runs locally through Apple's MLX framework — OMLX (text/vision) and `mlx-whisper` / Qwen3-ASR + ForcedAligner (speech) are all **Apple-Silicon-only**. Intel Macs, Windows, and Linux are **not supported**.
+
 ---
 
 ## Get started — `make app`
