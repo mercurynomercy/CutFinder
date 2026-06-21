@@ -84,6 +84,13 @@ class SubtitleExporter:
         )
         segments = list(transcript.segments)
 
+        # The Qwen engine already produces accurate text on real per-character
+        # timings, so the OMLX-ASR character-diff hybrid (whisper-only) must be
+        # skipped — running it would re-introduce the alignment drift it exists
+        # to work around. LLM proofreading still applies to both engines.
+        if self._config is not None and self._config.prefs.transcription_engine == "qwen":
+            asr_model = None
+
         # Optional hybrid refinement: keep whisper timing, improve the text.
         if segments and self._config is not None and (asr_model or correct_model):
             texts = [s.text for s in segments]

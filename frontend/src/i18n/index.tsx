@@ -232,10 +232,18 @@ const en = {
   'settings.visionModelDesc':
     'For B-roll visual tags + description generation (via OMLX, multimodal model). Defaults to Qwen3-VL-8B if blank.',
 
-  'settings.whisperTitle': 'Whisper (speech-to-text)',
-  'settings.whisperDesc': 'A-roll Chinese speech-to-text (separate local process, not via OMLX).',
+  'settings.whisperTitle': 'Speech engine (speech-to-text)',
+  'settings.whisperDesc': 'How A-roll speech is transcribed — used everywhere: catalog analysis, keyframes, and subtitle export. Runs locally, not via OMLX.',
   'settings.whisperModel': 'Whisper model',
   'settings.whisperModelDesc': 'HuggingFace model id. Downloaded into the project models/ folder on first use and loaded offline afterwards.',
+  'settings.speechEngine': 'Engine',
+  'settings.speechEngineDesc': 'Whisper, or Qwen3-ASR + ForcedAligner (more accurate for Chinese / zh-en mixed audio, with real word-level subtitle timing).',
+  'settings.engineWhisper': 'Whisper (large-v3)',
+  'settings.engineQwen': 'Qwen3-ASR + ForcedAligner',
+  'settings.qwenAsrModel': 'Qwen ASR model',
+  'settings.qwenAlignerModel': 'Qwen ForcedAligner model',
+  'settings.qwenMaxChunk': 'Max chunk seconds',
+  'settings.qwenMaxChunkDesc': 'Audio is split at silences (VAD) into chunks no longer than this before transcription + alignment. Larger = fewer cue breaks and faster; kept under the aligner limit.',
 
   'settings.processingOptions': 'Processing options',
   'settings.supportedExtensions': 'Supported extensions',
@@ -475,10 +483,18 @@ const zh: Record<Key, string> = {
   'settings.visionModelDesc':
     '用于 B-roll 的视觉标签 + 描述生成（通过 OMLX，多模态模型）。留空则用默认 Qwen3-VL-8B。',
 
-  'settings.whisperTitle': 'Whisper（语音转写）',
-  'settings.whisperDesc': 'A-roll 中文语音转文字（独立本地进程，不经过 OMLX）。',
+  'settings.whisperTitle': '语音引擎（语音转写）',
+  'settings.whisperDesc': 'A-roll 语音转文字的方式——全程通用：编目分析、关键帧、字幕导出都用它。本地运行，不经过 OMLX。',
   'settings.whisperModel': 'Whisper model',
   'settings.whisperModelDesc': 'HuggingFace 模型 id。首次使用时下载到项目的 models/ 目录，之后离线加载。',
+  'settings.speechEngine': '引擎',
+  'settings.speechEngineDesc': 'Whisper，或 Qwen3-ASR + ForcedAligner（中文 / 中英混合更准确，字幕带真实的逐词时间轴）。',
+  'settings.engineWhisper': 'Whisper（large-v3）',
+  'settings.engineQwen': 'Qwen3-ASR + ForcedAligner',
+  'settings.qwenAsrModel': 'Qwen ASR 模型',
+  'settings.qwenAlignerModel': 'Qwen ForcedAligner 模型',
+  'settings.qwenMaxChunk': '分段最大秒数',
+  'settings.qwenMaxChunkDesc': '转写+对齐前，音频会按静音（VAD）切成不超过该长度的片段。越大切分越少、速度越快；已限制在对齐器上限以内。',
 
   'settings.processingOptions': '处理选项',
   'settings.supportedExtensions': '支持的扩展名',
