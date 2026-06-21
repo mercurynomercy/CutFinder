@@ -138,6 +138,9 @@ class SubtitleExportRequest(BaseModel):
     out_dir: str = Field(..., min_length=1)
     formats: list[str] = ["itt", "srt"]
     language: Optional[str] = None
+    # Optional OMLX hybrid refinement; empty/None = plain whisper transcription.
+    asr_model: Optional[str] = None
+    correct_model: Optional[str] = None
 
 
 class SubtitleExportResponse(BaseModel):

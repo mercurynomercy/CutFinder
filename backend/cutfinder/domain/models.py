@@ -131,6 +131,11 @@ class SubtitleRequest(BaseModel, frozen=True):
     out_dir: str
     formats: list[str] = ["itt", "srt"]
     language: str = "zh"
+    # Optional OMLX hybrid refinement (timing always stays whisper's):
+    # *asr_model* replaces cue text with an aligned OMLX ASR transcript;
+    # *correct_model* proofreads the cue text. Empty/None = plain whisper.
+    asr_model: str | None = None
+    correct_model: str | None = None
 
 
 # ── SummaryResult (A-roll AI output) ─────────────────────────────

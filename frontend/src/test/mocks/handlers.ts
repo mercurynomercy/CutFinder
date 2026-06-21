@@ -106,6 +106,11 @@ let JOBS_PAUSED = false
 // ── Handlers (aligned with backend routes in routes.py) ────
 
 export const handlers = [
+  // GET /api/omlx/models — model ids for the subtitle refinement dropdowns
+  http.get('http://localhost:5080/api/omlx/models', () =>
+    HttpResponse.json({ models: ['Qwen3-ASR-1.7B', 'Qwen3.6-35B-A3B'] }),
+  ),
+
   // GET /api/clips — list clips with optional query params (date, roll_type, tag)
   http.get('http://localhost:5080/api/clips', ({ request }) => {
     const url = new URL(request.url)

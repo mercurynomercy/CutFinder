@@ -825,11 +825,17 @@ def _build_router(ctx: Any) -> Any:
             except Exception:  # noqa: BLE001 — fall back to Chinese default
                 language = "zh"
 
+        # Treat blank model names as "off" so the hybrid steps are skipped.
+        asr_model = (body.asr_model or "").strip() or None
+        correct_model = (body.correct_model or "").strip() or None
+
         req = SubtitleRequest(
             video_path=body.video_path,
             out_dir=body.out_dir,
             formats=formats,
             language=language,
+            asr_model=asr_model,
+            correct_model=correct_model,
         )
         job_id = await ctx.worker_queue.enqueue_subtitle(req)
         return {"job_id": job_id}
@@ -874,6 +880,35 @@ def _build_router(ctx: Any) -> Any:
 
         await proc.communicate()
         return {"status": "ok"}
+
+    # ── OMLX models (GET /omlx/models) ───────────────────────
+    @router.get("/omlx/models")
+    async def list_omlx_models() -> dict[str, list[str]]:
+        """List model ids served by the configured OMLX server (for dropdowns)."""
+        import asyncio as _asyncio
+
+        from cutfinder.config import load_config  # noqa: E402
+
+        if not ctx.library_path:
+            raise HTTPException(status_code=503, detail="Library not configured")
+        try:
+            config = load_config(ctx.library_path)
+        except Exception as exc:  # noqa: BLE001
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+        def _fetch() -> list[str]:
+            from openai import OpenAI
+
+            client = OpenAI(
+                base_url=config.env.OMLX_BASE_URL, api_key=config.env.OMLX_API_KEY,
+            )
+            return [m.id for m in client.models.list().data]
+
+        try:
+            ids = await _asyncio.to_thread(_fetch)
+        except Exception as exc:  # noqa: BLE001 — OMLX down / misconfigured
+            raise HTTPException(status_code=502, detail=f"OMLX unavailable: {exc}") from exc
+        return {"models": ids}
 
     return router
 

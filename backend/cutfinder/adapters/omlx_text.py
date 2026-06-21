@@ -94,6 +94,41 @@ Sentences:
 
 _CUTS_PROMPTS = {"zh": _CUTS_PROMPT_ZH, "en": _CUTS_PROMPT_EN}
 
+_CORRECT_PROMPT_ZH = """\
+你是专业的字幕校对助手。下面是按时间顺序编号的字幕分句（来自语音识别，可能有错别字、\
+同音字或标点问题）。请逐条校正：修正识别错误、错别字和明显的标点，使其通顺自然。
+
+严格要求：
+- 必须返回**与输入数量完全相同**的条目，顺序一致，与输入一一对应。
+- **不要**合并、拆分或增删任何条目；不要翻译；不要改变原意。
+- 若某条无需修改，原样返回。
+
+请仅以如下 JSON 回复（不要其他内容）：
+{{"segments": ["第1条校正后", "第2条校正后", ...]}}
+
+字幕分句：
+{segments}
+"""
+
+_CORRECT_PROMPT_EN = """\
+You are a professional subtitle proofreader. Below are time-ordered, numbered \
+subtitle cues from speech recognition (which may contain misrecognitions, \
+typos, or punctuation issues). Correct each cue so it reads naturally.
+
+Strict rules:
+- Return **exactly the same number** of cues, in the same order, one-to-one.
+- Do NOT merge, split, add, or remove cues; do NOT translate; do NOT change meaning.
+- If a cue needs no change, return it unchanged.
+
+Reply ONLY as the following JSON (no extra content):
+{{"segments": ["corrected cue 1", "corrected cue 2", ...]}}
+
+Cues:
+{segments}
+"""
+
+_CORRECT_PROMPTS = {"zh": _CORRECT_PROMPT_ZH, "en": _CORRECT_PROMPT_EN}
+
 
 # ── OmlxSummarizer ───────────────────────────────────────────────
 
@@ -320,3 +355,91 @@ class OmlxSummarizer(Summarizer):
             if len(out) >= n:
                 break
         return out
+
+
+# ── OmlxSubtitleCorrector ────────────────────────────────────────
+
+class OmlxSubtitleCorrector:
+    """Proofread subtitle cue texts with the OMLX text model (Qwen3.6).
+
+    Used by the standalone subtitle export's optional "text correction" step:
+    given the per-cue texts (already timed by whisper), it returns a same-length
+    list of corrected texts. Timing/segment count is never changed.
+
+    Parameters
+    ----------
+    config:
+        Application config carrying the OMLX endpoint/key and output language.
+    model:
+        Override the text model name (defaults to env/prefs text model).
+    """
+
+    def __init__(self, config: AppConfig, model: str | None = None) -> None:
+        self._config = config
+        self._model = (
+            model
+            or config.env.TEXT_MODEL.strip()
+            or config.prefs.text_model
+        )
+
+    def correct(self, texts: list[str]) -> list[str]:
+        """Return corrected cue texts, preserving count and order.
+
+        Falls back to the original *texts* if the model is unavailable or
+        returns a list of a different length (so correction never drops cues).
+        """
+        if not texts:
+            return texts
+
+        from openai import APIConnectionError, OpenAI
+
+        from ._jsonparse import parse_json_object
+
+        numbered = "\n".join(f"[{i}] {t}" for i, t in enumerate(texts))
+        prompt_template = _CORRECT_PROMPTS.get(
+            self._config.prefs.output_language, _CORRECT_PROMPT_ZH
+        )
+        prompt = prompt_template.format(segments=numbered)
+
+        client = OpenAI(
+            base_url=self._config.env.OMLX_BASE_URL,
+            api_key=self._config.env.OMLX_API_KEY,
+        )
+        max_retries = 2
+        for attempt in range(1 + max_retries):
+            try:
+                response = client.chat.completions.create(
+                    model=self._model,
+                    messages=[{"role": "user", "content": prompt}],
+                    max_tokens=2048,
+                    temperature=0.2,
+                    extra_body={"chat_template_kwargs": {"enable_thinking": False}},
+                )
+            except APIConnectionError as e:
+                if attempt == max_retries:
+                    raise RuntimeError(
+                        f"OMLX connection failed after {1 + max_retries} attempt(s): {e}"
+                    ) from e
+                continue
+            except Exception as e:  # noqa: BLE001
+                if attempt == max_retries:
+                    raise RuntimeError(
+                        f"OMLX request failed after {1 + max_retries} attempt(s): {e}"
+                    ) from e
+                continue
+
+            raw = response.choices[0].message.content
+            data = parse_json_object(raw) if raw else None
+            if data is None:
+                continue
+            seg_raw = data.get("segments")
+            if (
+                isinstance(seg_raw, list)
+                and len(seg_raw) == len(texts)
+                and all(isinstance(s, str) for s in seg_raw)
+            ):
+                return [s.strip() for s in seg_raw]
+            # Wrong shape/length → don't risk dropping cues; keep originals.
+            return texts
+
+        return texts

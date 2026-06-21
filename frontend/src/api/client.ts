@@ -342,9 +342,22 @@ export const api = {
     return _fetch('/api/pick-file', { method: 'POST' })
   },
 
-  /** POST /api/subtitles/export — transcribe a video and write subtitle files. */
-  exportSubtitles(body: { video_path: string; out_dir: string; formats: string[]; language?: string }): Promise<{ job_id: number }> {
+  /** POST /api/subtitles/export — transcribe a video and write subtitle files.
+   * Optional `asr_model` / `correct_model` enable the OMLX hybrid refinement. */
+  exportSubtitles(body: {
+    video_path: string
+    out_dir: string
+    formats: string[]
+    language?: string
+    asr_model?: string
+    correct_model?: string
+  }): Promise<{ job_id: number }> {
     return _fetch('/api/subtitles/export', { method: 'POST', body: JSON.stringify(body) })
+  },
+
+  /** GET /api/omlx/models — model ids served by the configured OMLX server. */
+  getOmlxModels(): Promise<{ models: string[] }> {
+    return _fetch('/api/omlx/models')
   },
 
   /** GET /api/subtitles/{jobId} — subtitle export result (files populate once done). */

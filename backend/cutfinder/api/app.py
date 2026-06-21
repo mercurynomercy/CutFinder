@@ -194,6 +194,7 @@ def _build_into(ctx: LibraryContext, library_path: Union[str, Path]) -> None:
         transcriber=MlxWhisperTranscriber(
             model=whisper_model, separator=vocal_separator
         ),
+        config=config,
     )
 
     # When the work queue drains, unload the in-process models (whisper +
