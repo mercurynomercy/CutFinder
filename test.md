@@ -103,26 +103,30 @@ segments=None,  # LLM-based model doesn't produce word-level timestamps
 
 ---
 
-## 推荐架构（A-roll 路径）
+## 最终落地架构（A-roll 路径）
+
+> **更新（2026-06-21）：上面的 whisper(对时) + Qwen3(文本) 字符对齐方案已被废弃。**
+> 实测中 difflib 字符对齐在长视频上会漂移：19 分钟样片约 3:27 之后字幕开始错位（重复"饿了，" + 空 cue）——whisper 的错误中文文本与 Qwen3 的准确文本越对越偏。改用**真正的强制对齐器**（Qwen3-ForcedAligner）从准确文本 + 音频直接得到逐字时间戳，彻底去掉 whisper 计时这一环。
 
 ```
 A-roll → Demucs 人声分离(可选)
-       ├─ mlx-whisper      → 逐句时间轴（只取时间）
-       └─ Qwen3-ASR(OMLX)  → 准确中文/中英文本
-       → 字符对齐：Qwen3 文本铺到 whisper 时间段
-       → Transcript(segments)
+       → Silero VAD 切成 ≤60s（上限 300s，受对齐器约 400s 时间戳范围限制）片段
+       → 逐段：
+           ├─ Qwen3-ASR(本地 mlx-audio)        → 准确中文/中英文本
+           └─ Qwen3-ForcedAligner(本地 mlx-audio) → 逐字时间戳（偏移回整段时间轴）
+       → 标点回贴 + 归并成字幕 cue → Transcript(segments)
           ├─ ① subtitle_exporter → SRT / iTT
           └─ ② 全文 → Qwen3.6 → 摘要 + 标签
 ```
 
-代价：每个 A-roll 两遍 ASR（都快）。whisper 留作"对时器"，不再当文本引擎。
+要点：
+- **全本地**：ASR 与对齐器都经 `mlx-audio` 运行（**OMLX 的 `/audio/transcriptions` 无法传参考文本，无法托管对齐器**），模型在 `models/qwen/`。
+- **防复读**：Qwen3-ASR 会复读/幻觉跑满 max_tokens，须 `repetition_penalty=1.1` + 按片段时长限制 `max_tokens`，并丢弃零时长/重复 cue。
+- **可选引擎**：保留 whisper，由「设置 → 语音引擎」(`transcription_engine`) 切换；该选择作用于编目转写、关键帧、字幕导出。
+- 19 分钟样片验证：到 19:00 仍精确无漂移，60s 切段约 34s 跑完（比 24s 切段快约 3 倍）。
 
 ---
 
-## ⚠️ 依赖副作用（待处理）
+## 依赖（已落地）
 
-为测 Fun-ASR 执行了 `uv pip install mlx-audio-plus`，引入 transformers 等大量包，并**降级**了项目原有依赖：
-- `starlette` 1.3.1 → 0.52.1
-- `websockets` 16.0 → 15.0.1
-
-若不采用 Fun-ASR，应回滚（`uv sync` 还原 lock 版本），以免影响 FastAPI app。
+`mlx-audio` 已作为后端正式依赖加入 `pyproject.toml` / `uv.lock`（Qwen3-ASR + ForcedAligner 由它加载）。早期为测 Fun-ASR 误装 `mlx-audio-plus` 导致的 `starlette` / `websockets` 降级问题已随 `uv lock` 重新解析消除。

@@ -59,7 +59,8 @@ Drag `dist/CutFinder.app` to `/Applications` and double-click:
 ## What it does
 
 - **Automatic A-roll / B-roll classification** — detects the presence of spoken narration (Silero VAD). The verdict is correctable by hand, and corrections are remembered.
-- **A-roll summary + tags** — `mlx-whisper` transcribes the Chinese narration → a Qwen text model summarizes it. The full transcript is stored and searchable.
+- **A-roll summary + tags** — the configurable speech engine transcribes the Chinese narration → a Qwen text model summarizes it. The full transcript is stored and searchable.
+- **Selectable speech engine (Whisper or Qwen3-ASR + ForcedAligner)** — pick in Settings; the choice drives *all* A-roll speech work (transcription, keyframes, subtitle export). The Qwen pair is recommended for Chinese / zh-en mixed audio: accurate text + real per-character timestamps via local forced alignment (no whisper timing drift), VAD-chunked so it scales to long video. See [Model serving](#model-serving).
 - **B-roll visual tags + description** — extracted frames are sent to a vision model that describes what's on screen.
 - **Photo cataloging** — still photos (`.jpg/.jpeg/.png/.heic`; HEIC decoded via `pillow-heif`) are scanned alongside video and cataloged as a separate **Photo** type: a JPEG preview is sent to the vision model for a description + tags, EXIF capture time dates them (falling back to file time), and the original is copied to `<library>/YYYY-MM-DD/photos/photo-0001.ext`. Photos have no transcript, keyframes, or re-analysis. The supported photo extensions are editable in Settings.
 - **Switchable interface language (EN / ZH)** — the entire UI can be flipped between **English and Chinese** in Settings (defaults to English, remembered per device), fully independent of the AI output language below.
@@ -69,7 +70,7 @@ Drag `dist/CutFinder.app` to `/Applications` and double-click:
 - **One-click Open / Reveal in Finder** — thumbnails and the detail panel open the video in the default player; date-group headers open that date's folder in Finder (macOS `open`).
 - **Re-analyze a single clip** — re-run the AI with one click (when changing models or unhappy with the result), preserving your manual corrections and tags. If the A/B verdict was wrong, toggle the type in the detail panel — the copy is **moved** to the correct A-roll/B-roll folder and renamed, and `library_path` is updated.
 - **Keyframe suggestions (cut points + highlight frames)** — for each clip, up to N ranked editing suggestions (default 3, configurable): **A-roll uses the text model over the transcript**, **B-roll uses Qwen3-VL over sampled frames**. Each suggestion carries in/out timecodes, a representative frame, and a one-line rationale. Suggestions can auto-queue after a scan (a Settings toggle, **off by default** since it's the most expensive step) or be generated on demand in the detail panel; gallery cards show a "has suggestions" badge.
-- **Subtitle export for finished cuts** — pick any edited video → re-transcribe with `mlx-whisper` (vocals isolated first to strip BGM) → export Final Cut Pro-native **iTT + SRT** into a folder you choose (source video stays read-only, subtitle language follows the AI output language, transcribe-only — no translation). The export shows a **live progress bar synced to the real backend progress**, advancing through two phases: vocal separation, then transcription.
+- **Subtitle export for finished cuts** — pick any edited video → re-transcribe with the configured speech engine (vocals isolated first to strip BGM) → export Final Cut Pro-native **iTT + SRT** into a folder you choose (source video stays read-only, subtitle language follows the AI output language, transcribe-only — no translation). With the Qwen engine, timestamps come from real forced alignment so cues stay accurate on long clips. The export shows a **live progress bar synced to the real backend progress**, advancing through two phases: vocal separation, then transcription.
 - **Capture-date display** — both thumbnail cards and the detail panel show each clip's capture time (embedded capture time preferred, falling back to file creation time).
 - **Task queue management** — a dedicated Task Queue page lists every scan / re-analyze job, with delete, retry-failed, and global pause/resume; scanning prompts you when the queue is paused.
 - **Progress bars survive a refresh** — the scan/keyframe progress bar and the subtitle-export progress bar re-attach to jobs still running in the backend after a page reload (the work never stopped, only the UI lost track), so you don't have to re-trigger anything.
@@ -97,7 +98,7 @@ API layer (FastAPI, thin)                          :5081
    │  create_app() wires real adapters into a mutable LibraryContext (library bound at runtime)
 Orchestration (Pipeline Orchestrator + background queue/SSE progress)
    │  depends only on interfaces (Protocols)
-Adapters ── ffmpeg/ffprobe · Silero VAD · mlx-whisper · OMLX (text + vision) · Pillow (photos) · SQLite
+Adapters ── ffmpeg/ffprobe · Silero VAD · mlx-whisper / Qwen3-ASR+ForcedAligner · OMLX (text + vision) · Pillow (photos) · SQLite
 ```
 
 Every external dependency hides behind an interface; business logic depends only on those interfaces, so modules are independently swappable and testable. See [`doc/detailed-design.md`](./doc/detailed-design.md).
@@ -109,9 +110,13 @@ Every external dependency hides behind an interface; business logic depends only
 | A-roll summary/tags (text) | `Qwen3.6-35B-A3B` | OMLX (OpenAI-compatible API) |
 | B-roll visual recognition (vision) | `Qwen3-VL-8B` | OMLX (same API, frames sent as base64) |
 | Photo description + tags (vision) | `Qwen3-VL-8B` | OMLX (a JPEG preview of the photo sent as base64) |
-| A-roll speech transcription | `mlx-whisper` (default `mlx-community/whisper-large-v3-mlx`) | Separate process (OMLX does not serve audio) |
+| A-roll speech transcription | **Speech engine, selectable in Settings:** `mlx-whisper` (default `mlx-community/whisper-large-v3-mlx`) **or** Qwen3-ASR + ForcedAligner (`mlx-community/Qwen3-ASR-1.7B-8bit` + `Qwen3-ForcedAligner-0.6B-8bit`) | Separate local process (OMLX does not serve audio) |
 | A/B speech detection | Silero VAD | Local |
 | Vocal separation (strip BGM before transcribing) | Demucs (`htdemucs`, ~80 MB) | Local (torch/MPS); isolates vocals, then transcribes |
+
+**Speech engine (Settings → Speech engine).** One choice governs *all* A-roll speech work — catalog transcription, keyframe reasoning, and subtitle export:
+- **Whisper** — `mlx-whisper` large-v3. Solid for English.
+- **Qwen3-ASR + ForcedAligner** (recommended for Chinese / zh-en mixed audio) — Qwen3-ASR transcribes far more accurately than whisper on Chinese, and the ForcedAligner gives real per-character timestamps, so subtitles stay correctly timed to the end of long clips (whisper's timing drifted on long footage). Audio is split at silences (Silero VAD) into chunks (default 60s, max 300s — the aligner can only timestamp ~400s per chunk) so it scales to arbitrarily long video. Both models run locally via `mlx-audio` (OMLX cannot serve the aligner over HTTP).
 
 Background music mixed into footage gets transcribed as garbage or triggers Whisper hallucinations. Before transcribing, [Demucs](https://github.com/adefossez/demucs) isolates the vocal stem and drops the accompaniment. **Subtitle export (finished cuts) always separates**; the **A-roll ingest pipeline has a `vocal_separation` toggle, off by default** (raw footage usually has no added music). On separation failure it falls back to the raw audio so transcription never breaks.
 
@@ -223,9 +228,9 @@ cd frontend && npx vite        # http://localhost:5080
 make models                     # pre-download mlx-whisper large-v3-mlx + Demucs htdemucs
 ```
 
-This pre-downloads both the Whisper model and the Demucs `htdemucs` vocal-separation model into the project's **`models/` folder** (gitignored). After that, transcription / subtitle export runs fully offline.
+This pre-downloads the Whisper model and the Demucs `htdemucs` vocal-separation model into the project's **`models/` folder** (gitignored). After that, transcription / subtitle export runs fully offline.
 
-You don't have to run this — both models are **downloaded automatically on first use** into `models/whisper/` and `models/demucs/`. `make models` just warms them ahead of time so the first run isn't slowed by a download. No path configuration needed.
+You don't have to run this — models are **downloaded automatically on first use**: whisper into `models/whisper/`, Demucs into `models/demucs/`, and (when the **Qwen** speech engine is selected) Qwen3-ASR + ForcedAligner into `models/qwen/`. `make models` just warms the defaults ahead of time so the first run isn't slowed by a download. No path configuration needed.
 
 ---
 

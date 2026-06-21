@@ -59,7 +59,8 @@ make app          # → dist/CutFinder.app（以及 dist/CutFinder.dmg）
 ## 它能做什么
 
 - **自动区分 A-roll / B-roll**：检测有无人声解说（Silero VAD），可手动纠正且会被记住。
-- **A-roll 简介 + 标签**：`mlx-whisper` 转写中文解说 → Qwen 文本模型总结，转写全文一并保存可搜索。
+- **A-roll 简介 + 标签**：由可选的语音引擎转写中文解说 → Qwen 文本模型总结，转写全文一并保存可搜索。
+- **语音引擎可选（Whisper 或 Qwen3-ASR + ForcedAligner）**：在「设置」里选择；该选择会作用于**所有** A-roll 语音处理（转写、关键帧、字幕导出）。中文 / 中英混合推荐用 Qwen 组合：文本更准，且经本地强制对齐得到真实的逐字时间戳（不会像 whisper 那样时间轴漂移），按 VAD 切段因此能处理超长视频。详见 [模型服务](#模型服务)。
 - **B-roll 画面标签 + 描述**：抽帧交给视觉模型识别画面内容。
 - **照片入库**：静态照片（`.jpg/.jpeg/.png/.heic`；HEIC 经 `pillow-heif` 解码）与视频一起扫描，作为独立的 **照片** 类型入库：把一张 JPEG 预览交给视觉模型出描述 + 标签，按 EXIF 拍摄时间归档（缺失则回退文件时间），原图复制到 `<library>/YYYY-MM-DD/photos/photo-0001.ext`。照片没有转写、关键帧、重分析。支持的照片后缀可在「设置」里编辑。
 - **界面语言可选（中 / 英）**：整套 UI 文案可在「设置」页切换**英文 / 中文**（默认英文，按设备记忆），与下面的 **AI 输出语言**相互独立、互不影响。
@@ -96,7 +97,7 @@ API 层 (FastAPI，薄)                       :5081
    │  create_app() 把真实适配器装配到可变 LibraryContext（库可运行时热绑定）
 编排层 (Pipeline Orchestrator + 后台队列/SSE 进度)
    │  只依赖接口(Protocol)
-适配器层 ── ffmpeg/ffprobe · Silero VAD · mlx-whisper · OMLX(文本+视觉) · Pillow(照片) · SQLite
+适配器层 ── ffmpeg/ffprobe · Silero VAD · mlx-whisper / Qwen3-ASR+ForcedAligner · OMLX(文本+视觉) · Pillow(照片) · SQLite
 ```
 
 每个外部依赖都藏在接口后面，业务逻辑只依赖接口 → 模块可独立替换与测试。详见 [`doc/detailed-design.md`](./doc/detailed-design.md)。
@@ -108,8 +109,13 @@ API 层 (FastAPI，薄)                       :5081
 | A-roll 简介/标签（文本） | `Qwen3.6-35B-A3B`                                          | OMLX（OpenAI 兼容接口）     |
 | B-roll 画面识别（视觉）  | `Qwen3-VL-8B`                                              | OMLX（同接口，base64 传帧） |
 | 照片描述 + 标签（视觉）  | `Qwen3-VL-8B`                                              | OMLX（照片的 JPEG 预览以 base64 传入） |
-| A-roll 语音转写          | `mlx-whisper`（默认 `mlx-community/whisper-large-v3-mlx`） | 独立进程（OMLX 不托管音频） |
+| A-roll 语音转写          | **语音引擎，「设置」里可选：** `mlx-whisper`（默认 `mlx-community/whisper-large-v3-mlx`）**或** Qwen3-ASR + ForcedAligner（`mlx-community/Qwen3-ASR-1.7B-8bit` + `Qwen3-ForcedAligner-0.6B-8bit`） | 独立本地进程（OMLX 不托管音频） |
 | A/B 人声检测             | Silero VAD                                                 | 本地                        |
+
+**语音引擎（设置 → 语音引擎）。** 一个选项决定**所有** A-roll 语音处理 —— 编目转写、关键帧推理、字幕导出：
+
+- **Whisper** —— `mlx-whisper` large-v3，英文较稳。
+- **Qwen3-ASR + ForcedAligner**（中文 / 中英混合推荐）—— Qwen3-ASR 的中文文本远比 whisper 准确，ForcedAligner 给出真实的逐字时间戳，因此长片段的字幕也不会像 whisper 那样越到后面越漂移。音频先按静音（Silero VAD）切成片段（默认 60 秒，上限 300 秒 —— 对齐器单段只能标注约 400 秒内的时间戳），所以能处理任意长度的视频。两个模型都通过 `mlx-audio` 本地运行（OMLX 无法经 HTTP 托管对齐器）。
 
 文本与视觉模型都由 [OMLX](https://github.com/jundot/omlx)（Apple Silicon 本地推理服务器，菜单栏 App）托管。
 
@@ -220,7 +226,7 @@ cd frontend && npx vite        # http://localhost:5080
 make models                     # 预下载 mlx-whisper large-v3-mlx + Demucs htdemucs
 ```
 
-两个模型都会下载到项目的 **`models/` 目录**（已 gitignore）。其实**无需手动运行**——首次使用时会自动下载到 `models/whisper/` 和 `models/demucs/`，`make models` 只是提前预热，免得首次运行卡在下载上。无需配置任何路径。
+模型会下载到项目的 **`models/` 目录**（已 gitignore）。其实**无需手动运行**——首次使用时会自动下载：whisper 到 `models/whisper/`、Demucs 到 `models/demucs/`，选择 **Qwen** 语音引擎时 Qwen3-ASR + ForcedAligner 到 `models/qwen/`。`make models` 只是提前预热默认模型，免得首次运行卡在下载上。无需配置任何路径。
 
 ---
 
