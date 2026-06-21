@@ -211,7 +211,6 @@ def _build_into(ctx: LibraryContext, library_path: Union[str, Path]) -> None:
     subtitle_exporter = SubtitleExporter(
         probe=FfmpegProbe(),
         transcriber=_make_transcriber(vocal_separator),
-        config=config,
     )
 
     # When the work queue drains, unload the in-process models (whisper +

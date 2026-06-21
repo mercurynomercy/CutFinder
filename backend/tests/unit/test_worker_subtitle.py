@@ -34,8 +34,6 @@ class _FakeExporter:
         formats: list[str],
         language: str,
         *,
-        asr_model: str | None = None,
-        correct_model: str | None = None,
         on_progress: Any = None,
     ) -> list[Path]:
         self.calls.append((video_path, out_dir, formats, language))

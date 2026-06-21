@@ -63,9 +63,6 @@ export function SubtitlesPage({ onClose }: SubtitlesPageProps) {
   const [outDir, setOutDir] = useState<string | null>(null)
   const [itt, setItt] = useState(true)
   const [srt, setSrt] = useState(true)
-  const [models, setModels] = useState<string[]>([])
-  const [asrModel, setAsrModel] = useState('')
-  const [correctModel, setCorrectModel] = useState('')
   const [phase, setPhase] = useState<Phase>('idle')
   const [files, setFiles] = useState<string[]>([])
   const [jobId, setJobId] = useState<number | null>(null)
@@ -96,16 +93,6 @@ export function SubtitlesPage({ onClose }: SubtitlesPageProps) {
       .catch(() => {}) // backend unreachable / no jobs — nothing to restore
     return () => { cancelled = true }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  // Load the OMLX model list for the refinement dropdowns (best-effort: if the
-  // server is unreachable the selects just stay at "None" and export uses whisper).
-  useEffect(() => {
-    let cancelled = false
-    api.getOmlxModels()
-      .then(({ models }) => { if (!cancelled) setModels(models) })
-      .catch(() => {}) // OMLX down / unconfigured — leave the dropdowns empty
-    return () => { cancelled = true }
   }, [])
 
   // Tick an elapsed timer while a job is running so the user sees it's working
@@ -148,8 +135,6 @@ export function SubtitlesPage({ onClose }: SubtitlesPageProps) {
         video_path: videoPath,
         out_dir: outDir,
         formats,
-        ...(asrModel ? { asr_model: asrModel } : {}),
-        ...(correctModel ? { correct_model: correctModel } : {}),
       })
       setJobId(job_id)
       const status = await waitForJob(job_id, setProgress)
@@ -252,37 +237,6 @@ export function SubtitlesPage({ onClose }: SubtitlesPageProps) {
               </label>
             </div>
             <p className="mt-3 text-xs text-[--text-muted]">{t('subtitles.languageNote')}</p>
-          </fieldset>
-
-          {/* ── Text refinement (optional OMLX hybrid) ─ */}
-          <fieldset className="rounded-lg border border-[--border] bg-[--surface-1] p-4">
-            <legend className="text-sm font-medium text-[--text-primary]">{t('subtitles.refine')}</legend>
-
-            <label className="mt-3 block text-xs font-medium text-[--text-secondary]">{t('subtitles.asrModel')}</label>
-            <select
-              value={asrModel}
-              onChange={(e) => setAsrModel(e.target.value)}
-              className="mt-1 w-full rounded-md border border-[--border] bg-[--surface-2] px-3 py-1.5 text-sm text-[--text-primary]"
-            >
-              <option value="">{t('subtitles.modelNone')}</option>
-              {models.map((m) => <option key={m} value={m}>{m}</option>)}
-            </select>
-            <p className="mt-1 text-xs text-[--text-muted]">{t('subtitles.asrModelHint')}</p>
-
-            <label className="mt-4 block text-xs font-medium text-[--text-secondary]">{t('subtitles.correctModel')}</label>
-            <select
-              value={correctModel}
-              onChange={(e) => setCorrectModel(e.target.value)}
-              className="mt-1 w-full rounded-md border border-[--border] bg-[--surface-2] px-3 py-1.5 text-sm text-[--text-primary]"
-            >
-              <option value="">{t('subtitles.modelNoneCorrect')}</option>
-              {models.map((m) => <option key={m} value={m}>{m}</option>)}
-            </select>
-            <p className="mt-1 text-xs text-[--text-muted]">{t('subtitles.correctModelHint')}</p>
-
-            {models.length === 0 && (
-              <p className="mt-3 text-xs text-[--text-muted]">{t('subtitles.modelsUnavailable')}</p>
-            )}
           </fieldset>
 
           {/* ── Export ────────────────────────────── */}
