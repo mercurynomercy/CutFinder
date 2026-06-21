@@ -235,7 +235,7 @@ const en = {
   'settings.qwenAsrModel': 'Qwen ASR model',
   'settings.qwenAlignerModel': 'Qwen ForcedAligner model',
   'settings.qwenMaxChunk': 'Max chunk seconds',
-  'settings.qwenMaxChunkDesc': 'Audio is split at silences (VAD) into chunks no longer than this before transcription + alignment. Larger = fewer cue breaks and faster; kept under the aligner limit.',
+  'settings.qwenMaxChunkDesc': 'Audio is split at silences (VAD) into chunks no longer than this before transcription + alignment. Larger = fewer cue breaks and faster. Max 300s: the ForcedAligner can only assign timestamps within ~400s per chunk, so longer chunks would lose timing.',
 
   'settings.processingOptions': 'Processing options',
   'settings.supportedExtensions': 'Supported extensions',
@@ -478,7 +478,7 @@ const zh: Record<Key, string> = {
   'settings.qwenAsrModel': 'Qwen ASR 模型',
   'settings.qwenAlignerModel': 'Qwen ForcedAligner 模型',
   'settings.qwenMaxChunk': '分段最大秒数',
-  'settings.qwenMaxChunkDesc': '转写+对齐前，音频会按静音（VAD）切成不超过该长度的片段。越大切分越少、速度越快；已限制在对齐器上限以内。',
+  'settings.qwenMaxChunkDesc': '转写+对齐前，音频会按静音（VAD）切成不超过该长度的片段。越大切分越少、速度越快。最大 300 秒：对齐器单段只能标注约 400 秒以内的时间戳，超过会丢失时间轴。',
 
   'settings.processingOptions': '处理选项',
   'settings.supportedExtensions': '支持的扩展名',
