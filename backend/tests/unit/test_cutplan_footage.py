@@ -38,6 +38,15 @@ def test_date_range_and_roll_filter() -> None:
     assert {r.clip_id for r in all_in_range} == {a1, b1}
 
 
+def test_date_range_tolerates_non_zero_padded_and_slash_dates() -> None:
+    repo = MemoryRepository()
+    a1 = _make_clip(repo, "a1", "a", "2026-04-26")
+    retr = CatalogFootageRetriever(repo)
+    # Model may emit "2026-4-25" or "2026/4/25" — both must still match.
+    assert [r.clip_id for r in retr.search_footage(date_from="2026-4-25", date_to="2026-5-11")] == [a1]
+    assert [r.clip_id for r in retr.search_footage(date_from="2026/04/25", date_to="2026/05/11")] == [a1]
+
+
 def test_tag_filter() -> None:
     repo = MemoryRepository()
     c1 = _make_clip(repo, "c1", "b", "2026-05-01")

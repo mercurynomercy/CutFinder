@@ -137,7 +137,22 @@ def test_round_cap_finalizes_without_runaway() -> None:
     result = director.run(RoughCutRequest(), [], "go")
     assert len(llm.calls) == 5  # capped
     assert result.plan is None
-    assert "最大工具轮数" in result.assistant_text
+    # Searches all came back empty → diagnostic points at missing footage.
+    assert "素材" in result.assistant_text
+
+
+def test_round_cap_with_footage_but_no_plan_suggests_retry() -> None:
+    # Searches find footage but the model never emits a plan → retry guidance.
+    forever = [
+        AgentStep(tool_calls=[_tc("search_footage", {})]) for _ in range(50)
+    ]
+    director = CutDirector(
+        FakeLLM(forever), FakeRetriever([ClipBrief(clip_id=1, roll="a")], _details()),
+        max_tool_rounds=4,
+    )
+    result = director.run(RoughCutRequest(), [], "go")
+    assert result.plan is None
+    assert "重试" in result.assistant_text
 
 
 def test_vision_budget_enforced() -> None:

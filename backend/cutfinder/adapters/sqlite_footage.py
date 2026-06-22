@@ -7,6 +7,8 @@ keyframe cut points). Read-only: it never writes to the catalog.
 
 from __future__ import annotations
 
+import datetime as _dt
+
 from ..domain.models import ClipBrief, ClipDetail, ClipFilter, ClipSummary
 from ..ports.repository import CatalogRepository
 
@@ -78,16 +80,36 @@ class CatalogFootageRetriever:
         )
 
 
+def _parse_day(value: str | None) -> _dt.date | None:
+    """Parse an ISO-ish date bound, tolerating non-zero-padded month/day.
+
+    The model may emit ``2026-4-25`` or ``2026/04/25``; normalise both so the
+    comparison is on real dates (a naive string compare would mis-order these).
+    """
+    if not value:
+        return None
+    text = value.strip().replace("/", "-")
+    parts = text.split("-")
+    if len(parts) != 3:
+        return None
+    try:
+        return _dt.date(int(parts[0]), int(parts[1]), int(parts[2]))
+    except (ValueError, TypeError):
+        return None
+
+
 def _in_date_range(r: ClipSummary, date_from: str | None, date_to: str | None) -> bool:
     """True if the clip's capture date falls within [date_from, date_to]."""
-    if not date_from and not date_to:
+    lo = _parse_day(date_from)
+    hi = _parse_day(date_to)
+    if lo is None and hi is None:
         return True
     ct = r.capture_time
-    if ct is None or not hasattr(ct, "isoformat"):
+    if ct is None or not hasattr(ct, "date"):
         return False
-    day = ct.date().isoformat()
-    if date_from and day < date_from:
+    day = ct.date()
+    if lo is not None and day < lo:
         return False
-    if date_to and day > date_to:
+    if hi is not None and day > hi:
         return False
     return True

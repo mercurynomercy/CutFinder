@@ -147,10 +147,13 @@ class CutDirector:
 
         clip_cache: dict[int, ClipDetail] = {}
         vision_used = 0
+        searches = 0          # how many search_footage calls were made
+        clips_seen = 0        # max clips any single search returned
+        nudged = False        # whether we force-pushed an emit_plan reminder
         last_plan: CutPlan | None = None
         reprompted = False
 
-        for _ in range(self._max_tool_rounds):
+        for round_i in range(self._max_tool_rounds):
             step = self._llm.run(messages, TOOLS)
 
             if not step.tool_calls:
@@ -188,7 +191,10 @@ class CutDirector:
                         result = self._duration_feedback(plan)
                     self._append_tool_result(messages, tc.id, result)
                 elif tc.name == "search_footage":
-                    self._append_tool_result(messages, tc.id, self._do_search(tc.arguments))
+                    searches += 1
+                    text, count = self._do_search(tc.arguments)
+                    clips_seen = max(clips_seen, count)
+                    self._append_tool_result(messages, tc.id, text)
                 elif tc.name == "get_clip_detail":
                     self._append_tool_result(
                         messages, tc.id, self._do_detail(tc.arguments, clip_cache),
@@ -204,13 +210,40 @@ class CutDirector:
                 text = step.content or "已生成初剪分镜表。"
                 return CutDirectorResult(text, last_plan)
 
-        # Round cap hit — finalize with the best plan we have.
-        note = "（已达到最大工具轮数，返回当前草稿。）"
+            # Convergence push: once we're past the halfway point without a plan,
+            # force the model to commit to emit_plan (flaky local tool-callers
+            # otherwise keep exploring until the round cap).
+            if not nudged and round_i + 1 >= self._max_tool_rounds // 2:
+                nudged = True
+                messages.append({
+                    "role": "system",
+                    "content": (
+                        "你已检索足够。现在**必须**调用 emit_plan 给出最终分镜表，"
+                        "用目前掌握的素材尽力而为，不要再检索。"
+                        if clips_seen > 0
+                        else "多次检索未找到素材。请直接用文字回复用户：该日期范围内没有"
+                        "已编目的素材，提示其确认素材已扫描入库或调整日期范围。"
+                    ),
+                })
+
+        # Round cap hit — finalize with the best plan we have + a diagnostic note.
+        if last_plan is not None:
+            note = "（已返回当前分镜草稿。）"
+        elif searches > 0 and clips_seen == 0:
+            note = (
+                "没有在该日期范围找到已编目的素材。请确认素材已扫描入库，"
+                "或调整日期范围后重试。"
+            )
+        else:
+            note = (
+                "尝试多次仍未能生成分镜表（本地模型的工具调用可能不稳定）。"
+                "请重试，或把需求说得更具体一些。"
+            )
         return CutDirectorResult(note, last_plan)
 
     # ── tool dispatch ────────────────────────────────────────────
 
-    def _do_search(self, args: dict[str, Any]) -> str:
+    def _do_search(self, args: dict[str, Any]) -> tuple[str, int]:
         briefs = self._retriever.search_footage(
             date_from=args.get("date_from"),
             date_to=args.get("date_to"),
@@ -218,7 +251,14 @@ class CutDirector:
             tags=args.get("tags"),
             query=args.get("query"),
         )
-        return json.dumps([b.model_dump() for b in briefs], ensure_ascii=False)
+        payload = json.dumps([b.model_dump() for b in briefs], ensure_ascii=False)
+        if not briefs:
+            # Steer the model away from repeating the same empty search.
+            payload += (
+                "  // 无结果：不要重复相同筛选；放宽日期/类型，"
+                "或若确无素材则直接用文字告知用户先扫描入库。"
+            )
+        return payload, len(briefs)
 
     def _do_detail(self, args: dict[str, Any], cache: dict[int, ClipDetail]) -> str:
         cid = _as_int(args.get("clip_id"))
