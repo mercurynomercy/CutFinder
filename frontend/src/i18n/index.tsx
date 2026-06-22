@@ -36,6 +36,28 @@ const en = {
   'app.themeToLight': 'Switch to light mode',
   'app.themeToDark': 'Switch to dark mode',
   'app.menu': 'Menu',
+  'app.roughcut': 'Rough cut',
+
+  // Rough-cut director (chat → shot list)
+  'roughcut.title': 'Rough cut',
+  'roughcut.desc': 'Chat with the director to build a shot list from your cataloged footage.',
+  'roughcut.newSession': 'New conversation',
+  'roughcut.noSessions': 'No conversations yet',
+  'roughcut.deleteSession': 'Delete conversation',
+  'roughcut.deleteConfirm': 'Delete this conversation and its shot list?',
+  'roughcut.untitled': 'Untitled',
+  'roughcut.you': 'You',
+  'roughcut.assistant': 'Director',
+  'roughcut.placeholder': 'e.g. Make a 15–20 min vlog from 4/25–5/11 footage, 16:9, narrative + upbeat rhythm',
+  'roughcut.send': 'Send',
+  'roughcut.thinking': 'Director is working…',
+  'roughcut.emptyConvo': 'Describe the cut you want — date range, length, style, rhythm.',
+  'roughcut.planTitle': 'Shot list',
+  'roughcut.noPlan': 'No shot list yet. Send a request to generate one.',
+  'roughcut.copyMarkdown': 'Copy as Markdown',
+  'roughcut.copied': 'Copied',
+  'roughcut.close': 'Close',
+  'roughcut.selectSession': 'Select or start a conversation.',
 
   // Subtitle export page
   'subtitles.title': 'Subtitle export',
@@ -149,6 +171,7 @@ const en = {
   'common.close': 'Close',
 
   // Scan confirm (App)
+  'scan.title': 'Scan',
   'scan.pausedConfirm':
     'The task queue is paused, so new scanned tasks will not start automatically.\n\nClick "OK" to resume processing and start scanning; click "Cancel" to abort this scan.',
 
@@ -257,6 +280,9 @@ const en = {
   'settings.keyframeCountDesc': 'Max ranked cut/frame suggestions generated per clip (1–10)',
   'settings.keyframeAuto': 'Auto-suggest keyframes after scan',
   'settings.keyframeAutoDesc': 'When a scan finishes, queue keyframe suggestion for the new clips',
+  'settings.roughcutTitle': 'Rough-cut director',
+  'settings.cutVisionBudget': 'Vision look-ups per generation',
+  'settings.cutVisionBudgetDesc': 'Max live B-roll vision checks per shot list (0 = unlimited). Depends on your machine — each one makes OMLX swap models, which is slow on weaker Macs.',
   'settings.langZh': '中文',
   'settings.langEn': 'English',
   'settings.uiLanguage': 'Interface language',
@@ -291,6 +317,27 @@ const zh: Record<Key, string> = {
   'app.themeToLight': '切换到浅色模式',
   'app.themeToDark': '切换到深色模式',
   'app.menu': '菜单',
+  'app.roughcut': '初剪',
+
+  'roughcut.title': '初剪',
+  'roughcut.desc': '和导演 Agent 对话，从已编目的素材库生成分镜表。',
+  'roughcut.newSession': '新建对话',
+  'roughcut.noSessions': '暂无对话',
+  'roughcut.deleteSession': '删除对话',
+  'roughcut.deleteConfirm': '删除这个对话及其分镜表？',
+  'roughcut.untitled': '未命名',
+  'roughcut.you': '你',
+  'roughcut.assistant': '导演',
+  'roughcut.placeholder': '例如：用 4/25–5/11 的素材剪一条 15–20 分钟、叙事/轻快/有节奏的 vlog，16:9',
+  'roughcut.send': '发送',
+  'roughcut.thinking': '导演正在生成…',
+  'roughcut.emptyConvo': '描述你想要的初剪——日期范围、时长、风格、节奏。',
+  'roughcut.planTitle': '分镜表',
+  'roughcut.noPlan': '还没有分镜表，发送需求来生成。',
+  'roughcut.copyMarkdown': '复制为 Markdown',
+  'roughcut.copied': '已复制',
+  'roughcut.close': '关闭',
+  'roughcut.selectSession': '选择或新建一个对话。',
 
   'subtitles.title': '字幕导出',
   'subtitles.desc': '选择一个剪辑好的视频和输出文件夹，导出根据音频转写生成的字幕。',
@@ -395,6 +442,7 @@ const zh: Record<Key, string> = {
 
   'common.close': '关闭',
 
+  'scan.title': '扫描',
   'scan.pausedConfirm':
     '任务队列已暂停，扫描出的新任务不会自动开始处理。\n\n点击「确定」恢复处理并开始扫描；点击「取消」放弃本次扫描。',
 
@@ -497,6 +545,9 @@ const zh: Record<Key, string> = {
   'settings.keyframeCountDesc': '每段素材生成的剪辑/帧建议上限（1–10）',
   'settings.keyframeAuto': '扫描后自动推荐关键帧',
   'settings.keyframeAutoDesc': '扫描完成后，自动为新片段排队生成关键帧建议',
+  'settings.roughcutTitle': '初剪导演 Agent',
+  'settings.cutVisionBudget': '每次生成的视觉确认次数',
+  'settings.cutVisionBudgetDesc': '每份分镜表里现场看 B-roll 画面的最大次数（0 = 不限）。取决于机器性能——每次都会让 OMLX 换模型，弱机会变慢。',
   'settings.langZh': '中文',
   'settings.langEn': 'English',
   'settings.uiLanguage': '界面语言',

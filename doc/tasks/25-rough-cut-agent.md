@@ -109,49 +109,49 @@ CREATE TABLE cut_plans (
 
 ### 后端
 
-- [ ] `domain/models.py`：`RoughCutRequest(date_from, date_to, target_min_s, target_max_s, aspect_ratio, style_notes:str)`；`Shot(clip_id, roll, in_s, out_s, content, rationale, chapter, thumb_ref)`；`CutPlan(shots:list[Shot], total_s, target_min_s, target_max_s, chapters:list[str])`；`CutSession`、`ChatMessage`、`ClipBrief`、`ClipDetail`（均 frozen）。
-- [ ] `config.py` / prefs：`cut_max_tool_rounds:int=24`、`cut_vision_budget:int=6`（**`0`=不限**，用户偏好，由机器性能决定）、`cut_default_aspect_ratio:str="16:9"`。文本模型复用 `text_model`，视觉复用 `vision_model`。
-- [ ] `ports/cutplan.py`：工具接口 `FootageRetriever`（`search_footage`/`get_clip_detail`）、`BrollInspector`（`inspect_broll`）、`LLMAgentClient`（`run_tools(messages, tools) -> AgentStep`，含 tool_calls 或 final content）。
-- [ ] `adapters/`：
-  - [ ] `sqlite_footage.py`：`FootageRetriever` 包在 `CatalogRepository` 上（日期范围 / 类型 / 标签 / FTS 台词检索 + 带回 segments/keyframes）。
-  - [ ] `omlx_agent.py`：`LLMAgentClient` 复用现有 OMLX client（`text_model=Qwen3.6`），用 OpenAI 工具调用协议；宽松解析、容错。
-  - [ ] `BrollInspector` 复用 07 `VisionTagger` + 03 `FrameExtractor`（薄封装，无新模型依赖）。
-- [ ] `cutplan/format.py`（纯逻辑，无 IO）：`to_shotlist_markdown(plan) -> str`（章节分组 + 上述列 + 缩略图引用 + 时长累计/区间校验尾注）。
-- [ ] `cutplan/director.py`（编排，纯逻辑，注入接口）：工具调用环 + 护栏（最大轮数 / 时长校验回灌 / 视觉预算）；`start_session()`、`handle_message(session_id, user_text)`（产 `CutPlan` + 助手回复）；refine 轮把既有 plan + 对话历史作为上下文重跑相关步骤。
-- [ ] `adapters/sqlite_repo.py` + `ports/repository.py`：`cut_sessions`/`cut_messages`/`cut_plans` 表 + `create_session / list_sessions / get_session / delete_session（级联）/ append_message / get_messages / save_plan / get_plan`。
-- [ ] `pipeline/worker.py`：job kind `cutplan`；`enqueue_cutplan(session_id, user_text) -> job_id` 与 `_process_cutplan`；经 SSE 推**工具活动 + 助手 token + 最终 plan ready** 事件。
-- [ ] `api/routes.py`：
-  - [ ] `POST /api/cut/sessions` → 新建会话（可选 title）→ session。
-  - [ ] `GET /api/cut/sessions` → 列表（id/title/updated_at）。
-  - [ ] `GET /api/cut/sessions/{id}` → 消息历史 + 最近 plan。
-  - [ ] `DELETE /api/cut/sessions/{id}` → **删除对话**（级联）。
-  - [ ] `POST /api/cut/sessions/{id}/messages` → body `{text, request?}` → 入队 `cutplan` job（返回 `{job_id}`，复用 `GET /api/jobs/{id}` + SSE）。
-  - [ ] `GET /api/cut/sessions/{id}/plan` → 最近 plan（含 `markdown` 渲染）。
-- [ ] `api/schemas.py`：`CutSessionOut`、`CutMessageOut`、`CutPlanOut`、`ShotOut`、`SendMessageRequest`。
+- [x] `domain/models.py`：`RoughCutRequest(date_from, date_to, target_min_s, target_max_s, aspect_ratio, style_notes:str)`；`Shot(clip_id, roll, in_s, out_s, content, rationale, chapter, thumb_ref)`；`CutPlan(shots:list[Shot], total_s, target_min_s, target_max_s, chapters:list[str])`；`CutSession`、`ChatMessage`、`ClipBrief`、`ClipDetail`（均 frozen）。
+- [x] `config.py` / prefs：`cut_max_tool_rounds:int=24`、`cut_vision_budget:int=6`（**`0`=不限**，用户偏好，由机器性能决定）、`cut_default_aspect_ratio:str="16:9"`。文本模型复用 `text_model`，视觉复用 `vision_model`。
+- [x] `ports/cutplan.py`：工具接口 `FootageRetriever`（`search_footage`/`get_clip_detail`）、`BrollInspector`（`inspect_broll`）、`LLMAgentClient`（`run_tools(messages, tools) -> AgentStep`，含 tool_calls 或 final content）。
+- [x] `adapters/`：
+  - [x] `sqlite_footage.py`：`FootageRetriever` 包在 `CatalogRepository` 上（日期范围 / 类型 / 标签 / FTS 台词检索 + 带回 segments/keyframes）。
+  - [x] `omlx_agent.py`：`LLMAgentClient` 复用现有 OMLX client（`text_model=Qwen3.6`），用 OpenAI 工具调用协议；宽松解析、容错。
+  - [x] `BrollInspector` 复用 07 `VisionTagger` + 03 `FrameExtractor`（薄封装，无新模型依赖）。
+- [x] `cutplan/format.py`（纯逻辑，无 IO）：`to_shotlist_markdown(plan) -> str`（章节分组 + 上述列 + 缩略图引用 + 时长累计/区间校验尾注）。
+- [x] `cutplan/director.py`（编排，纯逻辑，注入接口）：工具调用环 + 护栏（最大轮数 / 时长校验回灌 / 视觉预算）；`start_session()`、`handle_message(session_id, user_text)`（产 `CutPlan` + 助手回复）；refine 轮把既有 plan + 对话历史作为上下文重跑相关步骤。
+- [x] `adapters/sqlite_repo.py` + `ports/repository.py`：`cut_sessions`/`cut_messages`/`cut_plans` 表 + `create_session / list_sessions / get_session / delete_session（级联）/ append_message / get_messages / save_plan / get_plan`。
+- [x] `pipeline/worker.py`：job kind `cutplan`；`enqueue_cutplan(session_id, user_text) -> job_id` 与 `_process_cutplan`；经 SSE 推**工具活动 + 助手 token + 最终 plan ready** 事件。
+- [x] `api/routes.py`：
+  - [x] `POST /api/cut/sessions` → 新建会话（可选 title）→ session。
+  - [x] `GET /api/cut/sessions` → 列表（id/title/updated_at）。
+  - [x] `GET /api/cut/sessions/{id}` → 消息历史 + 最近 plan。
+  - [x] `DELETE /api/cut/sessions/{id}` → **删除对话**（级联）。
+  - [x] `POST /api/cut/sessions/{id}/messages` → body `{text, request?}` → 入队 `cutplan` job（返回 `{job_id}`，复用 `GET /api/jobs/{id}` + SSE）。
+  - [x] `GET /api/cut/sessions/{id}/plan` → 最近 plan（含 `markdown` 渲染）。
+- [x] `api/schemas.py`：`CutSessionOut`、`CutMessageOut`、`CutPlanOut`、`ShotOut`、`SendMessageRequest`。
 
 ### 前端
 
-- [ ] `api/client.ts`：会话 CRUD（含 `deleteSession`）、`sendCutMessage`、`getCutPlan`；相关类型 + SSE 订阅。
-- [ ] `features/cutplan`：新页 ——
+- [x] `api/client.ts`：会话 CRUD（含 `deleteSession`）、`sendCutMessage`、`getCutPlan`；相关类型 + SSE 订阅。
+- [x] `features/cutplan`：新页 ——
   - 左：会话列表（可删除）+ 对话框（用户发需求 / 助手回复 / 工具活动指示）。
   - 右：**实时分镜表预览**（按章节分组、每行带缩略图、in–out 时码、台词/画面、理由）+ 表尾总时长/区间提示 + **「复制为 Markdown」**。
   - 进度条复用 SSE 基建；刷新后从 `GET /api/cut/sessions/{id}` 恢复。
-- [ ] 导航入口：在 Header/导航加入「初剪 / Rough Cut」。
-- [ ] `features/settings`：初剪 Agent 视觉预算 `cut_vision_budget`（数字输入，**`0`=不限**，附"取决于机器性能"说明）；可选暴露 `cut_max_tool_rounds`、默认比例。
-- [ ] `i18n`：EN/ZH 文案。
+- [x] 导航入口：在 Header/导航加入「初剪 / Rough Cut」。
+- [x] `features/settings`：初剪 Agent 视觉预算 `cut_vision_budget`（数字输入，**`0`=不限**，附"取决于机器性能"说明）；可选暴露 `cut_max_tool_rounds`、默认比例。
+- [x] `i18n`：EN/ZH 文案。
 
 ### 测试
 
-- [ ] 单测 `cutplan/format.py`：章节分组 / 列渲染 / 缩略图引用 / 时长累计 / 命中与未命中目标区间尾注；黄金串；空 plan、单章、跨小时时码。
-- [ ] 单测 `cutplan/director.py`（**主力**）：注入**假 LLMAgentClient（脚本化 tool_calls 序列）+ 假工具**，断言：
+- [x] 单测 `cutplan/format.py`：章节分组 / 列渲染 / 缩略图引用 / 时长累计 / 命中与未命中目标区间尾注；黄金串；空 plan、单章、跨小时时码。
+- [x] 单测 `cutplan/director.py`（**主力**）：注入**假 LLMAgentClient（脚本化 tool_calls 序列）+ 假工具**，断言：
   - A-roll 主线选段走 segment 序号、映射回正确 in/out；B-roll 配空镜分支；
   - 时长护栏：欠/超区间触发增删回灌一轮；仍不达标则标注且照出；
   - 最大工具轮数护栏触发收尾、视觉预算上限生效；
   - refine 轮：第二条用户消息基于既有 plan + 历史重跑、产出新 plan。
-- [ ] 单测 `FootageRetriever`：内存 SQLite + 预置编目，日期范围 / 类型 / 标签 / FTS 检索正确，带回 segments/keyframes。
-- [ ] 单测 SessionStore：内存 SQLite，会话/消息/plan 往返；**删除会话级联删消息与 plan**。
-- [ ] 单测 worker `cutplan` job + API 路由（假 Director），含会话 CRUD、删除、SSE 事件序列。
-- [ ] 前端组件测试（Vitest + MSW）：发消息 / 流式回复 / 分镜表渲染（章节+缩略图）/ 复制 Markdown / 删除会话。
+- [x] 单测 `FootageRetriever`：内存 SQLite + 预置编目，日期范围 / 类型 / 标签 / FTS 检索正确，带回 segments/keyframes。
+- [x] 单测 SessionStore：内存 SQLite，会话/消息/plan 往返；**删除会话级联删消息与 plan**。
+- [x] 单测 worker `cutplan` job + API 路由（假 Director），含会话 CRUD、删除、SSE 事件序列。
+- [x] 前端组件测试（Vitest + MSW）：发消息 / 流式回复 / 分镜表渲染（章节+缩略图）/ 复制 Markdown / 删除会话。
 - [ ] （集成，手动）真 OMLX + 预置编目（`testVideo/` 那几条素材）→ 生成一版分镜表 → **人工评估"剪得合不合理"**（创意输出无法自动断言）。
 
 ---
@@ -173,3 +173,15 @@ CREATE TABLE cut_plans (
 - **OMLX 模型换入换出成本**：文本/视觉交替慢 → `inspect_broll` 设预算、批量调用、能少则少。
 - **分镜"质量"不可自动化验收**：硬测只覆盖确定性部分（时长/时间码/格式/工具调用契约/会话 CRUD），创意质量靠 eval 清单 + 真机抽查。
 - **可与后续 FCP 集成协同**：`CutPlan` 的 in/out 时码后续可导出为 FCPXML 序列 / FCP 标记（本期不做）。
+
+---
+
+## 实现状态（2026-06-22）
+
+**已实现（代码 + 自动测试通过），唯余真机集成 eval 待手动。**
+
+- 后端：`domain/models.py` 新模型、`config.Prefs` 三项 cut 偏好、`ports/cutplan.py`（`FootageRetriever`/`BrollInspector`/`LLMAgentClient`/`CutSessionStore` + `ToolCall`/`AgentStep`）、`cutplan/format.py`、`cutplan/director.py`、`pipeline/cutplan_service.py`、adapters（`sqlite_cutplan.py` 会话存储、`sqlite_footage.py`、`omlx_agent.py`、`broll_inspector.py`）、worker `cutplan` job、`api/cut_routes.py`（独立 router，`/api/cut/*`）、`api/app.py` 装配。
+- 前端：`api/client.ts` 类型+方法、`features/cutplan` 新页（会话列表/对话/实时分镜表/复制 Markdown/删除）、App 菜单入口、`features/settings` 视觉预算输入、i18n EN/ZH。
+- 测试：后端 **490 单测全绿**（+46：format/director/footage/store/service/cut_routes/worker_cutplan）；前端 cutplan 套件 **3 测试全绿**；`mypy`/`ruff` 在新代码上干净（仅余历史告警）。
+- **实现微调（与上文计划的命名差异）**：会话表/方法放在独立的 `adapters/sqlite_cutplan.py`（而非塞进 `sqlite_repo.py`），保持 Catalog 仓储职责单一；`LLMAgentClient.run(...)`（非 `run_tools`）；请求体 schema 名 `SendCutMessageRequest`；cut 路由独立成 `api/cut_routes.py`。SSE 现推 `cutplan_started/done/error` job 级事件，前端轮询 job 完成后刷新（token 级流式留作后续）。
+- **待手动**：真 OMLX + 预置编目对 `testVideo/` 生成一版分镜表，人工评估"剪得合不合理"（创意输出无法自动断言）。

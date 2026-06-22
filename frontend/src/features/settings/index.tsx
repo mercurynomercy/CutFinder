@@ -642,6 +642,15 @@ export function SettingsPage({ onSave }: SettingsPageProps) {
               </label>
               <p className="mb-1 mt-1 text-xs text-[--text-muted]">{t('settings.keyframeAutoDesc')}</p>
 
+              {/* Rough-cut director: live B-roll vision budget per generation */}
+              <label className="mt-4 block text-sm text-[--text-secondary]">{t('settings.cutVisionBudget')}</label>
+              <p className="mb-1 text-xs text-[--text-muted]">{t('settings.cutVisionBudgetDesc')}</p>
+              <input
+                type="number" min={0} step={1} value={prefs.cut_vision_budget ?? 6}
+                onChange={(e) => updateField('cut_vision_budget', parseInt(e.target.value, 10))}
+                className="w-full rounded-md border border-[--border] bg-[--surface-2] px-3 py-1.5 text-sm outline-none focus:border-[--primary]"
+              />
+
               {/* Field errors */}
               {fieldErrors.map((err) => (
                 <p key={err.field} className="mt-1 text-xs text-[--error]">{t(err.messageKey)}</p>
