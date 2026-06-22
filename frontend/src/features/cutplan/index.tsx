@@ -331,7 +331,7 @@ export function CutplanPage({ onClose }: CutplanPageProps) {
               messages.map((m, i) => (
                 <div key={i} className={m.role === 'user' ? 'text-right' : 'text-left'}>
                   <div
-                    className={`inline-block max-w-[85%] whitespace-pre-wrap rounded-lg px-3 py-2 text-sm ${
+                    className={`inline-block max-w-[85%] whitespace-pre-wrap rounded-lg px-3 py-2 text-left text-sm ${
                       m.role === 'user'
                         ? 'bg-[--primary] text-white'
                         : 'bg-[--surface-2] text-[--text-primary]'
