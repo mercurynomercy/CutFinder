@@ -87,6 +87,9 @@ def test_create_app_with_library_serves_settings(
         "keyframe_count",
         "keyframe_auto",
         "vocal_separation",
+        "cut_max_tool_rounds",
+        "cut_vision_budget",
+        "cut_default_aspect_ratio",
     }
     # The OMLX secret is masked, never returned in the clear.
     assert resp.json()["env"]["OMLX_API_KEY"] == "***MASKED***"

@@ -242,6 +242,52 @@ class TestGlobalPrefs:
         assert env.OMLX_API_KEY == "global-key"
 
 
+class TestCutDirectorPrompt:
+    """Custom rough-cut director prompt persistence (global store)."""
+
+    @pytest.fixture()
+    def global_file(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+        import cutfinder.config as cfg
+
+        target = tmp_path / ".cutfinder" / "config.json"
+        monkeypatch.setattr(cfg, "_GLOBAL_CONFIG_FILE", target)
+        return target
+
+    def test_default_is_none_when_unset(self, global_file: Path) -> None:
+        from cutfinder.config import load_cut_director_prompt
+
+        assert load_cut_director_prompt() is None
+
+    def test_save_then_load_round_trip(self, global_file: Path) -> None:
+        from cutfinder.config import load_cut_director_prompt, save_cut_director_prompt
+
+        save_cut_director_prompt("自定义导演提示词")
+        assert load_cut_director_prompt() == "自定义导演提示词"
+
+    def test_blank_or_none_resets_to_default(self, global_file: Path) -> None:
+        from cutfinder.config import load_cut_director_prompt, save_cut_director_prompt
+
+        save_cut_director_prompt("custom")
+        save_cut_director_prompt(None)
+        assert load_cut_director_prompt() is None
+        save_cut_director_prompt("custom")
+        save_cut_director_prompt("   ")  # whitespace-only → reset
+        assert load_cut_director_prompt() is None
+
+    def test_coexists_with_env_keys(self, global_file: Path) -> None:
+        from cutfinder.config import (
+            load_cut_director_prompt,
+            load_global_settings,
+            save_cut_director_prompt,
+            save_global_settings,
+        )
+
+        save_global_settings({"OMLX_BASE_URL": "http://x/v1"})
+        save_cut_director_prompt("提示词")
+        assert load_global_settings() == {"OMLX_BASE_URL": "http://x/v1"}
+        assert load_cut_director_prompt() == "提示词"
+
+
 # ── Prefs tests ──────────────────────────────────────────────────────
 
 

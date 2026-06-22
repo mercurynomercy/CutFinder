@@ -132,6 +132,7 @@ class WorkerQueue:
         progress_callback: Callable[[Any], None] | None = None,
         keyframe_auto: bool = False,
         subtitle_exporter: Any | None = None,
+        cutplan_service: Any | None = None,
         on_idle: Callable[[], None] | None = None,
     ) -> None:
         self._queue: asyncio.Queue[Any] = asyncio.Queue()
@@ -156,6 +157,9 @@ class WorkerQueue:
         # Standalone subtitle export (decoupled from the catalog) + its results.
         self._subtitle_exporter = subtitle_exporter
         self._subtitle_results: dict[int, list[str]] = {}
+
+        # Rough-cut director agent (§3.15) — one conversation turn per job.
+        self._cutplan_service = cutplan_service
 
         # Auto-increment counter for job IDs when no repository is available
         self._next_job_counter: int = 0
@@ -394,6 +398,29 @@ class WorkerQueue:
 
         return job_id
 
+    async def enqueue_cutplan(
+        self,
+        session_id: int,
+        user_text: str,
+        request: Any | None = None,
+        job_id: int | None = None,
+    ) -> int:
+        """Enqueue one rough-cut conversation turn (§3.15) as a job."""
+        if self._repository:
+            if job_id is not None and (self._repository.get_job(job_id) is not None):
+                pass
+            elif job_id is None:
+                job = self._repository.create_job(total=1, kind="cutplan")
+                job_id = job.id
+
+        if job_id is None:
+            self._next_job_counter += 1
+            job_id = self._next_job_counter
+
+        self._emit({"type": "job_started", "job_id": job_id, "total": 1})
+        await self._queue.put(("cutplan", (session_id, user_text, request), job_id))
+        return job_id
+
     async def enqueue_clip(self, candidate: ClipCandidate) -> None:
         """Enqueue a single clip for processing (no job tracking).
 
@@ -543,6 +570,8 @@ class WorkerQueue:
                         success, error = await self._process_keyframes(payload)
                     elif kind == "subtitle" and job_id is not None:
                         success, error = await self._process_subtitle(payload, job_id)
+                    elif kind == "cutplan" and job_id is not None:
+                        success, error = await self._process_cutplan(payload, job_id)
                     else:
                         success, error = True, None
 
@@ -624,9 +653,9 @@ class WorkerQueue:
                 self._repository.record_failed_item(JobFailedItem(
                     job_id=job_id, kind=kind, clip_id=payload, error=error,
                 ))
-            elif kind == "subtitle":
-                # Subtitle jobs record no retryable item (payload is a
-                # SubtitleRequest, not a ClipCandidate).
+            elif kind in ("subtitle", "cutplan"):
+                # These jobs record no retryable item (payload is not a
+                # ClipCandidate). A failed turn is re-driven by sending again.
                 pass
             else:
                 self._repository.record_failed_item(JobFailedItem(
@@ -794,6 +823,36 @@ class WorkerQueue:
     def get_subtitle_result(self, job_id: int) -> list[str] | None:
         """Return the exported subtitle file paths for *job_id*, if any."""
         return self._subtitle_results.get(job_id)
+
+    async def _process_cutplan(
+        self, payload: Any, job_id: int,
+    ) -> tuple[bool, str | None]:
+        """Run one rough-cut conversation turn off the event loop.
+
+        Returns ``(success, error)`` — counters are updated by the caller.
+        """
+        session_id, user_text, request = payload
+        logger.info("▶ Rough-cut turn for session #%s", session_id)
+        self._emit({"type": "cutplan_started", "session_id": session_id})
+        try:
+            result = (
+                await asyncio.to_thread(
+                    self._cutplan_service.handle, session_id, user_text, request,
+                )
+                if self._cutplan_service else None
+            )
+            has_plan = bool(result and result.plan is not None)
+            logger.info("✓ Rough-cut turn done for session #%s", session_id)
+            self._emit({
+                "type": "cutplan_done", "session_id": session_id, "has_plan": has_plan,
+            })
+            return True, None
+        except Exception as exc:  # noqa: BLE001 — error isolation
+            logger.error("✗ Rough-cut turn failed for session #%s: %s", session_id, exc)
+            self._emit({
+                "type": "cutplan_error", "session_id": session_id, "error": str(exc),
+            })
+            return False, str(exc)
 
 
 

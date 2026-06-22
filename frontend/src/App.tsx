@@ -15,6 +15,7 @@ import { JobsPanel, type JobsPanelProps } from '@/features/jobs'
 import { JobsQueuePage } from '@/features/jobs-queue'
 import { SettingsPage } from '@/features/settings'
 import { SubtitlesPage } from '@/features/subtitles'
+import { CutplanPage } from '@/features/cutplan'
 import { LogModal } from '@/features/logs'
 import { ConfirmDialog } from '@/components'
 import { useI18n } from '@/i18n'
@@ -43,6 +44,7 @@ export default function App() {
   const [showSettings, setShowSettings] = useState(false)
   const [showJobs, setShowJobs] = useState(false)
   const [showSubtitles, setShowSubtitles] = useState(false)
+  const [showCutplan, setShowCutplan] = useState(false)
   const [showLogs, setShowLogs] = useState(false)
   const [selectedClipId, setSelectedClipId] = useState<DetailPanelPropsType['clipId']>(null)
   const [activeJobId, setActiveJobId] = useState<JobsPanelProps['activeJobId']>(null)
@@ -361,6 +363,11 @@ export default function App() {
     return <SubtitlesPage onClose={() => setShowSubtitles(false)} />
   }
 
+  // Rough-cut director view (full-screen, replaces main layout)
+  if (showCutplan) {
+    return <CutplanPage onClose={() => setShowCutplan(false)} />
+  }
+
   return (
     <div className="flex h-screen w-full flex-col bg-[--bg-canvas] text-[--text-primary]">
       {/* Top progress bar (absolute, sticky) */}
@@ -395,6 +402,20 @@ export default function App() {
               <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M3 11h18v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z" />
             </svg>
             {t('app.keyframes')}
+          </button>
+          <button
+            onClick={() => setShowCutplan(true)}
+            className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-md bg-[--primary] px-4 py-1.5 text-sm font-medium text-white shadow hover:bg-[--primary]/90 transition-colors"
+            title={t('app.roughcut')}
+          >
+            <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <circle cx="6" cy="6" r="3" />
+              <circle cx="6" cy="18" r="3" />
+              <path d="M20 4 8.12 15.88" />
+              <path d="m14.8 14.8 5.2 5.2" />
+              <path d="M8.12 8.12 12 12" />
+            </svg>
+            {t('app.roughcut')}
           </button>
           <div className="relative" ref={menuRef}>
             <button

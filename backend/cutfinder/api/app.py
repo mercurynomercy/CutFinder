@@ -59,6 +59,7 @@ class LibraryContext:
         self.repository: Any = None
         self.orchestrator: Any = None
         self.worker_queue: Any = None
+        self.cut_store: Any = None  # rough-cut director sessions (§3.15)
 
     @property
     def thumbnail_root(self) -> Optional[str]:
@@ -213,6 +214,36 @@ def _build_into(ctx: LibraryContext, library_path: Union[str, Path]) -> None:
         transcriber=_make_transcriber(vocal_separator),
     )
 
+    # Rough-cut director agent (§3.15): conversation store + tool-loop service.
+    # Shares the catalog connection; reads the catalog read-only via the
+    # retriever, and may live-inspect B-roll frames via the vision model.
+    from cutfinder.adapters.broll_inspector import CatalogBrollInspector
+    from cutfinder.adapters.omlx_agent import OmlxAgentClient
+    from cutfinder.adapters.sqlite_cutplan import SqliteCutSessionStore
+    from cutfinder.adapters.sqlite_footage import CatalogFootageRetriever
+    from cutfinder.cutplan.director import CutDirector
+    from cutfinder.pipeline.cutplan_service import CutPlanService
+
+    cut_store = SqliteCutSessionStore(conn)
+    # Clear any rough-cut sessions left 'running' by a process that died mid-turn
+    # so the UI doesn't spin on a turn that can no longer make progress.
+    n_cut_paused = cut_store.reset_interrupted_sessions()
+    if n_cut_paused:
+        logger.info("Reset %d interrupted cut session(s) at bind", n_cut_paused)
+    cut_director = CutDirector(
+        OmlxAgentClient(config),
+        CatalogFootageRetriever(repository),
+        CatalogBrollInspector(
+            repository,
+            FfmpegFrameExtractor(default_count=prefs.broll_frame_count),
+            OmlxVisionTagger(config),
+            num_frames=prefs.broll_frame_count,
+        ),
+        max_tool_rounds=prefs.cut_max_tool_rounds,
+        vision_budget=prefs.cut_vision_budget,
+    )
+    cutplan_service = CutPlanService(cut_store, cut_director)
+
     # When the work queue drains, unload the in-process models (whisper +
     # demucs) so they stop occupying RAM while idle. They reload lazily on
     # the next job. (OMLX-served models are managed by OMLX itself.)
@@ -229,6 +260,7 @@ def _build_into(ctx: LibraryContext, library_path: Union[str, Path]) -> None:
         orchestrator=orchestrator, repository=repository,
         keyframe_auto=prefs.keyframe_auto,
         subtitle_exporter=subtitle_exporter,
+        cutplan_service=cutplan_service,
         on_idle=_release_idle_models,
     )
 
@@ -236,16 +268,27 @@ def _build_into(ctx: LibraryContext, library_path: Union[str, Path]) -> None:
     ctx.repository = repository
     ctx.orchestrator = orchestrator
     ctx.worker_queue = worker_queue
+    ctx.cut_store = cut_store
 
 
 async def rebind_library(ctx: LibraryContext, library_path: Union[str, Path]) -> None:
     """Rebind the active library at runtime: stop old worker, build, start new."""
     old_worker = ctx.worker_queue
     if old_worker is not None:
+        # Time-box the graceful stop: if the worker is blocked on a long /
+        # hung job (e.g. an OMLX cutplan turn), draining it could take forever
+        # and would hang the settings-save PUT that triggered this rebind. Fall
+        # back to a cancel so the rebind always completes.
+        import asyncio as _asyncio
+
         try:
-            await old_worker.stop()
+            await _asyncio.wait_for(old_worker.stop(), timeout=5.0)
+        except _asyncio.TimeoutError:
+            logger.warning("Worker stop timed out on rebind; cancelling it")
+            old_worker.close()
         except Exception as exc:  # noqa: BLE001 — best-effort teardown
             logger.warning("Error stopping previous worker on rebind: %s", exc)
+            old_worker.close()
 
     _build_into(ctx, library_path)
     await ctx.worker_queue.start()
@@ -288,6 +331,7 @@ def create_app(
             logger.warning("Could not bind initial library %r: %s", initial, exc)
 
     # ── Routers ─────────────────────────────────────────────────────
+    from cutfinder.api.cut_routes import _build_router as cut_router
     from cutfinder.api.library_routes import _build_router as library_router
     from cutfinder.api.routes import _build_router as main_router
     from cutfinder.api.settings_routes import _build_router as settings_router
@@ -315,6 +359,7 @@ def create_app(
         )
     )
     app.include_router(library_router(ctx, rebind_library))
+    app.include_router(cut_router(ctx))
 
     # ── Serve the built frontend (packaged single-server mode) ──────
     # In dev the UI is served by Vite (:5080) which proxies /api here. When

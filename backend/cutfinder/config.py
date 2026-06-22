@@ -162,6 +162,30 @@ def save_global_prefs(updates: dict[str, Any]) -> None:
     _write_global_file(data)
 
 
+_CUT_DIRECTOR_PROMPT_KEY = "cut_director_prompt"
+
+
+def load_cut_director_prompt() -> str | None:
+    """Return the user's custom rough-cut director prompt, or ``None``.
+
+    ``None`` means "no override — use the built-in default"; the director falls
+    back to :data:`~cutfinder.cutplan.director.DEFAULT_CUT_DIRECTOR_PROMPT`.
+    """
+    data = _read_global_file()
+    value = data.get(_CUT_DIRECTOR_PROMPT_KEY)
+    return value if isinstance(value, str) and value.strip() else None
+
+
+def save_cut_director_prompt(prompt: str | None) -> None:
+    """Persist a custom director prompt (``None``/blank resets to the default)."""
+    data = _read_global_file()
+    if prompt and prompt.strip():
+        data[_CUT_DIRECTOR_PROMPT_KEY] = prompt
+    else:
+        data.pop(_CUT_DIRECTOR_PROMPT_KEY, None)
+    _write_global_file(data)
+
+
 def resolve_env() -> EnvSettings:
     """Resolve OMLX config, layering all sources.
 
@@ -229,6 +253,15 @@ class Prefs(BaseModel, frozen=True):
     # A-roll transcription strips BGM with Demucs before Whisper; off by
     # default. Subtitle export always separates regardless of this flag.
     vocal_separation: bool = False
+    # Rough-cut director agent (§3.15) guardrails.
+    # Max tool-calling rounds before the loop force-finalizes the current draft.
+    cut_max_tool_rounds: int = Field(default=24, ge=1, le=200)
+    # Max live inspect_broll (Qwen3-VL) calls per generation; 0 = unlimited.
+    # Tunable because text/vision interleaving makes OMLX swap models (slow) —
+    # weak machines should cap it, strong machines can open it up.
+    cut_vision_budget: int = Field(default=6, ge=0)
+    # Default aspect ratio when the user doesn't state one in chat.
+    cut_default_aspect_ratio: str = "16:9"
 
     @field_validator(
         "text_model", "vision_model", "whisper_model",

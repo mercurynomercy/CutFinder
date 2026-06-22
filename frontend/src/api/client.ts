@@ -116,6 +116,9 @@ export interface SettingsPrefs {
   output_language: 'zh' | 'en'
   keyframe_count: number
   keyframe_auto: boolean
+  cut_max_tool_rounds: number
+  cut_vision_budget: number
+  cut_default_aspect_ratio: string
 }
 
 export interface SettingsResponse {
@@ -158,6 +161,9 @@ export interface UpdateSettingsBody {
   output_language?: 'zh' | 'en'
   keyframe_count?: number
   keyframe_auto?: boolean
+  cut_max_tool_rounds?: number
+  cut_vision_budget?: number
+  cut_default_aspect_ratio?: string
   // Machine-global keys (persisted to ~/.cutfinder/config.json, shared across
   // libraries). Omit OMLX_API_KEY to leave the stored secret unchanged.
   OMLX_BASE_URL?: string
@@ -170,6 +176,67 @@ export interface ClipFilter {
   date?: string | null
   roll_type?: string | null
   tag?: string | null
+}
+
+// ── Rough-cut director agent (§3.15) ────────────────────────────
+
+export interface CutSession {
+  id: number
+  title: string
+  status: string // 'idle' | 'running' | 'error'
+  created_at: string | null
+  updated_at: string | null
+}
+
+export interface CutMessage {
+  role: 'user' | 'assistant'
+  content: string
+  created_at: string | null
+}
+
+export interface CutShot {
+  clip_id: number
+  roll: string
+  in_s: number
+  out_s: number
+  content: string
+  rationale: string
+  chapter: string
+  clip_label: string
+  clip_date: string
+  thumb_ref: string | null
+}
+
+export interface CutPromptResponse {
+  prompt: string
+  default: string
+  is_default: boolean
+}
+
+export interface CutPlan {
+  shots: CutShot[]
+  chapters: string[]
+  total_s: number
+  target_min_s: number | null
+  target_max_s: number | null
+  within_target: boolean
+  note: string
+  markdown: string
+}
+
+export interface CutSessionDetail {
+  session: CutSession
+  messages: CutMessage[]
+  plan: CutPlan | null
+}
+
+export interface RoughCutRequestBody {
+  date_from?: string | null
+  date_to?: string | null
+  target_min_s?: number | null
+  target_max_s?: number | null
+  aspect_ratio?: string | null
+  style_notes?: string | null
 }
 
 export interface ClipEditBody {
@@ -373,6 +440,60 @@ export const api = {
   /** POST /api/open — reveal a folder in Finder or open a file in its default app. */
   openPath(path: string): Promise<{ status: string; path: string }> {
     return _fetch('/api/open', { method: 'POST', body: JSON.stringify({ path }) })
+  },
+
+  // ── Rough-cut director agent (§3.15) ──────────────────────────
+
+  /** GET /api/cut/sessions — list rough-cut conversations. */
+  listCutSessions(): Promise<{ sessions: CutSession[] }> {
+    return _fetch('/api/cut/sessions')
+  },
+
+  /** POST /api/cut/sessions — create a new conversation. */
+  createCutSession(title = ''): Promise<CutSession> {
+    return _fetch('/api/cut/sessions', { method: 'POST', body: JSON.stringify({ title }) })
+  },
+
+  /** GET /api/cut/sessions/{id} — messages + latest plan. */
+  getCutSession(id: number): Promise<CutSessionDetail> {
+    return _fetch(`/api/cut/sessions/${id}`)
+  },
+
+  /** DELETE /api/cut/sessions/{id} — delete a conversation. */
+  deleteCutSession(id: number): Promise<{ status: string; session_id: number }> {
+    return _fetch(`/api/cut/sessions/${id}`, { method: 'DELETE' })
+  },
+
+  /** POST /api/cut/sessions/{id}/messages — send a message; runs a director turn. */
+  sendCutMessage(
+    id: number,
+    text: string,
+    request?: RoughCutRequestBody,
+  ): Promise<{ job_id: number; session_id: number }> {
+    return _fetch(`/api/cut/sessions/${id}/messages`, {
+      method: 'POST',
+      body: JSON.stringify({ text, request }),
+    })
+  },
+
+  /** GET /api/cut/sessions/{id}/plan — latest plan (with rendered markdown). */
+  getCutPlan(id: number): Promise<{ plan: CutPlan | null }> {
+    return _fetch(`/api/cut/sessions/${id}/plan`)
+  },
+
+  /** GET /api/cut/prompt — current director prompt (+ built-in default). */
+  getCutPrompt(): Promise<CutPromptResponse> {
+    return _fetch('/api/cut/prompt')
+  },
+
+  /** PUT /api/cut/prompt — save a custom director prompt. */
+  setCutPrompt(prompt: string): Promise<CutPromptResponse> {
+    return _fetch('/api/cut/prompt', { method: 'PUT', body: JSON.stringify({ prompt }) })
+  },
+
+  /** DELETE /api/cut/prompt — reset to the built-in default. */
+  resetCutPrompt(): Promise<CutPromptResponse> {
+    return _fetch('/api/cut/prompt', { method: 'DELETE' })
   },
 
   /** GET /api/logs — recent backend log lines (poll with `after` for new ones). */

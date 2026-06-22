@@ -165,6 +165,99 @@ class CutSuggestion(BaseModel, frozen=True):
     source: str = "vision"          # "text" (A-roll) | "vision" (B-roll)
 
 
+# ── Rough-cut agent (§3.15) ─────────────────────────────────────
+
+class RoughCutRequest(BaseModel, frozen=True):
+    """Parsed parameters for a rough-cut request (free-form style as text).
+
+    The conversational agent derives these from the user's message; all
+    fields are optional so a partial request still works.
+    """
+
+    date_from: str | None = None     # ISO "YYYY-MM-DD" (inclusive)
+    date_to: str | None = None       # ISO "YYYY-MM-DD" (inclusive)
+    target_min_s: float | None = None
+    target_max_s: float | None = None
+    aspect_ratio: str = "16:9"
+    style_notes: str = ""            # free-text style / rhythm description
+
+
+class ClipBrief(BaseModel, frozen=True):
+    """Lightweight catalog row the agent searches over (one footage candidate)."""
+
+    clip_id: int
+    roll: str                        # "a" | "b"
+    capture_time: str | None = None  # ISO string
+    duration_s: float | None = None
+    summary: str | None = None       # A-roll intro
+    description: str | None = None   # B-roll visual description
+    tags: list[str] = []
+    has_transcript: bool = False
+    has_keyframes: bool = False
+
+
+class ClipDetail(BaseModel, frozen=True):
+    """Full per-clip detail the agent pulls when composing in/out points."""
+
+    clip_id: int
+    roll: str
+    duration_s: float | None = None
+    capture_time: str | None = None        # ISO capture time (shooting date source)
+    source_path: str | None = None         # read-only original
+    library_path: str | None = None        # organised copy (for the file label)
+    summary: str | None = None
+    description: str | None = None
+    tags: list[str] = []
+    segments: list[Segment] = []           # A-roll transcript segments
+    keyframes: list[CutSuggestion] = []    # existing keyframe cut points
+
+
+class Shot(BaseModel, frozen=True):
+    """One row of the shot list — a sub-clip in/out window with rationale."""
+
+    clip_id: int
+    roll: str                        # "a" | "b"
+    in_s: float
+    out_s: float
+    content: str = ""                # 台词 / 画面内容
+    rationale: str = ""              # 用途 · 理由
+    chapter: str = ""                # chapter / section title
+    clip_label: str = ""             # library/source file name (filled by director)
+    clip_date: str = ""              # ISO shooting date YYYY-MM-DD (filled by director)
+    thumb_ref: str | None = None     # thumbnail URL (filled by the director)
+
+
+class CutPlan(BaseModel, frozen=True):
+    """A generated shot list with chapter grouping and a duration roll-up."""
+
+    shots: list[Shot] = []
+    chapters: list[str] = []         # ordered unique chapter titles
+    total_s: float = 0.0
+    target_min_s: float | None = None
+    target_max_s: float | None = None
+    within_target: bool = True       # False → footer flags "missed target"
+    note: str = ""                   # assistant note (e.g. duration warning)
+
+
+class ChatMessage(BaseModel, frozen=True):
+    """One persisted message in a rough-cut conversation."""
+
+    role: str                        # "user" | "assistant" | "tool"
+    content: str = ""
+    tool_json: str | None = None     # raw tool_calls / tool_result (optional)
+    created_at: str | None = None
+
+
+class CutSession(BaseModel):
+    """A persisted rough-cut conversation (reopenable, deletable)."""
+
+    id: int | None = None
+    title: str = ""
+    status: str = "idle"             # "idle" | "running" | "error"
+    created_at: str | None = None
+    updated_at: str | None = None
+
+
 # ── AnalysisResult (combined AI output) ─────────────────────────
 
 class AnalysisResult(BaseModel, frozen=True):
