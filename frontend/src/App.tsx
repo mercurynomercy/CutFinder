@@ -403,6 +403,16 @@ export default function App() {
             </svg>
             {t('app.keyframes')}
           </button>
+          <button
+            onClick={() => setShowCutplan(true)}
+            className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-md bg-[--primary] px-4 py-1.5 text-sm font-medium text-white shadow hover:bg-[--primary]/90 transition-colors"
+            title={t('app.roughcut')}
+          >
+            <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" aria-hidden="true">
+              <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.6} d="M7.85 8.25l1.53.89M7.85 8.25a3 3 0 11-5.2-3 3 3 0 015.2 3zm1.53.89a2.16 2.16 0 011.08 1.83c0 .36.06.7.14 1.03M9.38 9.14l10.77 6.21a2.25 2.25 0 01-1.08 4.19M7.85 15.75l1.53-.89m-1.53.89a3 3 0 11-5.2 3 3 3 0 015.2-3zm1.53-.89a2.16 2.16 0 001.08-1.84c0-.35.06-.69.14-1.02m0 0L19.5 6.75" />
+            </svg>
+            {t('app.roughcut')}
+          </button>
           <div className="relative" ref={menuRef}>
             <button
               onClick={() => setShowMenu((v) => !v)}
@@ -431,16 +441,6 @@ export default function App() {
                     <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7.5 10.5h3m3 0h3m-9 3h6" />
                   </svg>
                   {t('app.subtitles')}
-                </button>
-                <button
-                  role="menuitem"
-                  onClick={() => { setShowMenu(false); setShowCutplan(true) }}
-                  className="flex w-full items-center gap-2.5 px-3 py-2 text-sm text-[--text-secondary] hover:bg-[--surface-3] hover:text-[--text-primary] transition-colors"
-                >
-                  <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" aria-hidden="true">
-                    <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7.5 4.5a3 3 0 11-3 3m3-3a3 3 0 00-3 3m3-3v12m-3-9a3 3 0 003 3m9-6a3 3 0 11-3 3 3 3 0 013-3zm0 6L7.5 16.5" />
-                  </svg>
-                  {t('app.roughcut')}
                 </button>
                 <button
                   role="menuitem"
