@@ -38,7 +38,12 @@ class CutPlanService:
             raise ValueError(f"cut session {session_id} not found")
 
         # Persist the user's message before running so a crash still records it.
-        self._store.append_message(session_id, ChatMessage(role="user", content=user_text))
+        # The API route already persists it synchronously (so it survives a slow
+        # worker / restart); only append here if it isn't already the last
+        # message, to stay correct when the service is used directly (tests).
+        existing = self._store.get_messages(session_id)
+        if not (existing and existing[-1].role == "user" and existing[-1].content == user_text):
+            self._store.append_message(session_id, ChatMessage(role="user", content=user_text))
         self._store.set_session_status(session_id, "running")
 
         # Resolve the request: an explicit one overrides + is remembered;

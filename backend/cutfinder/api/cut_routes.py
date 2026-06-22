@@ -18,7 +18,7 @@ def _build_router(ctx: Any) -> Any:
     from fastapi import APIRouter, HTTPException
 
     from cutfinder.cutplan.format import to_shotlist_markdown
-    from cutfinder.domain.models import CutPlan, RoughCutRequest
+    from cutfinder.domain.models import ChatMessage, CutPlan, RoughCutRequest
 
     router = APIRouter(prefix="/api/cut", tags=["RoughCut"])
 
@@ -107,6 +107,17 @@ def _build_router(ctx: Any) -> Any:
         if body.request is not None:
             fields = {k: v for k, v in body.request.model_dump().items() if v is not None}
             req_obj = RoughCutRequest(**fields)
+
+        # Persist the user message + mark the session running *now*, before the
+        # job is enqueued — so it survives even if the worker is slow, queued, or
+        # the process restarts before the turn finishes. The service's append is
+        # idempotent, so it won't be duplicated.
+        store.append_message(session_id, ChatMessage(role="user", content=body.text))
+        if req_obj is not None:
+            import json as _j
+
+            store.set_session_request(session_id, _j.dumps(req_obj.model_dump(), ensure_ascii=False))
+        store.set_session_status(session_id, "running")
 
         job_id = await ctx.worker_queue.enqueue_cutplan(session_id, body.text, req_obj)
         return {"job_id": job_id, "session_id": session_id}

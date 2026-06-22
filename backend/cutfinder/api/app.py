@@ -225,6 +225,11 @@ def _build_into(ctx: LibraryContext, library_path: Union[str, Path]) -> None:
     from cutfinder.pipeline.cutplan_service import CutPlanService
 
     cut_store = SqliteCutSessionStore(conn)
+    # Clear any rough-cut sessions left 'running' by a process that died mid-turn
+    # so the UI doesn't spin on a turn that can no longer make progress.
+    n_cut_paused = cut_store.reset_interrupted_sessions()
+    if n_cut_paused:
+        logger.info("Reset %d interrupted cut session(s) at bind", n_cut_paused)
     cut_director = CutDirector(
         OmlxAgentClient(config),
         CatalogFootageRetriever(repository),
@@ -270,10 +275,20 @@ async def rebind_library(ctx: LibraryContext, library_path: Union[str, Path]) ->
     """Rebind the active library at runtime: stop old worker, build, start new."""
     old_worker = ctx.worker_queue
     if old_worker is not None:
+        # Time-box the graceful stop: if the worker is blocked on a long /
+        # hung job (e.g. an OMLX cutplan turn), draining it could take forever
+        # and would hang the settings-save PUT that triggered this rebind. Fall
+        # back to a cancel so the rebind always completes.
+        import asyncio as _asyncio
+
         try:
-            await old_worker.stop()
+            await _asyncio.wait_for(old_worker.stop(), timeout=5.0)
+        except _asyncio.TimeoutError:
+            logger.warning("Worker stop timed out on rebind; cancelling it")
+            old_worker.close()
         except Exception as exc:  # noqa: BLE001 — best-effort teardown
             logger.warning("Error stopping previous worker on rebind: %s", exc)
+            old_worker.close()
 
     _build_into(ctx, library_path)
     await ctx.worker_queue.start()

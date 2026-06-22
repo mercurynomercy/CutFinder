@@ -54,6 +54,20 @@ def test_delete_cascades_messages_and_plans() -> None:
     assert store.get_latest_plan(s.id) is None
 
 
+def test_reset_interrupted_sessions() -> None:
+    store = MemoryCutSessionStore()
+    a = store.create_session()
+    b = store.create_session()
+    store.set_session_status(a.id, "running")
+    store.set_session_status(b.id, "idle")
+
+    n = store.reset_interrupted_sessions()
+
+    assert n == 1
+    assert store.get_session(a.id).status == "idle"
+    assert store.get_session(b.id).status == "idle"
+
+
 def test_status_and_request_updates() -> None:
     store = MemoryCutSessionStore()
     s = store.create_session()

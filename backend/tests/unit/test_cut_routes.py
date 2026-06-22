@@ -87,6 +87,13 @@ def test_send_message_enqueues_with_request() -> None:
     assert sid == s.id and text == "剪 15-20 分钟"
     assert req.date_from == "2026-04-25" and req.target_max_s == 1200
 
+    # The user message + running status are persisted synchronously, so a
+    # reopen/restart before the worker finishes still shows the message.
+    msgs = store.get_messages(s.id)
+    assert [m.role for m in msgs] == ["user"]
+    assert msgs[0].content == "剪 15-20 分钟"
+    assert store.get_session(s.id).status == "running"
+
 
 def test_send_message_404_unknown_session() -> None:
     client = _client(MemoryCutSessionStore())

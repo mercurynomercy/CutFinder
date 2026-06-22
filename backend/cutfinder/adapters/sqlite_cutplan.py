@@ -113,6 +113,20 @@ class SqliteCutSessionStore:
         )
         self._conn.commit()
 
+    def reset_interrupted_sessions(self) -> int:
+        """Mark sessions left ``running`` (process died mid-turn) back to idle.
+
+        The worker queue is in-memory, so a turn interrupted by a restart can no
+        longer make progress; clearing the flag stops the UI from spinning on a
+        turn that will never finish. Returns the count reset.
+        """
+        c = self._conn.cursor()
+        c.execute(
+            "UPDATE cut_sessions SET status = 'idle' WHERE status = 'running'",
+        )
+        self._conn.commit()
+        return c.rowcount
+
     def set_session_request(self, session_id: int, request_json: str) -> None:
         c = self._conn.cursor()
         c.execute(
