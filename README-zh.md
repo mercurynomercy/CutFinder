@@ -10,6 +10,12 @@
   <img src="doc/images/example.png" alt="CutFinder UI — 按日期分组的缩略图墙、筛选面板与详情面板"/>
 </p>
 
+<p align="center">
+  <img src="doc/images/ai_rough_cut.png" alt="CutFinder 初剪导演（beta）—— 左侧对话、右侧按日期分章的分镜表（含时码与缩略图）"/>
+  <br/>
+  <em>初剪导演（beta）—— 对话描述需求，得到按日期分章的分镜表。</em>
+</p>
+
 > 本地运行的 Vlog 视频素材（footage）智能分类与检索工具。灵感来自 [Argus](https://github.com/discoposse/argus)。
 
 **English docs → [README.md](./README.md)**
@@ -73,6 +79,7 @@ make app          # → dist/CutFinder.app（以及 dist/CutFinder.dmg）
 - **一键打开 / 在 Finder 中查看**：缩略图与详情面板可一键用默认播放器打开视频；日期分组标题可一键在 Finder 中打开该日期文件夹（macOS `open`）。
 - **重新分析单个片段**：换模型或结果不佳时一键重跑 AI，保留你的手动纠正与标签。分类判错时，可在详情面板切换 A/B 类型——副本会自动**移动**到正确的 A-roll/B-roll 目录并重命名，`library_path` 同步更新。
 - **关键帧推荐（剪辑切点 + 精选帧）**：为每段素材给出最多 N 条（默认 3，可配置）排序的剪辑建议——**A-roll 由文本模型基于转写选段**、**B-roll 由 Qwen3-VL 基于采样帧挑选**，每条含 in/out 时码、代表帧与一句理由。扫描完成后可自动排队（设置开关，**默认关**，因其最贵），也可在详情面板按需生成；画廊卡片有「已有建议」角标。
+- **初剪导演 —— 对话式分镜表（beta）**：在对话框里描述你想要的成片（日期范围、目标时长、画面比例、风格/节奏），本地 Qwen 文本模型就会基于已编目素材产出一份精确到片段内 in/out 的**分镜表**：**按拍摄日期分章**、每天内**按真实拍摄时间线排序**，以 A-roll 解说为叙事主线（依据转写选段）、配 B-roll 空镜插空。每行显示该片段的日期与文件名，方便快速找素材；整份可一键**复制为 Markdown** 贴进剪辑软件。日期/时长/比例等参数直接从你的消息里解析，生成时**按每个拍摄日期分别跑一遍**以保证本地模型的稳定性，**导演 Prompt 完全可在对话框内编辑**（并可一键恢复自带默认）。全程**只读编目**，不渲染、不导出剪辑工程。**目前为 beta，会持续改进。**
 - **片段拍摄日期显示**：缩略图卡片和详情面板均展示片段的拍摄时间（优先使用嵌入 capture time，回退到文件创建时间）。
 - **任务队列管理**：单独的「任务队列」页可查看所有扫描/重分析任务，支持删除、重试失败项、全局暂停/恢复；队列暂停时扫描会自动提示并可选恢复。
 - **进度条刷新后不丢**：刷新页面后，扫描/关键帧进度条与字幕导出进度条会自动重新挂接到后台仍在跑的任务（活儿没停，只是 UI 一度丢了引用），不必重新触发。
@@ -240,7 +247,7 @@ make models                     # 预下载 mlx-whisper large-v3-mlx + Demucs ht
 ```bash
 cd backend
 
-uv run pytest tests/unit             # 仅单元测试（438 项，无需外部服务，秒级）
+uv run pytest tests/unit             # 仅单元测试（515 项，无需外部服务，秒级）
 uv run pytest -m integration         # 集成测试（需真实 OMLX / ffmpeg / 样片）
 uv run mypy cutfinder/               # 类型检查（strict，clean）
 uv run ruff check cutfinder/         # linting（clean）

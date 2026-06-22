@@ -10,6 +10,12 @@
   <img src="doc/images/example.png" alt="CutFinder UI — thumbnail wall with date grouping, filters and detail panel"/>
 </p>
 
+<p align="center">
+  <img src="doc/images/ai_rough_cut.png" alt="CutFinder rough-cut director (beta) — chat on the left, a date-chaptered shot list with timecodes and thumbnails on the right"/>
+  <br/>
+  <em>Rough-cut director (beta) — chat your requirements, get a date-chaptered shot list.</em>
+</p>
+
 > A local, offline tool that automatically classifies, tags, summarizes, and organizes your Vlog footage. Inspired by [Argus](https://github.com/discoposse/argus).
 
 **中文文档 → [README-zh.md](./README-zh.md)**
@@ -74,6 +80,7 @@ Drag `dist/CutFinder.app` to `/Applications` and double-click:
 - **Re-analyze a single clip** — re-run the AI with one click (when changing models or unhappy with the result), preserving your manual corrections and tags. If the A/B verdict was wrong, toggle the type in the detail panel — the copy is **moved** to the correct A-roll/B-roll folder and renamed, and `library_path` is updated.
 - **Keyframe suggestions (cut points + highlight frames)** — for each clip, up to N ranked editing suggestions (default 3, configurable): **A-roll uses the text model over the transcript**, **B-roll uses Qwen3-VL over sampled frames**. Each suggestion carries in/out timecodes, a representative frame, and a one-line rationale. Suggestions can auto-queue after a scan (a Settings toggle, **off by default** since it's the most expensive step) or be generated on demand in the detail panel; gallery cards show a "has suggestions" badge.
 - **Subtitle export for finished cuts** — pick any edited video → re-transcribe with the configured speech engine (vocals isolated first to strip BGM) → export Final Cut Pro-native **iTT + SRT** into a folder you choose (source video stays read-only, subtitle language follows the AI output language, transcribe-only — no translation). With the Qwen engine, timestamps come from real forced alignment so cues stay accurate on long clips. The export shows a **live progress bar synced to the real backend progress**, advancing through two phases: vocal separation, then transcription.
+- **Rough-cut director — conversational shot list (beta)** — describe the cut you want in chat (date range, target length, aspect ratio, style/rhythm) and a local Qwen text model drafts a precise, in/out-level **shot list** from your cataloged footage: chaptered **by shooting date**, ordered along the real shooting timeline within each day, with an A-roll narration spine (transcript-driven) plus B-roll cutaways. Each row shows the clip's date and file so you can find the source fast; copy the whole plan as Markdown into your editor. Scoping (dates / length / aspect) is parsed straight from your message, generation runs **one focused pass per shooting date** for reliability on local models, and the **director prompt is fully editable** (with one-click reset to the built-in default) from a button in the chat box. Read-only over the catalog — it never renders or exports an edit project. **Still in beta and actively being improved.**
 - **Capture-date display** — both thumbnail cards and the detail panel show each clip's capture time (embedded capture time preferred, falling back to file creation time).
 - **Task queue management** — a dedicated Task Queue page lists every scan / re-analyze job, with delete, retry-failed, and global pause/resume; scanning prompts you when the queue is paused.
 - **Progress bars survive a refresh** — the scan/keyframe progress bar and the subtitle-export progress bar re-attach to jobs still running in the backend after a page reload (the work never stopped, only the UI lost track), so you don't have to re-trigger anything.
@@ -244,7 +251,7 @@ You don't have to run this — models are **downloaded automatically on first us
 ```bash
 cd backend
 
-uv run pytest tests/unit             # unit tests only (438, no external services, seconds)
+uv run pytest tests/unit             # unit tests only (515, no external services, seconds)
 uv run pytest -m integration         # integration tests (need a real OMLX / ffmpeg / sample clips)
 uv run mypy cutfinder/               # type check (strict, clean)
 uv run ruff check cutfinder/         # linting (clean)

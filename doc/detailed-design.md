@@ -2,7 +2,7 @@
 
 > 配套需求文档：[`doc/proposal.md`](./proposal.md)。本文件把需求拆成可独立开发、独立测试的模块，给出每个模块的职责、接口、输入输出、依赖与测试方式。
 >
-> - **日期**：2026-06-13（v1）；2026-06-18 增补 §3.13 字幕导出（独立成片 → FCP iTT/SRT）；2026-06-22 增补 §3.15 初剪导演 Agent（对话生成分镜表）。
+> - **日期**：2026-06-13（v1）；2026-06-18 增补 §3.13 字幕导出（独立成片 → FCP iTT/SRT）；2026-06-22 增补 §3.15 初剪导演 Agent（对话生成分镜表，**beta，持续改进中**）：分阶段生成已细化为**按拍摄日期逐日生成**、消息内自然语言参数解析、可编辑导演 Prompt（`~/.cutfinder/config.json`，可重置）、分镜表带拍摄日期列并按当天真实时间线排序。
 > - **范围**：proposal v1（需求 0–7）。需求 8（关键帧建议）已实现（见 `tasks/16-keyframes.md`）。**字幕导出**（§3.13、`tasks/17`）与**初剪导演 Agent**（§3.15、`tasks/25`）均为 v1 之外的独立工具，复用已有适配器/队列/SSE，**不改动 v1 per-clip 流水线接口**。
 
 ---
@@ -290,9 +290,11 @@ cutfinder/
 
 ---
 
-### 3.15 CutDirector（初剪导演 Agent，独立工具——v1 之外）
+### 3.15 CutDirector（初剪导演 Agent，独立工具——v1 之外，**beta，持续改进中**）
 
 > 在**已编目素材库**之上，通过**多轮对话**，依据用户给的日期范围 / 目标时长 / 风格 / 节奏 / 画面比例，产出一份**精确到片段内 in/out 的文字分镜表（A-roll 叙事主线 + B-roll 插空）**，供用户照搬到剪辑软件。**不渲染、不导出剪辑工程**（FCPXML 留作后续）。任务清单见 `tasks/25-rough-cut-agent.md`。
+>
+> **状态：beta。** 已可用并已按真机表现迭代（见下方"首要风险"与"迭代增强"），分镜"质量"仍在持续打磨——默认 prompt、按日期/时间线的组织方式、本地模型稳定性都会继续改进。
 
 - **架构（方案 C：受约束的工具调用环）**：把"会算错、要稳定"的部分（时长是否凑够目标区间、in/out 时间码、表格渲染）交给**确定性代码**；把"需要创意"的部分（挑哪句解说当主线、配哪条 B-roll、节奏松紧）交给 **LLM 工具调用环**。LLM 跑飞时由确定性脚手架 + 护栏兜底。
 - **复用**：`CatalogRepository`（检索编目 + transcript segments + 关键帧）、`VisionTagger`+`FrameExtractor`（现场看 B-roll）、现有 OMLX 文本 client（`text_model=Qwen3.6`）、Worker 队列 + SSE。
@@ -311,7 +313,8 @@ cutfinder/
 - **纯逻辑格式化**（`cutplan/format.py`，无 IO，本模块测试金矿）：
   ```python
   def to_shotlist_markdown(plan: CutPlan) -> str: ...
-  # 按章节分组：每章 `## 章节标题` + 表：# | in–out 时码 | 时长 | 类型 | 库内文件 | 缩略图 | 内容/台词 | 用途·理由
+  # 按章节（=拍摄日期）分组：每章 `## YYYY-MM-DD` + 表：
+  #   # | 日期 | in–out 时码 | 时长 | 类型 | 库内文件 | 缩略图 | 内容/台词 | 用途·理由
   # 表尾：总时长 + 是否落在目标区间
   ```
   **缩略图引用**链接 `/api/clips/{id}/thumbnail` 或所选窗口的关键帧帧图。
@@ -319,7 +322,14 @@ cutfinder/
 - **会话持久化**：新表 `cut_sessions`/`cut_messages`/`cut_plans`（见 §5），**可重开、可删除**（删会话级联清消息与 plan）。
 - **Worker**：新增 job kind `cutplan`，`enqueue_cutplan(session_id, user_text)`/`_process_cutplan`；经 SSE 推**工具活动 + 助手 token + plan ready** 事件。
 - **硬约束**：全程**只读编目与副本**，不碰源文件、不渲染、不联网；**素材须先入库**，库里无该日期范围素材时提示先扫描，不现场扫源文件夹。
-- **首要风险（已实测命中）**：Qwen3.6 本地 function-calling **不收敛**——多轮工具调用始终不发 `emit_plan`。**已按设计退化为「分阶段受限调用」并设为默认**：检索由 Director 用代码完成（按日期范围查编目），再把紧凑素材清单（A-roll 带逐段时间戳）交给模型，**一次性结构化补全**出分镜表 JSON（不依赖多轮 tool-call）。`CutPlanService` 调 `Director.generate(...)`；自治工具环 `Director.run(...)` 保留备用。新增 `LLMAgentClient.complete(...)`。
+- **首要风险（已实测命中）**：Qwen3.6 本地 function-calling **不收敛**——多轮工具调用始终不发 `emit_plan`。**已退化为「分阶段受限调用」并设为默认**：检索由 Director 用代码完成（按日期范围查编目），再把紧凑素材清单（A-roll 带逐段时间戳）交给模型结构化补全分镜表 JSON（不依赖多轮 tool-call）。`CutPlanService` 调 `Director.generate(...)`；自治工具环 `Director.run(...)` 保留备用。新增 `LLMAgentClient.complete(...)`。
+  - **第二轮实测命中：整片一次性 JSON 仍会跑飞**——让模型一次产出 15–20 分钟跨多天的完整分镜，会陷入复读/超长生成（实测单次 3 万+ token 仍不终止），JSON 无法解析。**已改为「按拍摄日期逐日生成」**：把素材按拍摄日期分组，**每个日期单独一次 `complete()`**，输出小而稳定，再在代码里拼接成按日期分章的 plan（章节直接 = 日期）。补全采样改 `temperature=0.3`、`max_tokens=8192` 抑制复读；某天解析失败则跳过该天并在回复里注明。
+- **迭代增强（beta）**：
+  - **消息内自然语言参数解析**（`cutplan/request_parse.py`，确定性正则）：从用户中文消息里抽 `date_from/date_to`、`target_min_s/max_s`、`aspect_ratio`，与会话记住的 `RoughCutRequest` 合并；refine 轮无新日期时沿用原范围。此前前端不下发 scoping，检索会拉全库导致模型过载。
+  - **可编辑导演 Prompt**：`DEFAULT_CUT_DIRECTOR_PROMPT`（按日期分章、当天按拍摄时间线、A-roll 以 transcript 为主、不依赖既有关键帧）可由用户在初剪页编辑，存 `~/.cutfinder/config.json` 的 `cut_director_prompt`，含 `{aspect}/{target}/{style}` 占位符；可一键重置回自带默认（删除该键）。
+  - **当天时间线排序**：每天素材按 `capture_time` 排序后再喂模型，上下文带完整时间戳，分镜还原当天真实行程顺序。
+  - **拍摄日期入分镜**：`ClipDetail`/`Shot` 增 `capture_time`/`clip_date`，UI 与 Markdown 分镜表均显示日期列，便于回找素材。
+  - **会话自动命名**：首条用户消息自动作为会话标题（不再恒为"未命名"）。
 - **独立测**：格式化用黄金串（章节/缩略图引用/时长尾注/边界）；Director 注入**假 LLMAgentClient（脚本化 tool_calls）+ 假工具**，断言 A 主线选段映射 in/out、B 插空、时长护栏回灌、最大轮数/视觉预算护栏、refine 重跑；Retriever/SessionStore 用内存 SQLite（含删除级联）。分镜"质量"不可自动化验收——靠 eval 清单 + 真机抽查。
 
 ---
@@ -442,6 +452,9 @@ CREATE TABLE cut_plans (
 | DELETE | `/api/cut/sessions/{id}` | **删除对话**(级联清消息与 plan) |
 | POST | `/api/cut/sessions/{id}/messages` | 发用户消息；body `{text, request?}`→ 入队 `cutplan` job(复用 `/api/jobs/{id}` + SSE) |
 | GET | `/api/cut/sessions/{id}/plan` | 最近 plan(含 markdown 分镜表渲染) |
+| GET | `/api/cut/prompt` | 当前导演 Prompt(自定义或自带默认)：`{prompt, default, is_default}` |
+| PUT | `/api/cut/prompt` | body `{prompt}` → 存自定义导演 Prompt(机器全局) |
+| DELETE | `/api/cut/prompt` | 重置为自带默认(删除自定义键) |
 
 - API 层**薄**：只做参数校验(pydantic)、调用编排/仓储、序列化。便于用 FastAPI `TestClient` 配合假仓储/假编排器做接口测试。
 - 纠正 `roll_type` 写入 `roll_source='manual'`，重扫不被自动判定覆盖（“记住纠正”）。
@@ -514,6 +527,7 @@ CREATE TABLE cut_plans (
 | `cut_max_tool_rounds` | `24` | 初剪 Agent(§3.15)工具调用环最大轮数护栏 |
 | `cut_vision_budget` | `6` | 初剪 Agent 单次生成内 `inspect_broll`(现场视觉)调用上限；**Settings 可调**，`0`=不限(由机器性能决定，JSON) |
 | `cut_default_aspect_ratio` | `16:9` | 初剪 Agent 默认画面比例（用户可在对话里覆盖） |
+| `cut_director_prompt` | （自带默认） | 初剪 Agent 导演 system prompt；用户可在初剪页编辑、存机器全局 `~/.cutfinder/config.json`，含 `{aspect}/{target}/{style}` 占位符；删除即重置回自带默认 |
 
 ---
 
