@@ -319,7 +319,7 @@ cutfinder/
 - **会话持久化**：新表 `cut_sessions`/`cut_messages`/`cut_plans`（见 §5），**可重开、可删除**（删会话级联清消息与 plan）。
 - **Worker**：新增 job kind `cutplan`，`enqueue_cutplan(session_id, user_text)`/`_process_cutplan`；经 SSE 推**工具活动 + 助手 token + plan ready** 事件。
 - **硬约束**：全程**只读编目与副本**，不碰源文件、不渲染、不联网；**素材须先入库**，库里无该日期范围素材时提示先扫描，不现场扫源文件夹。
-- **首要风险**：Qwen3.6 本地 function-calling 可靠性。对策 = 确定性脚手架 + 护栏；实测太差则退化为分阶段受限调用（检索→列大纲→填段→格式化），接口不变，只换 Director 内部策略。
+- **首要风险（已实测命中）**：Qwen3.6 本地 function-calling **不收敛**——多轮工具调用始终不发 `emit_plan`。**已按设计退化为「分阶段受限调用」并设为默认**：检索由 Director 用代码完成（按日期范围查编目），再把紧凑素材清单（A-roll 带逐段时间戳）交给模型，**一次性结构化补全**出分镜表 JSON（不依赖多轮 tool-call）。`CutPlanService` 调 `Director.generate(...)`；自治工具环 `Director.run(...)` 保留备用。新增 `LLMAgentClient.complete(...)`。
 - **独立测**：格式化用黄金串（章节/缩略图引用/时长尾注/边界）；Director 注入**假 LLMAgentClient（脚本化 tool_calls）+ 假工具**，断言 A 主线选段映射 in/out、B 插空、时长护栏回灌、最大轮数/视觉预算护栏、refine 重跑；Retriever/SessionStore 用内存 SQLite（含删除级联）。分镜"质量"不可自动化验收——靠 eval 清单 + 真机抽查。
 
 ---
