@@ -170,6 +170,9 @@ class PrefsOut(BaseModel):
     keyframe_count: int = 3
     keyframe_auto: bool = False
     vocal_separation: bool = False
+    cut_max_tool_rounds: int = 24
+    cut_vision_budget: int = 6
+    cut_default_aspect_ratio: str = "16:9"
 
 
 class SettingsOut(BaseModel):
@@ -191,6 +194,9 @@ class SettingsUpdate(BaseModel):
     keyframe_count: Optional[int] = None
     keyframe_auto: Optional[bool] = None
     vocal_separation: Optional[bool] = None
+    cut_max_tool_rounds: Optional[int] = None
+    cut_vision_budget: Optional[int] = None
+    cut_default_aspect_ratio: Optional[str] = None
 
 
 # ── SSE event types (internal helper schemas) ───────────────────
@@ -232,3 +238,60 @@ class ReanalyzeErrorEvent(BaseModel):
     type: str = "reanalyze_error"
     clip_id: int
     error: Optional[str] = None
+
+
+# ── Rough-cut director agent (§3.15) ────────────────────────────
+
+class RoughCutRequestIn(BaseModel):
+    """Optional structured params accompanying a chat message."""
+
+    date_from: Optional[str] = None
+    date_to: Optional[str] = None
+    target_min_s: Optional[float] = None
+    target_max_s: Optional[float] = None
+    aspect_ratio: Optional[str] = None
+    style_notes: Optional[str] = None
+
+
+class SendCutMessageRequest(BaseModel):
+    """POST /cut/sessions/{id}/messages body."""
+
+    text: str = Field(..., min_length=1)
+    request: Optional[RoughCutRequestIn] = None
+
+
+class CutSessionOut(BaseModel):
+    id: int
+    title: str = ""
+    status: str = "idle"
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
+
+
+class CutMessageOut(BaseModel):
+    role: str
+    content: str = ""
+    created_at: Optional[str] = None
+
+
+class ShotOut(BaseModel):
+    clip_id: int
+    roll: str
+    in_s: float
+    out_s: float
+    content: str = ""
+    rationale: str = ""
+    chapter: str = ""
+    clip_label: str = ""
+    thumb_ref: Optional[str] = None
+
+
+class CutPlanOut(BaseModel):
+    shots: list[ShotOut] = []
+    chapters: list[str] = []
+    total_s: float = 0.0
+    target_min_s: Optional[float] = None
+    target_max_s: Optional[float] = None
+    within_target: bool = True
+    note: str = ""
+    markdown: str = ""

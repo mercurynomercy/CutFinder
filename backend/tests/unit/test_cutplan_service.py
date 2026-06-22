@@ -1,0 +1,86 @@
+"""Unit tests for CutPlanService — persistence + director orchestration."""
+
+from __future__ import annotations
+
+from typing import Any
+
+import pytest
+
+from cutfinder.adapters.sqlite_cutplan import MemoryCutSessionStore
+from cutfinder.cutplan.director import CutDirectorResult
+from cutfinder.domain.models import CutPlan, RoughCutRequest, Shot
+from cutfinder.pipeline.cutplan_service import CutPlanService
+
+
+class FakeDirector:
+    """Records (request, history, user_text) and returns a canned result."""
+
+    def __init__(self, result: CutDirectorResult) -> None:
+        self.result = result
+        self.calls: list[tuple[RoughCutRequest, list[Any], str]] = []
+
+    def run(self, request: RoughCutRequest, history: list[Any], user_text: str) -> CutDirectorResult:
+        self.calls.append((request, list(history), user_text))
+        return self.result
+
+
+def _plan() -> CutPlan:
+    return CutPlan(shots=[Shot(clip_id=1, roll="a", in_s=0, out_s=10)], total_s=10.0)
+
+
+def test_handle_persists_messages_and_plan() -> None:
+    store = MemoryCutSessionStore()
+    s = store.create_session()
+    director = FakeDirector(CutDirectorResult("这是分镜", _plan()))
+    svc = CutPlanService(store, director)  # type: ignore[arg-type]
+
+    result = svc.handle(s.id, "剪一条", RoughCutRequest(date_from="2026-04-25"))
+
+    assert result.plan is not None
+    msgs = store.get_messages(s.id)
+    assert [m.role for m in msgs] == ["user", "assistant"]
+    assert msgs[0].content == "剪一条"
+    assert msgs[1].content == "这是分镜"
+    assert store.get_latest_plan(s.id).total_s == 10.0
+    assert store.get_session(s.id).status == "idle"
+    # The explicit request was passed through and remembered.
+    assert director.calls[0][0].date_from == "2026-04-25"
+
+
+def test_refine_reuses_stored_request() -> None:
+    store = MemoryCutSessionStore()
+    s = store.create_session()
+    director = FakeDirector(CutDirectorResult("v1", _plan()))
+    svc = CutPlanService(store, director)  # type: ignore[arg-type]
+
+    svc.handle(s.id, "第一轮", RoughCutRequest(target_min_s=60, target_max_s=120))
+    # Second turn with no request → should reuse the stored params.
+    svc.handle(s.id, "第三段太长")
+
+    assert director.calls[1][0].target_min_s == 60
+    # History on the refine turn includes the prior exchange.
+    history_roles = [m.role for m in director.calls[1][1]]
+    assert history_roles == ["user", "assistant"]
+
+
+def test_handle_marks_error_on_director_failure() -> None:
+    store = MemoryCutSessionStore()
+    s = store.create_session()
+
+    class Boom:
+        def run(self, *_a: Any, **_k: Any) -> CutDirectorResult:
+            raise RuntimeError("model down")
+
+    svc = CutPlanService(store, Boom())  # type: ignore[arg-type]
+    with pytest.raises(RuntimeError):
+        svc.handle(s.id, "go")
+    assert store.get_session(s.id).status == "error"
+    # The user message is still recorded even though the turn failed.
+    assert [m.role for m in store.get_messages(s.id)] == ["user"]
+
+
+def test_handle_unknown_session_raises() -> None:
+    store = MemoryCutSessionStore()
+    svc = CutPlanService(store, FakeDirector(CutDirectorResult("x", None)))  # type: ignore[arg-type]
+    with pytest.raises(ValueError):
+        svc.handle(999, "go")

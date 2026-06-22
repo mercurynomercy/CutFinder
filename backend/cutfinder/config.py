@@ -229,6 +229,15 @@ class Prefs(BaseModel, frozen=True):
     # A-roll transcription strips BGM with Demucs before Whisper; off by
     # default. Subtitle export always separates regardless of this flag.
     vocal_separation: bool = False
+    # Rough-cut director agent (§3.15) guardrails.
+    # Max tool-calling rounds before the loop force-finalizes the current draft.
+    cut_max_tool_rounds: int = Field(default=24, ge=1, le=200)
+    # Max live inspect_broll (Qwen3-VL) calls per generation; 0 = unlimited.
+    # Tunable because text/vision interleaving makes OMLX swap models (slow) —
+    # weak machines should cap it, strong machines can open it up.
+    cut_vision_budget: int = Field(default=6, ge=0)
+    # Default aspect ratio when the user doesn't state one in chat.
+    cut_default_aspect_ratio: str = "16:9"
 
     @field_validator(
         "text_model", "vision_model", "whisper_model",
