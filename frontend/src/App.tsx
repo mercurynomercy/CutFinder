@@ -408,8 +408,12 @@ export default function App() {
             className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-md bg-[--primary] px-4 py-1.5 text-sm font-medium text-white shadow hover:bg-[--primary]/90 transition-colors"
             title={t('app.roughcut')}
           >
-            <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" aria-hidden="true">
-              <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.6} d="M7.85 8.25l1.53.89M7.85 8.25a3 3 0 11-5.2-3 3 3 0 015.2 3zm1.53.89a2.16 2.16 0 011.08 1.83c0 .36.06.7.14 1.03M9.38 9.14l10.77 6.21a2.25 2.25 0 01-1.08 4.19M7.85 15.75l1.53-.89m-1.53.89a3 3 0 11-5.2 3 3 3 0 015.2-3zm1.53-.89a2.16 2.16 0 001.08-1.84c0-.35.06-.69.14-1.02m0 0L19.5 6.75" />
+            <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <circle cx="6" cy="6" r="3" />
+              <circle cx="6" cy="18" r="3" />
+              <path d="M20 4 8.12 15.88" />
+              <path d="m14.8 14.8 5.2 5.2" />
+              <path d="M8.12 8.12 12 12" />
             </svg>
             {t('app.roughcut')}
           </button>
