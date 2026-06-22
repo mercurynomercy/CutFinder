@@ -162,6 +162,30 @@ def save_global_prefs(updates: dict[str, Any]) -> None:
     _write_global_file(data)
 
 
+_CUT_DIRECTOR_PROMPT_KEY = "cut_director_prompt"
+
+
+def load_cut_director_prompt() -> str | None:
+    """Return the user's custom rough-cut director prompt, or ``None``.
+
+    ``None`` means "no override — use the built-in default"; the director falls
+    back to :data:`~cutfinder.cutplan.director.DEFAULT_CUT_DIRECTOR_PROMPT`.
+    """
+    data = _read_global_file()
+    value = data.get(_CUT_DIRECTOR_PROMPT_KEY)
+    return value if isinstance(value, str) and value.strip() else None
+
+
+def save_cut_director_prompt(prompt: str | None) -> None:
+    """Persist a custom director prompt (``None``/blank resets to the default)."""
+    data = _read_global_file()
+    if prompt and prompt.strip():
+        data[_CUT_DIRECTOR_PROMPT_KEY] = prompt
+    else:
+        data.pop(_CUT_DIRECTOR_PROMPT_KEY, None)
+    _write_global_file(data)
+
+
 def resolve_env() -> EnvSettings:
     """Resolve OMLX config, layering all sources.
 

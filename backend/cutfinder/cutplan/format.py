@@ -11,8 +11,8 @@ from ..domain.models import CutPlan, Shot
 
 # Output language is Chinese by default (matches the project), but the static
 # labels are kept terse so the table stays readable in any editor.
-_HEADER = "| # | 入–出 | 时长 | 类型 | 文件 | 缩略图 | 内容/台词 | 用途·理由 |"
-_DIVIDER = "|---|---|---|---|---|---|---|---|"
+_HEADER = "| # | 日期 | 入–出 | 时长 | 类型 | 文件 | 缩略图 | 内容/台词 | 用途·理由 |"
+_DIVIDER = "|---|---|---|---|---|---|---|---|---|"
 
 _ROLL_LABEL = {"a": "A-roll", "b": "B-roll"}
 
@@ -48,7 +48,7 @@ def _shot_row(index: int, shot: Shot) -> str:
     roll = _ROLL_LABEL.get(shot.roll, shot.roll or "")
     thumb = f"![]({shot.thumb_ref})" if shot.thumb_ref else ""
     return (
-        f"| {index} | {tc} | {format_duration(span)} | {roll} "
+        f"| {index} | {_escape(shot.clip_date)} | {tc} | {format_duration(span)} | {roll} "
         f"| {_escape(shot.clip_label)} | {thumb} "
         f"| {_escape(shot.content)} | {_escape(shot.rationale)} |"
     )

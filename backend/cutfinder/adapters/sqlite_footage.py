@@ -56,6 +56,7 @@ class CatalogFootageRetriever:
             clip_id=clip_id,
             roll=clip.roll_type,
             duration_s=clip.duration_s,
+            capture_time=clip.capture_time.isoformat() if clip.capture_time else None,
             source_path=clip.source_path,
             library_path=clip.library_path,
             summary=clip.summary,

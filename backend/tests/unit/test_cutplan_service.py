@@ -63,6 +63,42 @@ def test_refine_reuses_stored_request() -> None:
     assert history_roles == ["user", "assistant"]
 
 
+def test_handle_auto_titles_from_first_message() -> None:
+    store = MemoryCutSessionStore()
+    s = store.create_session()  # created untitled (via "新建对话")
+    director = FakeDirector(CutDirectorResult("ok", _plan()))
+    svc = CutPlanService(store, director)  # type: ignore[arg-type]
+
+    svc.handle(s.id, "我想要生成一个初剪，用2026/4/25 到 2026/5/11的素材")
+
+    title = store.get_session(s.id).title
+    assert title and title != "未命名"
+    assert title.startswith("我想要生成一个初剪")
+    # A second turn must not overwrite the established title.
+    svc.handle(s.id, "再短一点")
+    assert store.get_session(s.id).title == title
+
+
+def test_handle_parses_request_from_message_text() -> None:
+    store = MemoryCutSessionStore()
+    s = store.create_session()
+    director = FakeDirector(CutDirectorResult("ok", _plan()))
+    svc = CutPlanService(store, director)  # type: ignore[arg-type]
+
+    # No explicit request object — scoping comes from the message itself.
+    svc.handle(s.id, "用2026/4/25 到 2026/5/11的素材剪成一条 15~20 分钟、16:9 的 vlog")
+
+    req = director.calls[0][0]
+    assert req.date_from == "2026-04-25"
+    assert req.date_to == "2026-05-11"
+    assert req.target_min_s == 900.0
+    assert req.target_max_s == 1200.0
+    assert req.aspect_ratio == "16:9"
+    # A refine turn with no new dates keeps the original scope.
+    svc.handle(s.id, "第三段太长，整体再紧凑一点")
+    assert director.calls[1][0].date_from == "2026-04-25"
+
+
 def test_handle_marks_error_on_director_failure() -> None:
     store = MemoryCutSessionStore()
     s = store.create_session()

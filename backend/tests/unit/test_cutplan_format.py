@@ -36,7 +36,7 @@ def test_single_chapter_table_and_columns() -> None:
             Shot(
                 clip_id=1, roll="a", in_s=12.0, out_s=25.0,
                 content="今天我们去爬山", rationale="开场叙事",
-                chapter="开场", clip_label="A-0001.mov",
+                chapter="开场", clip_label="A-0001.mov", clip_date="2026-04-25",
                 thumb_ref="/api/clips/1/thumbnail",
             ),
         ],
@@ -48,8 +48,9 @@ def test_single_chapter_table_and_columns() -> None:
     )
     md = to_shotlist_markdown(plan)
     assert "## 开场" in md
-    assert "| # | 入–出 | 时长 | 类型 | 文件 | 缩略图 | 内容/台词 | 用途·理由 |" in md
+    assert "| # | 日期 | 入–出 | 时长 | 类型 | 文件 | 缩略图 | 内容/台词 | 用途·理由 |" in md
     assert "00:00:12.000 – 00:00:25.000" in md
+    assert "2026-04-25" in md
     assert "A-roll" in md
     assert "A-0001.mov" in md
     assert "![](/api/clips/1/thumbnail)" in md
@@ -94,4 +95,4 @@ def test_pipe_in_content_is_escaped() -> None:
     # Escaped row still has the right number of structural separators
     # (the escaped \| inside the cell doesn't count as one).
     row = next(line for line in md.splitlines() if line.startswith("| 1 |"))
-    assert row.replace("\\|", "").count("|") == 9  # 8 columns → 9 pipes
+    assert row.replace("\\|", "").count("|") == 10  # 9 columns → 10 pipes

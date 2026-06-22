@@ -15,6 +15,7 @@ target check itself.
 from __future__ import annotations
 
 import json
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -27,6 +28,28 @@ from ..domain.models import (
     Shot,
 )
 from ..ports.cutplan import BrollInspector, FootageRetriever, LLMAgentClient
+
+logger = logging.getLogger(__name__)
+
+# Built-in default director prompt for the staged generator. Editable in the UI
+# (persisted to ~/.cutfinder/config.json); the "重置" button restores this text.
+# Placeholders {aspect}/{target}/{style} are substituted per request — keep them
+# if you want the画面比例/目标时长/风格 to appear in the prompt.
+DEFAULT_CUT_DIRECTOR_PROMPT = (
+    "你是专业的视频初剪导演。基于下面给出的已编目素材，生成一份精确到片段内 in/out 的"
+    "分镜表，供用户照搬到剪辑软件。\n"
+    "按【拍摄日期】分章：每个拍摄日期作为一个章节，chapter 字段直接填该日期（ISO 格式，"
+    "如 2026-04-25）；把同一天的素材组织成一段叙事，章节按日期先后排列。\n"
+    "在每一天内：严格按每条素材给出的【拍摄时间】时间戳先后顺序组织，还原当天真实的行程"
+    "时间线——先发生的先出现（例如先到关帝庙、再去 Market City、最后吃饭，就按这个顺序排）。"
+    "素材清单已按拍摄时间排好，请保持这个顺序，不要打乱。\n"
+    "以 A-roll（有解说）的句子作为叙事主线，A-roll 选段以 transcript（台词内容）为主要依据，"
+    "in/out 落在给出的 segment 时间边界上，不要依赖任何已有的关键帧切点；每段 A-roll 后紧跟"
+    "与之同一场景/时间的 B-roll 空镜。\n"
+    "B-roll 在其时长内取一个合适窗口。\n"
+    "只能使用素材清单里出现的 clip_id，不要编造。让总时长尽量贴近目标。\n"
+    "画面比例 {aspect}。{target}风格/节奏：{style}"
+)
 
 # ── Tool schemas (OpenAI function-calling format) ────────────────
 
@@ -138,12 +161,18 @@ class CutDirector:
         history: list[ChatMessage],
         user_text: str,
     ) -> CutDirectorResult:
-        """Deterministic retrieval + one structured LLM call → shot list.
+        """Deterministic retrieval + one LLM call **per shooting date** → shot list.
 
-        Far more robust than the autonomous tool loop on local function-callers:
-        the catalog is queried in code, and the model only fills in a shot-list
-        JSON in a single completion.
+        A single call for a whole multi-day 15–20 min plan overwhelms local
+        models (they run away generating tens of thousands of tokens and never
+        return parseable JSON). Generating one focused shot list per shooting
+        date keeps each completion small and reliable, and is exactly the
+        date-chaptered structure the UI wants.
         """
+        from collections import defaultdict
+
+        from ..adapters._jsonparse import parse_json_object
+
         clips = self._retriever.search_footage(
             date_from=request.date_from, date_to=request.date_to,
         )
@@ -153,44 +182,86 @@ class CutDirector:
                 None,
             )
 
+        groups: dict[str, list[Any]] = defaultdict(list)
+        for b in clips:
+            day = (getattr(b, "capture_time", None) or "")[:10] or "无日期"
+            groups[day].append(b)
+        # Sort each day's clips by capture time so the context — and therefore the
+        # shot order the model produces — follows the real shooting timeline.
+        for day_clips in groups.values():
+            day_clips.sort(key=lambda b: (getattr(b, "capture_time", None) or ""))
+        dates = sorted(groups)
+
         cache: dict[int, ClipDetail] = {}
-        context = self._build_context(clips, cache)
-        messages: list[dict[str, Any]] = [
-            {"role": "system", "content": self._staged_system_prompt(request)},
-        ]
-        for m in history:
-            if m.role in ("user", "assistant") and m.content:
-                messages.append({"role": m.role, "content": m.content})
-        messages.append({
-            "role": "user",
-            "content": (
-                f"{user_text}\n\n可用素材（只能用下列 clip_id）：\n{context}\n\n"
-                "请只输出 JSON，格式：\n"
-                '{"reply": "给用户的一句话", "note": "可选备注", '
-                '"shots": [{"clip_id": 整数, "roll": "a"或"b", "in_s": 数字, '
-                '"out_s": 数字, "content": "台词或画面", "rationale": "用途理由", '
-                '"chapter": "章节标题"}]}'
-            ),
-        })
+        system_prompt = self._staged_system_prompt(request)
+        per_day = self._per_day_target(request, len(dates))
 
-        from ..adapters._jsonparse import parse_json_object
+        all_shots: list[dict[str, Any]] = []
+        notes: list[str] = []
+        failed: list[str] = []
+        for day in dates:
+            context = self._build_context(groups[day], cache)
+            messages: list[dict[str, Any]] = [{"role": "system", "content": system_prompt}]
+            for m in history:
+                if m.role in ("user", "assistant") and m.content:
+                    messages.append({"role": m.role, "content": m.content})
+            messages.append({
+                "role": "user",
+                "content": self._day_user_prompt(user_text, day, context, per_day),
+            })
 
-        raw = self._llm.complete(messages)
-        data = parse_json_object(raw) if raw else None
-        if not isinstance(data, dict) or not isinstance(data.get("shots"), list):
+            raw = self._llm.complete(messages)
+            data = parse_json_object(raw) if raw else None
+            if not isinstance(data, dict) or not isinstance(data.get("shots"), list):
+                logger.warning(
+                    "cutplan: date %s produced no valid shots (%d clips); raw head=%r",
+                    day, len(groups[day]), (raw or "")[:300],
+                )
+                failed.append(day)
+                continue
+            for item in data["shots"]:
+                if isinstance(item, dict):
+                    item["chapter"] = day  # force the chapter to the shooting date
+                    all_shots.append(item)
+            if data.get("note"):
+                notes.append(str(data["note"]))
+
+        if not all_shots:
             return CutDirectorResult(
                 "生成分镜表失败（模型未返回有效结果），请重试或把需求说得更具体。", None,
             )
 
-        plan = self._build_plan(
-            {"shots": data["shots"], "note": data.get("note") or ""}, request, cache,
-        )
-        reply = data.get("reply")
-        text = reply if isinstance(reply, str) and reply else "已生成初剪分镜表。"
+        plan = self._build_plan({"shots": all_shots, "note": " ".join(notes)}, request, cache)
         if not plan.shots:
-            text = "模型没有选出可用片段，请重试或调整需求。"
-            return CutDirectorResult(text, None)
+            return CutDirectorResult("模型没有选出可用片段，请重试或调整需求。", None)
+        text = "已生成初剪分镜表。"
+        if failed:
+            text += f"（{('、').join(failed)} 这些日期未能生成，已跳过。）"
         return CutDirectorResult(text, plan)
+
+    @staticmethod
+    def _per_day_target(
+        request: RoughCutRequest, n_days: int,
+    ) -> tuple[float, float] | None:
+        """Split the overall target duration evenly across shooting dates."""
+        if request.target_min_s is None or request.target_max_s is None or n_days <= 0:
+            return None
+        return request.target_min_s / n_days, request.target_max_s / n_days
+
+    @staticmethod
+    def _day_user_prompt(
+        user_text: str, day: str, context: str, per_day: tuple[float, float] | None,
+    ) -> str:
+        budget = ""
+        if per_day is not None:
+            budget = f"\n这一天的目标时长约 {per_day[0]/60:.1f}–{per_day[1]/60:.1f} 分钟。"
+        return (
+            f"{user_text}\n\n本次只为【{day}】这一天生成分镜，chapter 一律填 \"{day}\"。{budget}\n\n"
+            f"该日期可用素材（只能用下列 clip_id）：\n{context}\n\n"
+            "请只输出 JSON，格式：\n"
+            '{"note": "可选备注", "shots": [{"clip_id": 整数, "roll": "a"或"b", '
+            '"in_s": 数字, "out_s": 数字, "content": "台词或画面", "rationale": "用途理由"}]}'
+        )
 
     def _build_context(
         self, clips: list[Any], cache: dict[int, ClipDetail], char_budget: int = 12000,
@@ -202,7 +273,10 @@ class CutDirector:
             dur = f"{b.duration_s:.0f}s" if b.duration_s else "?"
             desc = (b.summary or b.description or "").strip().replace("\n", " ")[:120]
             tags = ",".join(b.tags[:6]) if b.tags else ""
-            head = f"[{b.clip_id}] {b.roll}-roll dur={dur} {desc} tags={tags}"
+            # Full timestamp (date + time of day) so the model can order shots by
+            # the real shooting timeline within a day.
+            when = (b.capture_time or "").replace("T", " ")[:19] or "无拍摄时间"
+            head = f"[{b.clip_id}] {when} {b.roll}-roll dur={dur} {desc} tags={tags}"
             lines.append(head)
             used += len(head)
             if b.roll == "a" and b.has_transcript:
@@ -219,17 +293,19 @@ class CutDirector:
 
     @staticmethod
     def _staged_system_prompt(request: RoughCutRequest) -> str:
+        from ..config import load_cut_director_prompt
+
+        template = load_cut_director_prompt() or DEFAULT_CUT_DIRECTOR_PROMPT
         target = ""
         if request.target_min_s is not None and request.target_max_s is not None:
             target = f"目标时长 {request.target_min_s/60:.0f}–{request.target_max_s/60:.0f} 分钟。"
+        # Plain replace (not str.format) so stray braces in a custom prompt can't
+        # raise; unknown placeholders are simply left as-is.
         return (
-            "你是专业的视频初剪导演。基于下面给出的已编目素材，生成一份精确到片段内 in/out 的"
-            "分镜表，供用户照搬到剪辑软件。\n"
-            "结构：以 A-roll（有解说）的句子作为叙事主线，再为每段配合适的 B-roll 空镜插空。\n"
-            "A-roll 的 in/out 必须落在给出的 segment 时间边界上；B-roll 在其时长内取一个合适窗口。\n"
-            "只能使用素材清单里出现的 clip_id，不要编造。按章节组织，让总时长尽量贴近目标。\n"
-            f"画面比例 {request.aspect_ratio}。{target}"
-            f"风格/节奏：{request.style_notes or '（自行把握）'}"
+            template
+            .replace("{aspect}", request.aspect_ratio)
+            .replace("{target}", target)
+            .replace("{style}", request.style_notes or "（自行把握）")
         )
 
     # ── public entry (autonomous tool loop; advanced/experimental) ──
@@ -435,6 +511,7 @@ class CutDirector:
                 rationale=str(item.get("rationale") or ""),
                 chapter=chapter,
                 clip_label=_clip_label(detail),
+                clip_date=(detail.capture_time or "")[:10] if detail else "",
                 thumb_ref=f"/api/clips/{cid}/thumbnail",
             ))
             total += max(0.0, out_s - in_s)
@@ -481,7 +558,8 @@ class CutDirector:
             "你是专业的视频初剪导演。基于已编目的素材库，为用户生成一份精确到片段内 in/out 的"
             "文字分镜表，供其照搬到剪辑软件。\n"
             "结构：以 A-roll（有解说）的句子作为叙事主线，再为每段配合适的 B-roll 空镜插空。\n"
-            "工具：search_footage 检索素材，get_clip_detail 取 transcript 分段与关键帧切点（A-roll 的"
+            "A-roll 选段以 transcript（台词内容）为主要依据，in/out 落在 segment 边界上，不要依赖已有关键帧切点。\n"
+            "工具：search_footage 检索素材，get_clip_detail 取 transcript 分段（A-roll 的"
             " in/out 应落在 segment 边界上），inspect_broll 仅在文本元数据不足时现场看 B-roll 画面（尽量少用、"
             "可批量），最后用 emit_plan 给出最终分镜表。\n"
             "不要自己计算总时长，系统会校验。只使用素材库里真实存在的 clip。\n"

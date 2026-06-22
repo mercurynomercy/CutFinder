@@ -203,7 +203,14 @@ export interface CutShot {
   rationale: string
   chapter: string
   clip_label: string
+  clip_date: string
   thumb_ref: string | null
+}
+
+export interface CutPromptResponse {
+  prompt: string
+  default: string
+  is_default: boolean
 }
 
 export interface CutPlan {
@@ -472,6 +479,21 @@ export const api = {
   /** GET /api/cut/sessions/{id}/plan — latest plan (with rendered markdown). */
   getCutPlan(id: number): Promise<{ plan: CutPlan | null }> {
     return _fetch(`/api/cut/sessions/${id}/plan`)
+  },
+
+  /** GET /api/cut/prompt — current director prompt (+ built-in default). */
+  getCutPrompt(): Promise<CutPromptResponse> {
+    return _fetch('/api/cut/prompt')
+  },
+
+  /** PUT /api/cut/prompt — save a custom director prompt. */
+  setCutPrompt(prompt: string): Promise<CutPromptResponse> {
+    return _fetch('/api/cut/prompt', { method: 'PUT', body: JSON.stringify({ prompt }) })
+  },
+
+  /** DELETE /api/cut/prompt — reset to the built-in default. */
+  resetCutPrompt(): Promise<CutPromptResponse> {
+    return _fetch('/api/cut/prompt', { method: 'DELETE' })
   },
 
   /** GET /api/logs — recent backend log lines (poll with `after` for new ones). */

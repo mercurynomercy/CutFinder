@@ -20,6 +20,9 @@ import { useI18n, type I18n } from '@/i18n'
 function kindLabel(t: I18n['t'], kind?: string): string {
   if (kind === 'scan') return t('jobs.kindScan')
   if (kind === 'reanalyze') return t('jobs.kindReanalyze')
+  if (kind === 'keyframes') return t('jobs.kindKeyframes')
+  if (kind === 'subtitle') return t('jobs.kindSubtitle')
+  if (kind === 'cutplan') return t('jobs.kindCutplan')
   return kind || '—'
 }
 

@@ -67,6 +67,33 @@ def test_get_session_404() -> None:
     assert client.get("/api/cut/sessions/999").status_code == 404
 
 
+def test_prompt_get_put_reset(
+    tmp_path: Any, monkeypatch: Any,
+) -> None:
+    import cutfinder.config as cfg
+    from cutfinder.cutplan.director import DEFAULT_CUT_DIRECTOR_PROMPT
+
+    # Isolate the machine-global config file so the real one isn't touched.
+    monkeypatch.setattr(cfg, "_GLOBAL_CONFIG_FILE", tmp_path / ".cutfinder" / "config.json")
+    client = _client(MemoryCutSessionStore())
+
+    # Unset → default.
+    got = client.get("/api/cut/prompt").json()
+    assert got["is_default"] is True
+    assert got["prompt"] == DEFAULT_CUT_DIRECTOR_PROMPT
+
+    # Save a custom prompt.
+    put = client.put("/api/cut/prompt", json={"prompt": "我的导演提示词 {aspect}"}).json()
+    assert put["is_default"] is False
+    assert put["prompt"] == "我的导演提示词 {aspect}"
+    assert client.get("/api/cut/prompt").json()["prompt"] == "我的导演提示词 {aspect}"
+
+    # Reset → default again.
+    reset = client.delete("/api/cut/prompt").json()
+    assert reset["is_default"] is True
+    assert reset["prompt"] == DEFAULT_CUT_DIRECTOR_PROMPT
+
+
 def test_send_message_enqueues_with_request() -> None:
     store = MemoryCutSessionStore()
     s = store.create_session()

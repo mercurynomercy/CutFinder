@@ -202,6 +202,7 @@ class ClipDetail(BaseModel, frozen=True):
     clip_id: int
     roll: str
     duration_s: float | None = None
+    capture_time: str | None = None        # ISO capture time (shooting date source)
     source_path: str | None = None         # read-only original
     library_path: str | None = None        # organised copy (for the file label)
     summary: str | None = None
@@ -222,6 +223,7 @@ class Shot(BaseModel, frozen=True):
     rationale: str = ""              # 用途 · 理由
     chapter: str = ""                # chapter / section title
     clip_label: str = ""             # library/source file name (filled by director)
+    clip_date: str = ""              # ISO shooting date YYYY-MM-DD (filled by director)
     thumb_ref: str | None = None     # thumbnail URL (filled by the director)
 
 

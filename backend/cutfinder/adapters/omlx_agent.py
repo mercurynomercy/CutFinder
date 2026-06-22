@@ -91,8 +91,13 @@ class OmlxAgentClient:
                 response = client.chat.completions.create(
                     model=self._model,
                     messages=messages,  # type: ignore[arg-type]
-                    max_tokens=4096,
-                    temperature=0.7,
+                    # Staged generation runs one call per shooting date, so one
+                    # day's shot list is small; this cap is generous for that yet
+                    # stops a runaway model from looping for minutes on one call.
+                    max_tokens=8192,
+                    # Low temperature → more deterministic, less likely to fall
+                    # into a repetition loop while emitting structured JSON.
+                    temperature=0.3,
                     extra_body={"chat_template_kwargs": {"enable_thinking": False}},
                 )
             except APIConnectionError as e:

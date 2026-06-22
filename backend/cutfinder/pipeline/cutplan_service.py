@@ -13,6 +13,7 @@ import logging
 from typing import Any
 
 from ..cutplan.director import CutDirector, CutDirectorResult
+from ..cutplan.request_parse import parse_request_fields
 from ..domain.models import ChatMessage, RoughCutRequest
 from ..ports.cutplan import CutSessionStore
 
@@ -46,15 +47,24 @@ class CutPlanService:
             self._store.append_message(session_id, ChatMessage(role="user", content=user_text))
         self._store.set_session_status(session_id, "running")
 
-        # Resolve the request: an explicit one overrides + is remembered;
-        # otherwise reuse the session's stored params (refine turns).
+        # Auto-title an untitled conversation from its first user message, so the
+        # sidebar shows something other than "未命名" after the opening turn.
+        if not (session.title or "").strip():
+            self._store.set_session_title(session_id, _derive_title(user_text))
+
+        # Resolve the request. Precedence: an explicit request object (from a
+        # future structured UI) wins; otherwise parse scoping (date range /
+        # duration / aspect) out of the message itself and merge it over the
+        # session's remembered params, so refine turns keep the original scope.
         if request is not None:
-            self._store.set_session_request(
-                session_id, json.dumps(request.model_dump(), ensure_ascii=False),
-            )
             req = request
         else:
-            req = self._load_request(session_id) or RoughCutRequest()
+            stored = self._load_request(session_id) or RoughCutRequest()
+            parsed = parse_request_fields(user_text)
+            req = stored.model_copy(update=parsed) if parsed else stored
+        self._store.set_session_request(
+            session_id, json.dumps(req.model_dump(), ensure_ascii=False),
+        )
 
         # History excludes the just-appended user message (passed separately).
         history = self._store.get_messages(session_id)[:-1]
@@ -84,3 +94,9 @@ class CutPlanService:
             return RoughCutRequest(**data)
         except (json.JSONDecodeError, TypeError, ValueError):
             return None
+
+
+def _derive_title(user_text: str, max_len: int = 24) -> str:
+    """A short sidebar title from the first user message (first line, clipped)."""
+    line = (user_text or "").strip().splitlines()[0].strip() if user_text.strip() else ""
+    return line[:max_len] or "未命名"

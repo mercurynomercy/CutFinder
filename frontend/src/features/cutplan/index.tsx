@@ -80,6 +80,11 @@ export function CutplanPage({ onClose }: CutplanPageProps) {
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null)
   const [listCollapsed, setListCollapsed] = useState(false)
   const [planFullscreen, setPlanFullscreen] = useState(false)
+  const [promptOpen, setPromptOpen] = useState(false)
+  const [promptText, setPromptText] = useState('')
+  const [promptDefault, setPromptDefault] = useState('')
+  const [promptIsDefault, setPromptIsDefault] = useState(true)
+  const [promptSaved, setPromptSaved] = useState(false)
 
   const threadRef = useRef<HTMLDivElement>(null)
   // Tracks the currently-open session so resume polling can bail if the user
@@ -232,6 +237,40 @@ export function CutplanPage({ onClose }: CutplanPageProps) {
     }
   }
 
+  const openPrompt = async () => {
+    setPromptOpen(true)
+    try {
+      const r = await api.getCutPrompt()
+      setPromptText(r.prompt)
+      setPromptDefault(r.default)
+      setPromptIsDefault(r.is_default)
+    } catch (err) {
+      console.error('Load director prompt failed:', err)
+    }
+  }
+
+  const savePrompt = async () => {
+    try {
+      const r = await api.setCutPrompt(promptText)
+      setPromptText(r.prompt)
+      setPromptIsDefault(r.is_default)
+      setPromptSaved(true)
+      setTimeout(() => setPromptSaved(false), 1500)
+    } catch (err) {
+      console.error('Save director prompt failed:', err)
+    }
+  }
+
+  const resetPrompt = async () => {
+    try {
+      const r = await api.resetCutPrompt()
+      setPromptText(r.prompt)
+      setPromptIsDefault(r.is_default)
+    } catch (err) {
+      console.error('Reset director prompt failed:', err)
+    }
+  }
+
   const copyMarkdown = async () => {
     if (!plan?.markdown) return
     try {
@@ -365,7 +404,18 @@ export function CutplanPage({ onClose }: CutplanPageProps) {
               placeholder={t('roughcut.placeholder')}
               className="w-full resize-none rounded-md border border-[--border] bg-[--surface-2] px-3 py-2 text-sm outline-none focus:border-[--primary]"
             />
-            <div className="mt-2 flex justify-end">
+            <div className="mt-2 flex items-center justify-between">
+              <button
+                onClick={openPrompt}
+                aria-label={t('roughcut.promptSettings')}
+                title={t('roughcut.promptSettings')}
+                className="inline-flex items-center gap-1.5 rounded-md border border-[--border] px-2.5 py-1.5 text-xs text-[--text-secondary] hover:bg-[--surface-3]"
+              >
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} aria-hidden="true">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 6h9.75M10.5 6a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0ZM3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m-9.75 0h9.75" />
+                </svg>
+                {t('roughcut.promptSettings')}
+              </button>
               <button
                 onClick={send}
                 disabled={busy || !input.trim()}
@@ -441,6 +491,53 @@ export function CutplanPage({ onClose }: CutplanPageProps) {
         </div>
       )}
 
+      {/* Director prompt settings modal */}
+      {promptOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="flex max-h-[85vh] w-full max-w-2xl flex-col rounded-lg border border-[--border] bg-[--surface-1] shadow-xl">
+            <div className="flex items-center justify-between border-b border-[--border] px-5 py-3">
+              <span className="text-sm font-semibold">{t('roughcut.promptTitle')}</span>
+              <span className={`text-xs ${promptIsDefault ? 'text-[--text-muted]' : 'text-[--primary]'}`}>
+                {promptIsDefault ? t('roughcut.promptDefault') : t('roughcut.promptCustom')}
+              </span>
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto p-5">
+              <p className="mb-2 text-xs text-[--text-muted]">{t('roughcut.promptHelp')}</p>
+              <textarea
+                value={promptText}
+                onChange={(e) => setPromptText(e.target.value)}
+                rows={16}
+                spellCheck={false}
+                className="w-full resize-y rounded-md border border-[--border] bg-[--surface-2] px-3 py-2 font-mono text-xs leading-relaxed outline-none focus:border-[--primary]"
+              />
+            </div>
+            <div className="flex items-center justify-between border-t border-[--border] px-5 py-3">
+              <button
+                onClick={resetPrompt}
+                disabled={promptIsDefault && promptText === promptDefault}
+                className="rounded-md border border-[--border] px-3 py-1.5 text-sm text-[--text-secondary] hover:bg-[--surface-3] disabled:opacity-40"
+              >
+                {t('roughcut.reset')}
+              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setPromptOpen(false)}
+                  className="rounded-md border border-[--border] px-3 py-1.5 text-sm text-[--text-secondary] hover:bg-[--surface-3]"
+                >
+                  {t('roughcut.cancel')}
+                </button>
+                <button
+                  onClick={savePrompt}
+                  className="rounded-md bg-[--primary] px-4 py-1.5 text-sm font-medium text-white hover:bg-[--primary]/90"
+                >
+                  {promptSaved ? t('roughcut.saved') : t('roughcut.save')}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <ConfirmDialog
         open={confirmDeleteId !== null}
         title={t('roughcut.deleteSession')}
@@ -478,6 +575,7 @@ function ShotList({ plan }: { plan: CutPlan }) {
                       <div className="flex items-center gap-2 text-[--text-secondary]">
                         <span className="font-mono">{fmtTimecode(s.in_s)}–{fmtTimecode(s.out_s)}</span>
                         <span className="rounded bg-[--surface-3] px-1">{s.roll === 'a' ? 'A' : 'B'}</span>
+                        {s.clip_date && <span className="font-mono text-[--text-muted]">{s.clip_date}</span>}
                         <span className="truncate text-[--text-muted]">{s.clip_label}</span>
                       </div>
                       {s.content && <p className="mt-0.5 truncate text-[--text-primary]">{s.content}</p>}

@@ -38,6 +38,52 @@ def _build_router(ctx: Any) -> Any:
         data["markdown"] = to_shotlist_markdown(plan)
         return data
 
+    # ── director prompt (machine-global, UI-editable) ────────────
+
+    @router.get("/prompt")
+    async def get_prompt() -> dict[str, Any]:
+        from cutfinder.config import load_cut_director_prompt
+        from cutfinder.cutplan.director import DEFAULT_CUT_DIRECTOR_PROMPT
+
+        custom = load_cut_director_prompt()
+        return {
+            "prompt": custom or DEFAULT_CUT_DIRECTOR_PROMPT,
+            "default": DEFAULT_CUT_DIRECTOR_PROMPT,
+            "is_default": custom is None,
+        }
+
+    @router.put("/prompt")
+    async def set_prompt(request: Request) -> dict[str, Any]:
+        from cutfinder.config import load_cut_director_prompt, save_cut_director_prompt
+        from cutfinder.cutplan.director import DEFAULT_CUT_DIRECTOR_PROMPT
+
+        prompt = ""
+        try:
+            body = _json.loads(await request.body() or b"{}")
+            if isinstance(body, dict):
+                prompt = str(body.get("prompt") or "")
+        except _json.JSONDecodeError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        save_cut_director_prompt(prompt)
+        custom = load_cut_director_prompt()
+        return {
+            "prompt": custom or DEFAULT_CUT_DIRECTOR_PROMPT,
+            "default": DEFAULT_CUT_DIRECTOR_PROMPT,
+            "is_default": custom is None,
+        }
+
+    @router.delete("/prompt")
+    async def reset_prompt() -> dict[str, Any]:
+        from cutfinder.config import save_cut_director_prompt
+        from cutfinder.cutplan.director import DEFAULT_CUT_DIRECTOR_PROMPT
+
+        save_cut_director_prompt(None)
+        return {
+            "prompt": DEFAULT_CUT_DIRECTOR_PROMPT,
+            "default": DEFAULT_CUT_DIRECTOR_PROMPT,
+            "is_default": True,
+        }
+
     # ── sessions CRUD ────────────────────────────────────────────
 
     @router.post("/sessions")

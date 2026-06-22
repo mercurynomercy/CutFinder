@@ -105,6 +105,14 @@ class SqliteCutSessionStore:
         c.execute("DELETE FROM cut_sessions WHERE id = ?", (session_id,))
         self._conn.commit()
 
+    def set_session_title(self, session_id: int, title: str) -> None:
+        c = self._conn.cursor()
+        c.execute(
+            "UPDATE cut_sessions SET title = ?, updated_at = ? WHERE id = ?",
+            (title, _now(), session_id),
+        )
+        self._conn.commit()
+
     def set_session_status(self, session_id: int, status: str) -> None:
         c = self._conn.cursor()
         c.execute(

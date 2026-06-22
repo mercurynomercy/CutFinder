@@ -102,6 +102,9 @@ class CutSessionStore(Protocol):
     def delete_session(self, session_id: int) -> None:
         """Delete a session and cascade its messages + plans."""
 
+    def set_session_title(self, session_id: int, title: str) -> None:
+        """Set a session's display title (used for auto-titling from message 1)."""
+
     def set_session_status(self, session_id: int, status: str) -> None:
         """Update a session's status ('idle'|'running'|'error')."""
 

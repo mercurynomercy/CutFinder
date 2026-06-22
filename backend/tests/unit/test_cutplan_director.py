@@ -185,21 +185,148 @@ class FakeCompleteLLM:
         return self.raw
 
 
+class ScriptedCompleteLLM:
+    """Pops one canned completion per call (for per-date generation tests)."""
+
+    def __init__(self, raws: list[str]) -> None:
+        self._raws = list(raws)
+        self.calls: list[list[dict[str, Any]]] = []
+
+    def run(self, messages: Any, tools: Any) -> AgentStep:
+        return AgentStep(content="")
+
+    def complete(self, messages: list[dict[str, Any]]) -> str:
+        self.calls.append([dict(m) for m in messages])
+        return self._raws.pop(0) if self._raws else "{}"
+
+
 def test_generate_builds_plan_from_structured_json() -> None:
     raw = (
-        '{"reply": "搞定", "shots": ['
-        '{"clip_id": 1, "roll": "a", "in_s": 0, "out_s": 12, "content": "开场白", "chapter": "开场"},'
-        '{"clip_id": 2, "roll": "b", "in_s": 0, "out_s": 6, "content": "山景", "chapter": "开场"}]}'
+        '{"note": "ok", "shots": ['
+        '{"clip_id": 1, "roll": "a", "in_s": 0, "out_s": 12, "content": "开场白"},'
+        '{"clip_id": 2, "roll": "b", "in_s": 0, "out_s": 6, "content": "山景"}]}'
     )
     director = CutDirector(
         FakeCompleteLLM(raw),
-        FakeRetriever([ClipBrief(clip_id=1, roll="a", has_transcript=True), ClipBrief(clip_id=2, roll="b")], _details()),
+        FakeRetriever(
+            [
+                ClipBrief(clip_id=1, roll="a", has_transcript=True, capture_time="2026-04-25T09:00:00"),
+                ClipBrief(clip_id=2, roll="b", capture_time="2026-04-25T09:01:00"),
+            ],
+            _details(),
+        ),
     )
     result = director.generate(RoughCutRequest(date_from="2026-04-25"), [], "剪一条")
-    assert result.assistant_text == "搞定"
     assert result.plan is not None
     assert result.plan.total_s == 18.0
     assert result.plan.shots[1].out_s == 6.0  # clip 2 clamped within 8s
+    # Chapter is forced to the shooting date (date-categorized output).
+    assert result.plan.chapters == ["2026-04-25"]
+    assert all(s.chapter == "2026-04-25" for s in result.plan.shots)
+
+
+def test_generate_one_call_per_date_with_date_chapters() -> None:
+    # Two shooting dates → two completions, concatenated into date chapters.
+    llm = ScriptedCompleteLLM([
+        '{"shots": [{"clip_id": 1, "roll": "a", "in_s": 0, "out_s": 12}]}',
+        '{"shots": [{"clip_id": 3, "roll": "a", "in_s": 0, "out_s": 10}]}',
+    ])
+    briefs = [
+        ClipBrief(clip_id=1, roll="a", has_transcript=True, capture_time="2026-04-25T09:00:00"),
+        ClipBrief(clip_id=3, roll="a", has_transcript=True, capture_time="2026-05-09T09:00:00"),
+    ]
+    details = {
+        1: ClipDetail(clip_id=1, roll="a", duration_s=60.0, capture_time="2026-04-25T09:00:00",
+                      segments=[Segment(start_s=0, end_s=12, text="第一天")]),
+        3: ClipDetail(clip_id=3, roll="a", duration_s=60.0, capture_time="2026-05-09T09:00:00",
+                      segments=[Segment(start_s=0, end_s=10, text="第二天")]),
+    }
+    director = CutDirector(llm, FakeRetriever(briefs, details))
+    result = director.generate(
+        RoughCutRequest(date_from="2026-04-25", date_to="2026-05-11"), [], "按日期剪",
+    )
+    assert len(llm.calls) == 2                          # one LLM call per date
+    assert result.plan is not None
+    assert result.plan.chapters == ["2026-04-25", "2026-05-09"]
+    assert [s.chapter for s in result.plan.shots] == ["2026-04-25", "2026-05-09"]
+    assert result.plan.total_s == 22.0                 # 12 + 10
+
+
+def test_generate_orders_day_context_by_capture_time() -> None:
+    # Briefs supplied out of order; context must list them by shooting time.
+    llm = ScriptedCompleteLLM(['{"shots": []}'])
+    briefs = [
+        ClipBrief(clip_id=2, roll="a", capture_time="2026-04-25T12:00:00"),
+        ClipBrief(clip_id=1, roll="a", capture_time="2026-04-25T09:00:00"),
+    ]
+    details = {
+        1: ClipDetail(clip_id=1, roll="a", duration_s=60.0, capture_time="2026-04-25T09:00:00"),
+        2: ClipDetail(clip_id=2, roll="a", duration_s=60.0, capture_time="2026-04-25T12:00:00"),
+    }
+    director = CutDirector(llm, FakeRetriever(briefs, details))
+    director.generate(RoughCutRequest(date_from="2026-04-25"), [], "按时间剪")
+    context = llm.calls[0][-1]["content"]
+    assert context.index("[1]") < context.index("[2]")  # 09:00 before 12:00
+
+
+def test_generate_skips_failed_dates_but_keeps_good_ones() -> None:
+    # First date returns garbage, second returns a valid shot → plan from day 2.
+    llm = ScriptedCompleteLLM([
+        "not json",
+        '{"shots": [{"clip_id": 3, "roll": "a", "in_s": 0, "out_s": 10}]}',
+    ])
+    briefs = [
+        ClipBrief(clip_id=1, roll="a", has_transcript=True, capture_time="2026-04-25T09:00:00"),
+        ClipBrief(clip_id=3, roll="a", has_transcript=True, capture_time="2026-05-09T09:00:00"),
+    ]
+    details = {
+        1: ClipDetail(clip_id=1, roll="a", duration_s=60.0, capture_time="2026-04-25T09:00:00"),
+        3: ClipDetail(clip_id=3, roll="a", duration_s=60.0, capture_time="2026-05-09T09:00:00"),
+    }
+    director = CutDirector(llm, FakeRetriever(briefs, details))
+    result = director.generate(
+        RoughCutRequest(date_from="2026-04-25", date_to="2026-05-11"), [], "按日期剪",
+    )
+    assert result.plan is not None
+    assert result.plan.chapters == ["2026-05-09"]
+    assert "2026-04-25" in result.assistant_text  # the skipped date is reported
+
+
+def test_generate_fills_clip_date_and_uses_custom_prompt(
+    tmp_path: Any, monkeypatch: Any,
+) -> None:
+    import cutfinder.config as cfg
+
+    monkeypatch.setattr(cfg, "_GLOBAL_CONFIG_FILE", tmp_path / ".cutfinder" / "config.json")
+    from cutfinder.config import save_cut_director_prompt
+
+    save_cut_director_prompt("自定义 比例={aspect} 时长={target}风格={style}")
+
+    raw = '{"shots": [{"clip_id": 1, "roll": "a", "in_s": 0, "out_s": 12}]}'
+    llm = FakeCompleteLLM(raw)
+    details = {
+        1: ClipDetail(
+            clip_id=1, roll="a", duration_s=60.0, capture_time="2026-04-25T10:00:00",
+            library_path="/lib/A-0001.mov", segments=[Segment(start_s=0, end_s=12, text="开场白")],
+        ),
+    }
+    director = CutDirector(
+        llm,
+        FakeRetriever(
+            [ClipBrief(clip_id=1, roll="a", has_transcript=True, capture_time="2026-04-25T10:00:00")],
+            details,
+        ),
+    )
+    result = director.generate(
+        RoughCutRequest(aspect_ratio="16:9", target_min_s=900, target_max_s=1200, style_notes="轻快"),
+        [], "剪一条",
+    )
+    assert result.plan is not None
+    assert result.plan.shots[0].clip_date == "2026-04-25"  # from capture_time
+    system = llm.calls[0][0]["content"]
+    assert "自定义 比例=16:9" in system               # {aspect} substituted
+    assert "时长=目标时长 15–20 分钟。" in system       # {target} substituted
+    assert "风格=轻快" in system                        # {style} substituted
 
 
 def test_generate_no_footage_returns_scan_hint() -> None:
