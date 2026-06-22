@@ -58,6 +58,10 @@ const en = {
   'roughcut.copied': 'Copied',
   'roughcut.close': 'Close',
   'roughcut.selectSession': 'Select or start a conversation.',
+  'roughcut.collapseList': 'Collapse list',
+  'roughcut.expandList': 'Expand list',
+  'roughcut.fullscreen': 'Fullscreen',
+  'roughcut.exitFullscreen': 'Exit fullscreen',
 
   // Subtitle export page
   'subtitles.title': 'Subtitle export',
@@ -338,6 +342,10 @@ const zh: Record<Key, string> = {
   'roughcut.copied': '已复制',
   'roughcut.close': '关闭',
   'roughcut.selectSession': '选择或新建一个对话。',
+  'roughcut.collapseList': '收起列表',
+  'roughcut.expandList': '展开列表',
+  'roughcut.fullscreen': '全屏',
+  'roughcut.exitFullscreen': '退出全屏',
 
   'subtitles.title': '字幕导出',
   'subtitles.desc': '选择一个剪辑好的视频和输出文件夹，导出根据音频转写生成的字幕。',

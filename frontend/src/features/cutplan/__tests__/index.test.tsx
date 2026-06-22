@@ -91,6 +91,56 @@ describe('CutplanPage', () => {
     expect(await screen.findByText('A-0001.mov')).toBeInTheDocument()
   })
 
+  it('restores the last session on mount and shows its plan without a click', async () => {
+    localStorage.setItem('cutfinder:cut-active-session', '1')
+    server.use(
+      http.get(`${API}/cut/sessions`, () =>
+        HttpResponse.json({ sessions: [{ id: 1, title: '周末 vlog', status: 'idle', created_at: null, updated_at: null }] }),
+      ),
+      http.get(`${API}/cut/sessions/1`, () =>
+        HttpResponse.json({
+          session: { id: 1, title: '周末 vlog', status: 'idle', created_at: null, updated_at: null },
+          messages: [{ role: 'assistant', content: '已生成', created_at: null }],
+          plan: PLAN,
+        }),
+      ),
+    )
+
+    render(<CutplanPage onClose={() => {}} />)
+
+    // Auto-restored — the shot list shows up with no interaction.
+    expect(await screen.findByText('A-0001.mov')).toBeInTheDocument()
+    localStorage.clear()
+  })
+
+  it('shows the thinking indicator and resumes when the restored session is still running', async () => {
+    let calls = 0
+    server.use(
+      http.get(`${API}/cut/sessions`, () =>
+        HttpResponse.json({ sessions: [{ id: 7, title: 't', status: 'running', created_at: null, updated_at: null }] }),
+      ),
+      http.get(`${API}/cut/sessions/7`, () => {
+        calls += 1
+        const running = calls === 1
+        return HttpResponse.json({
+          session: { id: 7, title: 't', status: running ? 'running' : 'idle', created_at: null, updated_at: null },
+          messages: running
+            ? [{ role: 'user', content: '剪一条', created_at: null }]
+            : [{ role: 'user', content: '剪一条', created_at: null }, { role: 'assistant', content: '完成了', created_at: null }],
+          plan: running ? null : PLAN,
+        })
+      }),
+    )
+
+    render(<CutplanPage onClose={() => {}} />)
+
+    // First load: running → thinking indicator visible.
+    expect(await screen.findByText('Director is working…')).toBeInTheDocument()
+    // After the resume poll: assistant reply + plan appear.
+    expect(await screen.findByText('完成了', {}, { timeout: 4000 })).toBeInTheDocument()
+    expect(screen.getByText('A-0001.mov')).toBeInTheDocument()
+  })
+
   it('deletes a conversation', async () => {
     const del = vi.fn()
     server.use(
