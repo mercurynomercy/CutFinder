@@ -379,29 +379,29 @@ export function CutplanPage({ onClose }: CutplanPageProps) {
         </section>
 
         {/* Shot list preview */}
-        <section className="flex w-[42%] min-w-0 shrink-0 flex-col bg-[--surface-1]">
+        <section className="flex w-[46%] min-w-0 shrink-0 flex-col bg-[--surface-1]">
           <div className="flex h-11 shrink-0 items-center justify-between border-b border-[--border] px-4">
             <span className="text-xs font-medium text-[--text-secondary]">{t('roughcut.planTitle')}</span>
-            {plan && (
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setPlanFullscreen(true)}
-                  aria-label={t('roughcut.fullscreen')}
-                  title={t('roughcut.fullscreen')}
-                  className="rounded border border-[--border] p-1 text-[--text-secondary] hover:bg-[--surface-3]"
-                >
-                  <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" aria-hidden="true">
-                    <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" />
-                  </svg>
-                </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setPlanFullscreen(true)}
+                aria-label={t('roughcut.fullscreen')}
+                title={t('roughcut.fullscreen')}
+                className="rounded border border-[--border] p-1 text-[--text-secondary] hover:bg-[--surface-3]"
+              >
+                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" aria-hidden="true">
+                  <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" />
+                </svg>
+              </button>
+              {plan && (
                 <button
                   onClick={copyMarkdown}
                   className="rounded border border-[--border] px-2 py-1 text-xs text-[--text-secondary] hover:bg-[--surface-3]"
                 >
                   {copied ? t('roughcut.copied') : t('roughcut.copyMarkdown')}
                 </button>
-              </div>
-            )}
+              )}
+            </div>
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto p-4">
             {!plan ? (
@@ -414,17 +414,19 @@ export function CutplanPage({ onClose }: CutplanPageProps) {
       </div>
 
       {/* Fullscreen shot list overlay */}
-      {planFullscreen && plan && (
+      {planFullscreen && (
         <div className="fixed inset-0 z-50 flex flex-col bg-[--bg-canvas]">
           <div className="flex h-12 shrink-0 items-center justify-between border-b border-[--border] bg-[--surface-1] px-6">
             <span className="text-sm font-semibold">{t('roughcut.planTitle')}</span>
             <div className="flex items-center gap-2">
-              <button
-                onClick={copyMarkdown}
-                className="rounded border border-[--border] px-2 py-1 text-xs text-[--text-secondary] hover:bg-[--surface-3]"
-              >
-                {copied ? t('roughcut.copied') : t('roughcut.copyMarkdown')}
-              </button>
+              {plan && (
+                <button
+                  onClick={copyMarkdown}
+                  className="rounded border border-[--border] px-2 py-1 text-xs text-[--text-secondary] hover:bg-[--surface-3]"
+                >
+                  {copied ? t('roughcut.copied') : t('roughcut.copyMarkdown')}
+                </button>
+              )}
               <button
                 onClick={() => setPlanFullscreen(false)}
                 className="rounded-md border border-[--border] px-3 py-1.5 text-sm text-[--text-secondary] hover:bg-[--surface-3]"
@@ -434,7 +436,7 @@ export function CutplanPage({ onClose }: CutplanPageProps) {
             </div>
           </div>
           <div className="mx-auto min-h-0 w-full max-w-5xl flex-1 overflow-y-auto p-6">
-            <ShotList plan={plan} />
+            {plan ? <ShotList plan={plan} /> : <p className="text-sm text-[--text-muted]">{t('roughcut.noPlan')}</p>}
           </div>
         </div>
       )}
