@@ -168,6 +168,57 @@ def test_vision_budget_enforced() -> None:
     assert result.assistant_text == "ok"
 
 
+# ── staged generation (the primary path) ───────────────────────
+
+class FakeCompleteLLM:
+    """Returns a canned completion string; records messages seen."""
+
+    def __init__(self, raw: str) -> None:
+        self.raw = raw
+        self.calls: list[list[dict[str, Any]]] = []
+
+    def run(self, messages: Any, tools: Any) -> AgentStep:  # unused in staged path
+        return AgentStep(content="")
+
+    def complete(self, messages: list[dict[str, Any]]) -> str:
+        self.calls.append([dict(m) for m in messages])
+        return self.raw
+
+
+def test_generate_builds_plan_from_structured_json() -> None:
+    raw = (
+        '{"reply": "搞定", "shots": ['
+        '{"clip_id": 1, "roll": "a", "in_s": 0, "out_s": 12, "content": "开场白", "chapter": "开场"},'
+        '{"clip_id": 2, "roll": "b", "in_s": 0, "out_s": 6, "content": "山景", "chapter": "开场"}]}'
+    )
+    director = CutDirector(
+        FakeCompleteLLM(raw),
+        FakeRetriever([ClipBrief(clip_id=1, roll="a", has_transcript=True), ClipBrief(clip_id=2, roll="b")], _details()),
+    )
+    result = director.generate(RoughCutRequest(date_from="2026-04-25"), [], "剪一条")
+    assert result.assistant_text == "搞定"
+    assert result.plan is not None
+    assert result.plan.total_s == 18.0
+    assert result.plan.shots[1].out_s == 6.0  # clip 2 clamped within 8s
+
+
+def test_generate_no_footage_returns_scan_hint() -> None:
+    director = CutDirector(FakeCompleteLLM("{}"), FakeRetriever([], {}))
+    result = director.generate(RoughCutRequest(date_from="2026-04-25"), [], "go")
+    assert result.plan is None
+    assert "素材" in result.assistant_text
+
+
+def test_generate_bad_json_returns_retry_message() -> None:
+    director = CutDirector(
+        FakeCompleteLLM("not json at all"),
+        FakeRetriever([ClipBrief(clip_id=1, roll="a")], _details()),
+    )
+    result = director.generate(RoughCutRequest(), [], "go")
+    assert result.plan is None
+    assert "重试" in result.assistant_text or "失败" in result.assistant_text
+
+
 def test_plain_reply_ends_turn_without_plan() -> None:
     llm = FakeLLM([AgentStep(content="请先扫描素材入库。")])
     director = CutDirector(llm, FakeRetriever([], {}))

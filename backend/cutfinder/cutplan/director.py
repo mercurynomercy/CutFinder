@@ -130,7 +130,109 @@ class CutDirector:
         self._max_tool_rounds = max(1, max_tool_rounds)
         self._vision_budget = max(0, vision_budget)
 
-    # ── public entry ─────────────────────────────────────────────
+    # ── staged generation (primary path; reliable on local models) ──
+
+    def generate(
+        self,
+        request: RoughCutRequest,
+        history: list[ChatMessage],
+        user_text: str,
+    ) -> CutDirectorResult:
+        """Deterministic retrieval + one structured LLM call → shot list.
+
+        Far more robust than the autonomous tool loop on local function-callers:
+        the catalog is queried in code, and the model only fills in a shot-list
+        JSON in a single completion.
+        """
+        clips = self._retriever.search_footage(
+            date_from=request.date_from, date_to=request.date_to,
+        )
+        if not clips:
+            return CutDirectorResult(
+                "没有在该日期范围找到已编目的素材。请确认素材已扫描入库，或调整日期范围。",
+                None,
+            )
+
+        cache: dict[int, ClipDetail] = {}
+        context = self._build_context(clips, cache)
+        messages: list[dict[str, Any]] = [
+            {"role": "system", "content": self._staged_system_prompt(request)},
+        ]
+        for m in history:
+            if m.role in ("user", "assistant") and m.content:
+                messages.append({"role": m.role, "content": m.content})
+        messages.append({
+            "role": "user",
+            "content": (
+                f"{user_text}\n\n可用素材（只能用下列 clip_id）：\n{context}\n\n"
+                "请只输出 JSON，格式：\n"
+                '{"reply": "给用户的一句话", "note": "可选备注", '
+                '"shots": [{"clip_id": 整数, "roll": "a"或"b", "in_s": 数字, '
+                '"out_s": 数字, "content": "台词或画面", "rationale": "用途理由", '
+                '"chapter": "章节标题"}]}'
+            ),
+        })
+
+        from ..adapters._jsonparse import parse_json_object
+
+        raw = self._llm.complete(messages)
+        data = parse_json_object(raw) if raw else None
+        if not isinstance(data, dict) or not isinstance(data.get("shots"), list):
+            return CutDirectorResult(
+                "生成分镜表失败（模型未返回有效结果），请重试或把需求说得更具体。", None,
+            )
+
+        plan = self._build_plan(
+            {"shots": data["shots"], "note": data.get("note") or ""}, request, cache,
+        )
+        reply = data.get("reply")
+        text = reply if isinstance(reply, str) and reply else "已生成初剪分镜表。"
+        if not plan.shots:
+            text = "模型没有选出可用片段，请重试或调整需求。"
+            return CutDirectorResult(text, None)
+        return CutDirectorResult(text, plan)
+
+    def _build_context(
+        self, clips: list[Any], cache: dict[int, ClipDetail], char_budget: int = 12000,
+    ) -> str:
+        """Compact text catalog of candidate clips (A-roll incl. timed segments)."""
+        lines: list[str] = []
+        used = 0
+        for b in clips:
+            dur = f"{b.duration_s:.0f}s" if b.duration_s else "?"
+            desc = (b.summary or b.description or "").strip().replace("\n", " ")[:120]
+            tags = ",".join(b.tags[:6]) if b.tags else ""
+            head = f"[{b.clip_id}] {b.roll}-roll dur={dur} {desc} tags={tags}"
+            lines.append(head)
+            used += len(head)
+            if b.roll == "a" and b.has_transcript:
+                detail = self._fetch_detail(b.clip_id, cache)
+                if detail is not None:
+                    for s in detail.segments[:60]:
+                        seg = f"   ({s.start_s:.1f}-{s.end_s:.1f}) {s.text}"
+                        lines.append(seg)
+                        used += len(seg)
+            if used > char_budget:
+                lines.append("   …(更多素材已省略)")
+                break
+        return "\n".join(lines)
+
+    @staticmethod
+    def _staged_system_prompt(request: RoughCutRequest) -> str:
+        target = ""
+        if request.target_min_s is not None and request.target_max_s is not None:
+            target = f"目标时长 {request.target_min_s/60:.0f}–{request.target_max_s/60:.0f} 分钟。"
+        return (
+            "你是专业的视频初剪导演。基于下面给出的已编目素材，生成一份精确到片段内 in/out 的"
+            "分镜表，供用户照搬到剪辑软件。\n"
+            "结构：以 A-roll（有解说）的句子作为叙事主线，再为每段配合适的 B-roll 空镜插空。\n"
+            "A-roll 的 in/out 必须落在给出的 segment 时间边界上；B-roll 在其时长内取一个合适窗口。\n"
+            "只能使用素材清单里出现的 clip_id，不要编造。按章节组织，让总时长尽量贴近目标。\n"
+            f"画面比例 {request.aspect_ratio}。{target}"
+            f"风格/节奏：{request.style_notes or '（自行把握）'}"
+        )
+
+    # ── public entry (autonomous tool loop; advanced/experimental) ──
 
     def run(
         self,

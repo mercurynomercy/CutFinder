@@ -19,7 +19,7 @@ class FakeDirector:
         self.result = result
         self.calls: list[tuple[RoughCutRequest, list[Any], str]] = []
 
-    def run(self, request: RoughCutRequest, history: list[Any], user_text: str) -> CutDirectorResult:
+    def generate(self, request: RoughCutRequest, history: list[Any], user_text: str) -> CutDirectorResult:
         self.calls.append((request, list(history), user_text))
         return self.result
 
@@ -68,7 +68,7 @@ def test_handle_marks_error_on_director_failure() -> None:
     s = store.create_session()
 
     class Boom:
-        def run(self, *_a: Any, **_k: Any) -> CutDirectorResult:
+        def generate(self, *_a: Any, **_k: Any) -> CutDirectorResult:
             raise RuntimeError("model down")
 
     svc = CutPlanService(store, Boom())  # type: ignore[arg-type]

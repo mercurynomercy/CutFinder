@@ -71,3 +71,43 @@ class OmlxAgentClient:
             return AgentStep(content=msg.content or "", tool_calls=tool_calls)
 
         raise RuntimeError("OMLX agent returned no result after retries")
+
+    def complete(self, messages: list[dict[str, Any]]) -> str:
+        """Plain chat completion (no tools) → raw assistant text.
+
+        Used by the staged generator, which is far more reliable on local
+        models than autonomous multi-round tool calling.
+        """
+        from openai import APIConnectionError, OpenAI
+
+        client = OpenAI(
+            base_url=self._config.env.OMLX_BASE_URL,
+            api_key=self._config.env.OMLX_API_KEY,
+        )
+
+        max_retries = 2
+        for attempt in range(1 + max_retries):
+            try:
+                response = client.chat.completions.create(
+                    model=self._model,
+                    messages=messages,  # type: ignore[arg-type]
+                    max_tokens=4096,
+                    temperature=0.7,
+                    extra_body={"chat_template_kwargs": {"enable_thinking": False}},
+                )
+            except APIConnectionError as e:
+                if attempt == max_retries:
+                    raise RuntimeError(
+                        f"OMLX connection failed after {1 + max_retries} attempt(s): {e}"
+                    ) from e
+                continue
+            except Exception as e:  # noqa: BLE001
+                if attempt == max_retries:
+                    raise RuntimeError(
+                        f"OMLX request failed after {1 + max_retries} attempt(s): {e}"
+                    ) from e
+                continue
+
+            return response.choices[0].message.content or ""
+
+        raise RuntimeError("OMLX agent returned no completion after retries")

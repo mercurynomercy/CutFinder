@@ -76,12 +76,15 @@ class BrollInspector(Protocol):
 
 
 class LLMAgentClient(Protocol):
-    """One tool-calling turn against the text model (OMLX Qwen3.6)."""
+    """Text-model access for the director (OMLX Qwen3.6)."""
 
     def run(
         self, messages: list[dict[str, Any]], tools: list[dict[str, Any]],
     ) -> AgentStep:
-        """Send *messages* + *tools*; return the model's next step."""
+        """Send *messages* + *tools*; return the model's next step (tool loop)."""
+
+    def complete(self, messages: list[dict[str, Any]]) -> str:
+        """Plain (no-tools) chat completion → raw text. Used by staged generation."""
 
 
 class CutSessionStore(Protocol):

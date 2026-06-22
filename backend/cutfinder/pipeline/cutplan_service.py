@@ -60,7 +60,9 @@ class CutPlanService:
         history = self._store.get_messages(session_id)[:-1]
 
         try:
-            result = self._director.run(req, history, user_text)
+            # Staged generation (deterministic retrieval + one structured call)
+            # is far more reliable on local models than the autonomous tool loop.
+            result = self._director.generate(req, history, user_text)
         except Exception:
             self._store.set_session_status(session_id, "error")
             raise
