@@ -70,11 +70,21 @@ class CutPlanService:
         history = self._store.get_messages(session_id)[:-1]
 
         try:
-            # Staged generation (deterministic retrieval + one structured call)
-            # is far more reliable on local models than the autonomous tool loop.
-            result = self._director.generate(req, history, user_text)
+            # Deterministic per-date generation: the director either runs a
+            # scoped tool loop per shooting date (agent mode) or one structured
+            # JSON call per date (staged mode), with a per-day fall back. Small
+            # per-day context keeps it reliable on local models (task 26).
+            # The callbacks surface live progress + completed dates to the polling
+            # UI: progress text into the (ephemeral) session field, and the
+            # cumulative plan saved after each day so finished shots show early.
+            result = self._director.generate(
+                req, history, user_text,
+                on_progress=lambda text: self._store.set_session_progress(session_id, text),
+                on_partial=lambda plan: self._store.save_plan(session_id, plan),
+            )
         except Exception:
             self._store.set_session_status(session_id, "error")
+            self._store.clear_session_progress(session_id)
             raise
 
         self._store.append_message(
@@ -83,6 +93,7 @@ class CutPlanService:
         if result.plan is not None:
             self._store.save_plan(session_id, result.plan)
         self._store.set_session_status(session_id, "idle")
+        self._store.clear_session_progress(session_id)
         return result
 
     def _load_request(self, session_id: int) -> RoughCutRequest | None:

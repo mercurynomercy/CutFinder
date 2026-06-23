@@ -18,20 +18,6 @@ import { ConfirmDialog } from '@/components'
 
 const ACTIVE_KEY = 'cutfinder:cut-active-session'
 
-// Poll a job until it reaches a terminal state (or the timeout elapses).
-async function waitForJob(jobId: number, timeoutMs = 10 * 60_000): Promise<void> {
-  const deadline = Date.now() + timeoutMs
-  while (Date.now() < deadline) {
-    try {
-      const job = await api.getJob(jobId)
-      if (['done', 'failed', 'cancelled'].includes(job.status)) return
-    } catch {
-      /* transient — keep polling */
-    }
-    await new Promise((r) => setTimeout(r, 1200))
-  }
-}
-
 function fmtTimecode(s: number): string {
   const ms = Math.max(0, Math.round(s * 1000))
   const h = Math.floor(ms / 3_600_000)
@@ -76,6 +62,7 @@ export function CutplanPage({ onClose }: CutplanPageProps) {
   const [plan, setPlan] = useState<CutPlan | null>(null)
   const [input, setInput] = useState('')
   const [busy, setBusy] = useState(false)
+  const [progress, setProgress] = useState('') // live director status while running
   const [copied, setCopied] = useState(false)
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null)
   const [listCollapsed, setListCollapsed] = useState(false)
@@ -111,27 +98,34 @@ export function CutplanPage({ onClose }: CutplanPageProps) {
     }
   }
 
-  // Poll a still-running session until it goes idle/error, then show the result.
+  // Poll a still-running session until it goes idle/error, live-updating the
+  // partial plan + the director's current step on every tick (so completed
+  // dates and "查看片段 #N" status show while the rest still generates).
   const resumePoll = async (id: number) => {
     const deadline = Date.now() + 10 * 60_000
     while (Date.now() < deadline) {
-      await new Promise((r) => setTimeout(r, 1500))
       if (activeRef.current !== id) return // user switched away
       try {
         const detail = await api.getCutSession(id)
+        if (activeRef.current !== id) return
+        if (detail.plan) setPlan(detail.plan)          // show completed dates early
+        setProgress(detail.session.progress ?? '')      // live "正在查看…" status
         if (detail.session.status !== 'running') {
-          if (activeRef.current === id) {
-            setMessages(detail.messages)
-            setPlan(detail.plan)
-            setBusy(false)
-          }
+          setMessages(detail.messages)
+          setPlan(detail.plan)
+          setProgress('')
+          setBusy(false)
           return
         }
       } catch {
         /* transient — keep polling */
       }
+      await new Promise((r) => setTimeout(r, 1500))
     }
-    if (activeRef.current === id) setBusy(false)
+    if (activeRef.current === id) {
+      setBusy(false)
+      setProgress('')
+    }
   }
 
   // Open a session: load its messages + plan, and if its turn is still running
@@ -143,12 +137,14 @@ export function CutplanPage({ onClose }: CutplanPageProps) {
     setPlan(null)
     setMessages([])
     setBusy(false)
+    setProgress('')
     try {
       const detail = await api.getCutSession(id)
       if (activeRef.current !== id) return
       setMessages(detail.messages)
       setPlan(detail.plan)
       if (detail.session.status === 'running') {
+        setProgress(detail.session.progress ?? '')
         setBusy(true)
         void resumePoll(id)
       }
@@ -206,17 +202,19 @@ export function CutplanPage({ onClose }: CutplanPageProps) {
     setMessages((prev) => [...prev, { role: 'user', content: text, created_at: null }])
     setInput('')
     setBusy(true)
+    setProgress('')
     try {
-      const { job_id } = await api.sendCutMessage(sessionId, text)
-      await waitForJob(job_id)
-      const detail = await api.getCutSession(sessionId)
-      setMessages(detail.messages)
-      setPlan(detail.plan)
+      // The route marks the session 'running' synchronously, so we can poll the
+      // session directly — resumePoll live-updates the partial plan + progress
+      // and finalizes when it goes idle/error.
+      await api.sendCutMessage(sessionId, text)
+      await resumePoll(sessionId)
       await loadSessions() // refresh titles / updated_at ordering
     } catch (err) {
       console.error('Rough-cut turn failed:', err)
     } finally {
       setBusy(false)
+      setProgress('')
     }
   }
 
@@ -385,7 +383,7 @@ export function CutplanPage({ onClose }: CutplanPageProps) {
               <div className="text-left">
                 <div className="inline-flex items-center gap-2 rounded-lg bg-[--surface-2] px-3 py-2 text-sm text-[--text-secondary]">
                   <ThinkingDots />
-                  <span>{t('roughcut.thinking')}</span>
+                  <span>{progress || t('roughcut.thinking')}</span>
                 </div>
               </div>
             )}
@@ -457,7 +455,15 @@ export function CutplanPage({ onClose }: CutplanPageProps) {
             {!plan ? (
               <p className="text-sm text-[--text-muted]">{t('roughcut.noPlan')}</p>
             ) : (
-              <ShotList plan={plan} />
+              <>
+                {busy && (
+                  <div className="mb-3 flex items-center gap-2 rounded-md bg-[--surface-2] px-3 py-2 text-xs text-[--text-secondary]">
+                    <ThinkingDots />
+                    <span>{progress || t('roughcut.partialGenerating')}</span>
+                  </div>
+                )}
+                <ShotList plan={plan} />
+              </>
             )}
           </div>
         </section>

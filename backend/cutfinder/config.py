@@ -254,6 +254,11 @@ class Prefs(BaseModel, frozen=True):
     # default. Subtitle export always separates regardless of this flag.
     vocal_separation: bool = False
     # Rough-cut director agent (§3.15) guardrails.
+    # Generation mode: "agent" runs a scoped tool loop per shooting date (the
+    # model can get_clip_detail / inspect_broll then emit_plan — smarter, with a
+    # per-day fall back to staged JSON when it doesn't converge); "staged" is the
+    # original one-structured-JSON-call-per-date path. See task 26.
+    cut_director_mode: Literal["agent", "staged"] = "agent"
     # Max tool-calling rounds before the loop force-finalizes the current draft.
     cut_max_tool_rounds: int = Field(default=24, ge=1, le=200)
     # Max live inspect_broll (Qwen3-VL) calls per generation; 0 = unlimited.

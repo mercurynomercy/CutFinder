@@ -18,6 +18,7 @@ import json
 import logging
 from dataclasses import dataclass
 from pathlib import Path
+from collections.abc import Callable
 from typing import Any
 
 from ..domain.models import (
@@ -127,6 +128,15 @@ TOOLS: list[dict[str, Any]] = [
     },
 ]
 
+# Tools a per-day worker may call (task 26). It does **not** get search_footage:
+# the day's clips are already retrieved deterministically and fed in the prompt,
+# so the worker's value-add is deep-diving transcript (get_clip_detail), looking
+# at B-roll frames (inspect_broll), and finalizing (emit_plan) — not re-searching.
+DAY_TOOLS: list[dict[str, Any]] = [
+    t for t in TOOLS if t["function"]["name"] in ("get_clip_detail", "inspect_broll", "emit_plan")
+]
+
+
 @dataclass
 class CutDirectorResult:
     """Outcome of one turn: the assistant's reply plus the (maybe new) plan."""
@@ -144,12 +154,14 @@ class CutDirector:
         retriever: FootageRetriever,
         inspector: BrollInspector | None = None,
         *,
+        mode: str = "agent",
         max_tool_rounds: int = 24,
         vision_budget: int = 6,
     ) -> None:
         self._llm = llm
         self._retriever = retriever
         self._inspector = inspector
+        self._mode = mode
         self._max_tool_rounds = max(1, max_tool_rounds)
         self._vision_budget = max(0, vision_budget)
 
@@ -160,6 +172,9 @@ class CutDirector:
         request: RoughCutRequest,
         history: list[ChatMessage],
         user_text: str,
+        *,
+        on_progress: Callable[[str], None] | None = None,
+        on_partial: Callable[[CutPlan], None] | None = None,
     ) -> CutDirectorResult:
         """Deterministic retrieval + one LLM call **per shooting date** → shot list.
 
@@ -168,10 +183,15 @@ class CutDirector:
         return parseable JSON). Generating one focused shot list per shooting
         date keeps each completion small and reliable, and is exactly the
         date-chaptered structure the UI wants.
+
+        *on_progress* receives a human-readable status string as each day /
+        clip is worked; *on_partial* receives the cumulative plan after each day
+        finishes (so the UI can show completed dates while the rest generate).
         """
         from collections import defaultdict
 
-        from ..adapters._jsonparse import parse_json_object
+        progress = on_progress or (lambda _s: None)
+        partial = on_partial or (lambda _p: None)
 
         clips = self._retriever.search_footage(
             date_from=request.date_from, date_to=request.date_to,
@@ -193,38 +213,56 @@ class CutDirector:
         dates = sorted(groups)
 
         cache: dict[int, ClipDetail] = {}
-        system_prompt = self._staged_system_prompt(request)
         per_day = self._per_day_target(request, len(dates))
+        vision_used = 0  # inspect_broll budget shared across all days this turn
 
         all_shots: list[dict[str, Any]] = []
         notes: list[str] = []
         failed: list[str] = []
-        for day in dates:
+        n_days = len(dates)
+        for idx, day in enumerate(dates, 1):
+            progress(f"正在生成第 {idx}/{n_days} 天（{day}）…")
             context = self._build_context(groups[day], cache)
-            messages: list[dict[str, Any]] = [{"role": "system", "content": system_prompt}]
-            for m in history:
-                if m.role in ("user", "assistant") and m.content:
-                    messages.append({"role": m.role, "content": m.content})
-            messages.append({
-                "role": "user",
-                "content": self._day_user_prompt(user_text, day, context, per_day),
-            })
 
-            raw = self._llm.complete(messages)
-            data = parse_json_object(raw) if raw else None
-            if not isinstance(data, dict) or not isinstance(data.get("shots"), list):
+            day_shots: list[dict[str, Any]] | None = None
+            day_note = ""
+            if self._mode == "agent":
+                # Per-day mini-agent: a scoped tool loop (get_clip_detail /
+                # inspect_broll → emit_plan). Reliable on local models because the
+                # context is one day, not the whole multi-day plan (task 26).
+                def day_step(detail: str, _i: int = idx, _d: str = day) -> None:
+                    progress(f"第 {_i}/{n_days} 天（{_d}）· {detail}")
+
+                day_shots, day_note, vision_used = self._run_day(
+                    request, history, user_text, day, context, per_day, cache, vision_used,
+                    on_step=day_step,
+                )
+            if day_shots is None:
+                # Staged JSON path — the original mode, and the fall back when a
+                # day's agent loop doesn't converge within the round cap.
+                day_shots, day_note = self._staged_day(
+                    request, history, user_text, day, context, per_day,
+                )
+            if day_shots is None:
                 logger.warning(
-                    "cutplan: date %s produced no valid shots (%d clips); raw head=%r",
-                    day, len(groups[day]), (raw or "")[:300],
+                    "cutplan: date %s produced no valid shots (%d clips)",
+                    day, len(groups[day]),
                 )
                 failed.append(day)
                 continue
-            for item in data["shots"]:
+            for item in day_shots:
                 if isinstance(item, dict):
                     item["chapter"] = day  # force the chapter to the shooting date
                     all_shots.append(item)
-            if data.get("note"):
-                notes.append(str(data["note"]))
+            if day_note:
+                notes.append(day_note)
+            # Surface completed dates immediately: emit the cumulative plan so the
+            # UI can render finished days while the remaining ones generate.
+            progress(f"第 {idx}/{n_days} 天（{day}）完成 · 已选 {len(all_shots)} 个镜头")
+            if all_shots:
+                partial(self._build_plan(
+                    {"shots": all_shots, "note": " ".join(notes)}, request, cache,
+                ))
 
         if not all_shots:
             return CutDirectorResult(
@@ -239,6 +277,145 @@ class CutDirector:
             text += f"（{('、').join(failed)} 这些日期未能生成，已跳过。）"
         return CutDirectorResult(text, plan)
 
+    def _day_messages(
+        self,
+        request: RoughCutRequest,
+        history: list[ChatMessage],
+        user_text: str,
+        day: str,
+        context: str,
+        per_day: tuple[float, float] | None,
+        *,
+        agent: bool,
+    ) -> list[dict[str, Any]]:
+        """Build the message list for one day (system + history + day prompt)."""
+        messages: list[dict[str, Any]] = [
+            {"role": "system", "content": self._staged_system_prompt(request)},
+        ]
+        for m in history:
+            if m.role in ("user", "assistant") and m.content:
+                messages.append({"role": m.role, "content": m.content})
+        messages.append({
+            "role": "user",
+            "content": self._day_user_prompt(user_text, day, context, per_day, agent=agent),
+        })
+        return messages
+
+    def _staged_day(
+        self,
+        request: RoughCutRequest,
+        history: list[ChatMessage],
+        user_text: str,
+        day: str,
+        context: str,
+        per_day: tuple[float, float] | None,
+    ) -> tuple[list[dict[str, Any]] | None, str]:
+        """One structured-JSON completion for a day → (shots, note) or (None, "")."""
+        from ..adapters._jsonparse import parse_json_object
+
+        messages = self._day_messages(
+            request, history, user_text, day, context, per_day, agent=False,
+        )
+        raw = self._llm.complete(messages)
+        data = parse_json_object(raw) if raw else None
+        if not isinstance(data, dict) or not isinstance(data.get("shots"), list):
+            return None, ""
+        shots = [s for s in data["shots"] if isinstance(s, dict)]
+        return shots, str(data.get("note") or "")
+
+    def _run_day(
+        self,
+        request: RoughCutRequest,
+        history: list[ChatMessage],
+        user_text: str,
+        day: str,
+        context: str,
+        per_day: tuple[float, float] | None,
+        cache: dict[int, ClipDetail],
+        vision_used: int,
+        *,
+        on_step: Callable[[str], None] | None = None,
+    ) -> tuple[list[dict[str, Any]] | None, str, int]:
+        """Scoped tool loop for one day → (shots, note, vision_used).
+
+        Returns ``(None, "", vision_used)`` when the model doesn't converge to
+        emit_plan within the round cap (or replies in prose); the caller then
+        falls back to :meth:`_staged_day` for this day.
+
+        *on_step* (if given) receives a short status string each time the worker
+        looks at a clip, so the UI can show what it is doing right now.
+        """
+        step_cb = on_step or (lambda _s: None)
+        messages = self._day_messages(
+            request, history, user_text, day, context, per_day, agent=True,
+        )
+        nudged = False
+        seen: set[tuple[str, str]] = set()  # (tool, args) already executed this day
+        for round_i in range(self._max_tool_rounds):
+            step = self._llm.run(messages, DAY_TOOLS)
+            if not step.tool_calls:
+                # Prose with no tool call → didn't commit; let the caller fall back.
+                return None, "", vision_used
+
+            messages.append({
+                "role": "assistant",
+                "content": step.content,
+                "tool_calls": [
+                    {
+                        "id": tc.id,
+                        "type": "function",
+                        "function": {"name": tc.name, "arguments": json.dumps(tc.arguments)},
+                    }
+                    for tc in step.tool_calls
+                ],
+            })
+
+            emitted: list[dict[str, Any]] | None = None
+            note = ""
+            for tc in step.tool_calls:
+                if tc.name == "emit_plan":
+                    raw_shots = tc.arguments.get("shots")
+                    emitted = [s for s in raw_shots if isinstance(s, dict)] if isinstance(raw_shots, list) else []
+                    note = str(tc.arguments.get("note") or "")
+                    self._append_tool_result(messages, tc.id, "Plan accepted.")
+                    continue
+                # Dedup guard: a hallucinating model can repeat the same call;
+                # short-circuit identical (tool, args) so it can't burn the round
+                # budget / vision budget re-fetching what it already has.
+                key = (tc.name, json.dumps(tc.arguments, sort_keys=True, ensure_ascii=False))
+                if key in seen:
+                    self._append_tool_result(
+                        messages, tc.id,
+                        "（你已用相同参数调用过该工具，结果同上；请改用已有信息，或直接调用 emit_plan。）",
+                    )
+                    continue
+                seen.add(key)
+                if tc.name == "get_clip_detail":
+                    step_cb(f"查看片段 #{_as_int(tc.arguments.get('clip_id'))} 台词")
+                    self._append_tool_result(
+                        messages, tc.id, self._do_detail(tc.arguments, cache),
+                    )
+                elif tc.name == "inspect_broll":
+                    step_cb(f"查看片段 #{_as_int(tc.arguments.get('clip_id'))} 画面")
+                    text, vision_used = self._do_inspect(tc.arguments, vision_used)
+                    self._append_tool_result(messages, tc.id, text)
+                else:
+                    self._append_tool_result(messages, tc.id, f"Unknown tool: {tc.name}")
+
+            if emitted is not None:
+                return emitted, note, vision_used
+
+            # Past the halfway point without a plan → push the model to commit
+            # (local tool-callers otherwise keep exploring until the round cap).
+            if not nudged and round_i + 1 >= self._max_tool_rounds // 2:
+                nudged = True
+                messages.append({
+                    "role": "system",
+                    "content": "你已了解足够。现在**必须**调用 emit_plan 给出这一天的最终分镜表，不要再查看素材。",
+                })
+
+        return None, "", vision_used
+
     @staticmethod
     def _per_day_target(
         request: RoughCutRequest, n_days: int,
@@ -251,13 +428,22 @@ class CutDirector:
     @staticmethod
     def _day_user_prompt(
         user_text: str, day: str, context: str, per_day: tuple[float, float] | None,
+        *, agent: bool = False,
     ) -> str:
         budget = ""
         if per_day is not None:
             budget = f"\n这一天的目标时长约 {per_day[0]/60:.1f}–{per_day[1]/60:.1f} 分钟。"
-        return (
+        head = (
             f"{user_text}\n\n本次只为【{day}】这一天生成分镜，chapter 一律填 \"{day}\"。{budget}\n\n"
             f"该日期可用素材（只能用下列 clip_id）：\n{context}\n\n"
+        )
+        if agent:
+            return head + (
+                "如有需要，可先用 get_clip_detail 深挖某条 A-roll 的完整台词分段，"
+                "或用 inspect_broll 现场查看某条 B-roll 的画面（尽量少用）；"
+                "掌握足够后调用 emit_plan 给出这一天的最终分镜表。"
+            )
+        return head + (
             "请只输出 JSON，格式：\n"
             '{"note": "可选备注", "shots": [{"clip_id": 整数, "roll": "a"或"b", '
             '"in_s": 数字, "out_s": 数字, "content": "台词或画面", "rationale": "用途理由"}]}'

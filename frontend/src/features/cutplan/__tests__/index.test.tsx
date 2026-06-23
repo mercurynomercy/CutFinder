@@ -121,7 +121,9 @@ describe('CutplanPage', () => {
       ),
       http.get(`${API}/cut/sessions/7`, () => {
         calls += 1
-        const running = calls === 1
+        // Stay running for the first couple of polls so the thinking indicator
+        // has a real window before the turn resolves.
+        const running = calls <= 2
         return HttpResponse.json({
           session: { id: 7, title: 't', status: running ? 'running' : 'idle', created_at: null, updated_at: null },
           messages: running

@@ -13,14 +13,39 @@ from cutfinder.pipeline.cutplan_service import CutPlanService
 
 
 class FakeDirector:
-    """Records (request, history, user_text) and returns a canned result."""
+    """Records (request, history, user_text) and returns a canned result.
 
-    def __init__(self, result: CutDirectorResult) -> None:
+    Optionally emits scripted progress strings / partial plans through the
+    callbacks the service passes, to exercise the live-progress wiring.
+    """
+
+    def __init__(
+        self,
+        result: CutDirectorResult,
+        progress_steps: list[str] | None = None,
+        partial_plans: list[CutPlan] | None = None,
+    ) -> None:
         self.result = result
         self.calls: list[tuple[RoughCutRequest, list[Any], str]] = []
+        self._progress_steps = progress_steps or []
+        self._partial_plans = partial_plans or []
 
-    def generate(self, request: RoughCutRequest, history: list[Any], user_text: str) -> CutDirectorResult:
+    def generate(
+        self,
+        request: RoughCutRequest,
+        history: list[Any],
+        user_text: str,
+        *,
+        on_progress: Any = None,
+        on_partial: Any = None,
+    ) -> CutDirectorResult:
         self.calls.append((request, list(history), user_text))
+        for s in self._progress_steps:
+            if on_progress:
+                on_progress(s)
+        for p in self._partial_plans:
+            if on_partial:
+                on_partial(p)
         return self.result
 
 
@@ -45,6 +70,25 @@ def test_handle_persists_messages_and_plan() -> None:
     assert store.get_session(s.id).status == "idle"
     # The explicit request was passed through and remembered.
     assert director.calls[0][0].date_from == "2026-04-25"
+
+
+def test_handle_saves_partial_plan_and_clears_progress() -> None:
+    store = MemoryCutSessionStore()
+    s = store.create_session()
+    partial = CutPlan(shots=[Shot(clip_id=9, roll="b", in_s=0, out_s=5)], total_s=5.0)
+    # Final result carries no plan → the last saved plan is the partial one,
+    # proving on_partial reached the store mid-run.
+    director = FakeDirector(
+        CutDirectorResult("生成中", None),
+        progress_steps=["正在生成第 1/2 天（2026-04-25）…"],
+        partial_plans=[partial],
+    )
+    svc = CutPlanService(store, director)  # type: ignore[arg-type]
+
+    svc.handle(s.id, "剪一条", RoughCutRequest())
+
+    assert store.get_latest_plan(s.id).total_s == 5.0   # partial plan persisted
+    assert store.get_session(s.id).progress == ""        # progress cleared at end
 
 
 def test_refine_reuses_stored_request() -> None:

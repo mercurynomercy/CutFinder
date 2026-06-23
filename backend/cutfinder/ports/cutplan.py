@@ -108,6 +108,12 @@ class CutSessionStore(Protocol):
     def set_session_status(self, session_id: int, status: str) -> None:
         """Update a session's status ('idle'|'running'|'error')."""
 
+    def set_session_progress(self, session_id: int, text: str) -> None:
+        """Set live, human-readable progress text for a running turn (ephemeral)."""
+
+    def clear_session_progress(self, session_id: int) -> None:
+        """Drop a session's live progress text when the turn ends."""
+
     def set_session_request(self, session_id: int, request_json: str) -> None:
         """Store the latest structured request params (JSON) for a session."""
 

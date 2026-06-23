@@ -30,6 +30,7 @@ def _build_router(ctx: Any) -> Any:
     def _session_dict(s: Any) -> dict[str, Any]:
         return {
             "id": s.id, "title": s.title, "status": s.status,
+            "progress": getattr(s, "progress", ""),
             "created_at": s.created_at, "updated_at": s.updated_at,
         }
 

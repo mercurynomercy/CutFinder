@@ -329,6 +329,96 @@ def test_generate_fills_clip_date_and_uses_custom_prompt(
     assert "风格=轻快" in system                        # {style} substituted
 
 
+# ── per-day mini-agent (mode="agent", task 26) ──────────────────
+
+class FakeAgentLLM:
+    """run() pops scripted AgentSteps; complete() returns canned JSON (fallback)."""
+
+    def __init__(self, steps: list[AgentStep], raw: str = "{}") -> None:
+        self._steps = steps
+        self.raw = raw
+        self.run_calls = 0
+        self.complete_calls = 0
+
+    def run(self, messages: list[dict[str, Any]], tools: list[dict[str, Any]]) -> AgentStep:
+        self.run_calls += 1
+        self.tools_seen = tools
+        return self._steps.pop(0) if self._steps else AgentStep(content="done")
+
+    def complete(self, messages: list[dict[str, Any]]) -> str:
+        self.complete_calls += 1
+        return self.raw
+
+
+def test_generate_agent_mode_converges_via_tool_loop() -> None:
+    # Day worker deep-dives one A-roll (get_clip_detail) then emit_plan.
+    llm = FakeAgentLLM([
+        AgentStep(tool_calls=[_tc("get_clip_detail", {"clip_id": 1})]),
+        AgentStep(content="搞定", tool_calls=[_tc("emit_plan", {"shots": [
+            {"clip_id": 1, "roll": "a", "in_s": 0, "out_s": 12, "content": "开场白"},
+        ]})]),
+    ])
+    briefs = [ClipBrief(clip_id=1, roll="a", has_transcript=True, capture_time="2026-04-25T09:00:00")]
+    director = CutDirector(llm, FakeRetriever(briefs, _details()))  # default mode="agent"
+    result = director.generate(RoughCutRequest(date_from="2026-04-25"), [], "剪一条")
+
+    assert result.plan is not None
+    assert result.plan.total_s == 12.0
+    assert result.plan.chapters == ["2026-04-25"]
+    assert llm.complete_calls == 0  # converged via tools, no staged fall back
+    # Worker is not given search_footage (only detail / inspect / emit).
+    assert {t["function"]["name"] for t in llm.tools_seen} == {
+        "get_clip_detail", "inspect_broll", "emit_plan",
+    }
+
+
+def test_generate_agent_falls_back_to_staged_on_nonconvergence() -> None:
+    # run() never emits a plan (keeps inspecting) → round cap → staged complete().
+    looping = [AgentStep(tool_calls=[_tc("get_clip_detail", {"clip_id": 1})]) for _ in range(50)]
+    raw = '{"shots": [{"clip_id": 1, "roll": "a", "in_s": 0, "out_s": 12}]}'
+    llm = FakeAgentLLM(looping, raw=raw)
+    briefs = [ClipBrief(clip_id=1, roll="a", has_transcript=True, capture_time="2026-04-25T09:00:00")]
+    director = CutDirector(llm, FakeRetriever(briefs, _details()), max_tool_rounds=3)
+    result = director.generate(RoughCutRequest(date_from="2026-04-25"), [], "剪一条")
+
+    assert llm.run_calls == 3          # hit the per-day round cap
+    assert llm.complete_calls == 1     # then fell back to staged JSON for the day
+    assert result.plan is not None
+    assert result.plan.total_s == 12.0
+
+
+def test_run_day_dedups_repeated_tool_calls() -> None:
+    # Model inspects the same B-roll twice (hallucinated repeat) → the second is
+    # short-circuited by the dedup guard, not re-executed (inspector hit once).
+    inspector = FakeInspector()
+    llm = FakeAgentLLM([
+        AgentStep(tool_calls=[_tc("inspect_broll", {"clip_id": 2})]),
+        AgentStep(tool_calls=[_tc("inspect_broll", {"clip_id": 2})]),  # identical → deduped
+        AgentStep(content="ok", tool_calls=[_tc("emit_plan", {"shots": [
+            {"clip_id": 2, "roll": "b", "in_s": 0, "out_s": 6},
+        ]})]),
+    ])
+    briefs = [ClipBrief(clip_id=2, roll="b", capture_time="2026-04-25T09:00:00")]
+    director = CutDirector(llm, FakeRetriever(briefs, _details()), inspector, vision_budget=5)
+    result = director.generate(RoughCutRequest(date_from="2026-04-25"), [], "剪一条")
+
+    assert result.plan is not None
+    assert inspector.count == 1  # second identical inspect_broll deduped, not re-run
+    assert llm.complete_calls == 0
+
+
+def test_generate_staged_mode_skips_tool_loop() -> None:
+    raw = '{"shots": [{"clip_id": 1, "roll": "a", "in_s": 0, "out_s": 12}]}'
+    llm = FakeAgentLLM([], raw=raw)
+    briefs = [ClipBrief(clip_id=1, roll="a", has_transcript=True, capture_time="2026-04-25T09:00:00")]
+    director = CutDirector(llm, FakeRetriever(briefs, _details()), mode="staged")
+    result = director.generate(RoughCutRequest(date_from="2026-04-25"), [], "剪一条")
+
+    assert llm.run_calls == 0          # staged mode never enters the tool loop
+    assert llm.complete_calls == 1
+    assert result.plan is not None
+
+
 def test_generate_no_footage_returns_scan_hint() -> None:
     director = CutDirector(FakeCompleteLLM("{}"), FakeRetriever([], {}))
     result = director.generate(RoughCutRequest(date_from="2026-04-25"), [], "go")

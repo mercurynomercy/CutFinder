@@ -87,6 +87,7 @@ def test_create_app_with_library_serves_settings(
         "keyframe_count",
         "keyframe_auto",
         "vocal_separation",
+        "cut_director_mode",
         "cut_max_tool_rounds",
         "cut_vision_budget",
         "cut_default_aspect_ratio",

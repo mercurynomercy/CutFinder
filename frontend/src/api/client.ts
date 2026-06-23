@@ -184,6 +184,7 @@ export interface CutSession {
   id: number
   title: string
   status: string // 'idle' | 'running' | 'error'
+  progress?: string // live status while a turn runs (e.g. "第 2/6 天 · 查看片段 #123")
   created_at: string | null
   updated_at: string | null
 }

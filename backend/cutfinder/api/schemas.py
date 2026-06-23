@@ -170,6 +170,7 @@ class PrefsOut(BaseModel):
     keyframe_count: int = 3
     keyframe_auto: bool = False
     vocal_separation: bool = False
+    cut_director_mode: str = "agent"
     cut_max_tool_rounds: int = 24
     cut_vision_budget: int = 6
     cut_default_aspect_ratio: str = "16:9"
@@ -194,6 +195,7 @@ class SettingsUpdate(BaseModel):
     keyframe_count: Optional[int] = None
     keyframe_auto: Optional[bool] = None
     vocal_separation: Optional[bool] = None
+    cut_director_mode: Optional[str] = None
     cut_max_tool_rounds: Optional[int] = None
     cut_vision_budget: Optional[int] = None
     cut_default_aspect_ratio: Optional[str] = None

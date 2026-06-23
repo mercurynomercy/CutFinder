@@ -239,6 +239,7 @@ def _build_into(ctx: LibraryContext, library_path: Union[str, Path]) -> None:
             OmlxVisionTagger(config),
             num_frames=prefs.broll_frame_count,
         ),
+        mode=prefs.cut_director_mode,
         max_tool_rounds=prefs.cut_max_tool_rounds,
         vision_budget=prefs.cut_vision_budget,
     )
