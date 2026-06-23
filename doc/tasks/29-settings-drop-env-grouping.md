@@ -35,8 +35,8 @@
 4. 后端 `test_app_factory` 等断言 settings 契约的测试同步。
 
 ## 验收
-- [ ] 设置页模型名/OMLX 端点正常显示与保存（落 config.json）。
-- [ ] 前后端测试绿；mypy / ruff / tsc 干净。
+- [x] 设置页模型名/OMLX 端点正常显示与保存（落 config.json）。采用**方案 B**：machine-global 键并进 `prefs`，删 `env` 分组。
+- [x] 前后端测试绿（后端 526、前端 205）；mypy / ruff 干净；tsc 仅余 tsconfig `baseUrl` 历史告警。
 
 ## 备注
 - 纯清理，无功能变化；与初剪（26/27/28）无关。

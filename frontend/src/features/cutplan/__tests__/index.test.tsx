@@ -143,6 +143,38 @@ describe('CutplanPage', () => {
     expect(screen.getByText('A-0001.mov')).toBeInTheDocument()
   })
 
+  it('edits generation options in the 初剪设置 modal and saves them via PUT /settings', async () => {
+    let putBody: Record<string, unknown> | null = null
+    server.use(
+      http.get(`${API}/cut/sessions`, () => HttpResponse.json({ sessions: [] })),
+      http.get(`${API}/cut/prompt`, () =>
+        HttpResponse.json({ prompt: '你是导演…', default: '你是导演…', is_default: true }),
+      ),
+      http.put(`${API}/cut/prompt`, () =>
+        HttpResponse.json({ prompt: '你是导演…', default: '你是导演…', is_default: true }),
+      ),
+      http.put(`${API}/settings`, async ({ request }) => {
+        putBody = (await request.json()) as Record<string, unknown>
+        return HttpResponse.json({ status: 'ok' })
+      }),
+    )
+
+    render(<CutplanPage onClose={() => {}} />)
+
+    // Open the "Rough-cut settings" modal from the composer toolbar.
+    await userEvent.click(await screen.findByRole('button', { name: 'Rough-cut settings' }))
+
+    // The critic toggle reflects the loaded value (off) — flip it on.
+    const critic = await screen.findByRole('checkbox', { name: 'Critic review pass' })
+    expect((critic as HTMLInputElement).checked).toBe(false)
+    await userEvent.click(critic)
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => expect(putBody).not.toBeNull())
+    expect(putBody!.cut_critic_enabled).toBe(true)
+    expect(putBody!.cut_vision_budget).toBe(6)
+  })
+
   it('deletes a conversation', async () => {
     const del = vi.fn()
     server.use(

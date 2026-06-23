@@ -56,10 +56,10 @@
 
 ## 验收
 
-- [ ] 单测（A）：prior 有 4/25、4/26，本轮范围只 5/11 → 结果含三天、按日期排序、4/25 shots 保留；失败的天若有旧版本则保留、不进"已跳过"提示；service 把 `get_latest_plan` 作为 `prior_plan` 传入。
-- [ ] 单测（B）：fake critic 返回点名某日期 + action → 该日期被重做并合并；critic 返回空/坏 JSON → 跳过、原 plan 不变。
-- [ ] 真机：refine"增加一份 X"得到完整表；开启 critic 后某拖沓日期被剪短。
-- [ ] mypy / ruff 干净。
+- [x] 单测（A）：prior 有 4/25、4/26，本轮范围只 5/11 → 结果含三天、按日期排序、4/25 shots 保留；失败的天若有旧版本则保留、不进"已跳过"提示；service 把 `get_latest_plan` 作为 `prior_plan` 传入。
+- [x] 单测（B）：fake critic 返回点名某日期 + action → 该日期被重做并合并；critic 返回空/坏 JSON → 跳过、原 plan 不变。
+- [ ] 真机：refine"增加一份 X"得到完整表；开启 critic 后某拖沓日期被剪短。（待手动验收）
+- [x] mypy / ruff 干净。
 
 ## 备注
 - 无前端改动（前端轮询读合并后的 plan 即可）；critic 阶段可复用 27 的进度串（"正在审片…/重做 2026-05-03…"）。

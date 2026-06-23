@@ -2,7 +2,7 @@
 
 > 配套需求文档：[`doc/proposal.md`](./proposal.md)。本文件把需求拆成可独立开发、独立测试的模块，给出每个模块的职责、接口、输入输出、依赖与测试方式。
 >
-> - **日期**：2026-06-13（v1）；2026-06-18 增补 §3.13 字幕导出（独立成片 → FCP iTT/SRT）；2026-06-22 增补 §3.15 初剪导演 Agent（对话生成分镜表，**beta，持续改进中**）：分阶段生成已细化为**按拍摄日期逐日生成**、消息内自然语言参数解析、可编辑导演 Prompt（`~/.cutfinder/config.json`，可重置）、分镜表带拍摄日期列并按当天真实时间线排序。
+> - **日期**：2026-06-13（v1）；2026-06-18 增补 §3.13 字幕导出（独立成片 → FCP iTT/SRT）；2026-06-22 增补 §3.15 初剪导演 Agent（对话生成分镜表，**beta，持续改进中**）：分阶段生成已细化为**按拍摄日期逐日生成**、消息内自然语言参数解析、可编辑导演 Prompt（`~/.cutfinder/config.json`，可重置）、分镜表带拍摄日期列并按当天真实时间线排序。2026-06-24 §3.15 再迭代（`tasks/26–28`）：**按天 mini-agent**（scoped 工具环 + 回落，开关 `cut_director_mode`）、**实时进度 + 部分分镜先显示**、**refine 按日期合并**（修「增加某天却整表替换」bug）、**审片 critic agent**（默认关 `cut_critic_enabled`）；逐次生成参数（审片复检 / 视觉确认次数）移到初剪页「初剪设置」弹窗。`tasks/29`：设置去掉历史 `"env"` 分组，machine-global 键并入统一 `prefs` 视图（仍存 `~/.cutfinder/config.json`）。
 > - **范围**：proposal v1（需求 0–7）。需求 8（关键帧建议）已实现（见 `tasks/16-keyframes.md`）。**字幕导出**（§3.13、`tasks/17`）与**初剪导演 Agent**（§3.15、`tasks/25`）均为 v1 之外的独立工具，复用已有适配器/队列/SSE，**不改动 v1 per-clip 流水线接口**。
 
 ---
@@ -309,7 +309,7 @@ cutfinder/
       def run_tools(self, messages, tools) -> AgentStep: ...        # tool_calls 或 final content（结构化 CutPlan）
   ```
 - **in/out 时间码来源**：**A-roll 主线** in/out = 所选 transcript **segment 的边界**（让 LLM 按 segment 序号选段，映射回 `start_s/end_s`，杜绝幻觉时码——沿用 §3.13/`tasks/16` 的约束手法）；**B-roll 插空**优先用已有关键帧切点，没有则取默认窗口，必要时 `inspect_broll` 抽帧确认。
-- **护栏（Director 内，确定性）**：最大工具轮数 `cut_max_tool_rounds`（默认 24）；时长校验 `sum(out_s-in_s)` ∈ `[target_min_s, target_max_s]`，超/欠回灌一轮，仍不达标则**照出 + 尾注"未命中目标时长"**；视觉调用预算 `cut_vision_budget`——**Settings 可调用户偏好**（默认 6；设 `0` = **不限**，由用户按机器性能决定，因文本/视觉交替触发 OMLX 换模型、慢，弱机宜限、强机可放开）。**收尾不让 LLM 算术**——时长累计与区间校验全走代码。
+- **护栏（Director 内，确定性）**：最大工具轮数 `cut_max_tool_rounds`（默认 24）；时长校验 `sum(out_s-in_s)` ∈ `[target_min_s, target_max_s]`，超/欠回灌一轮，仍不达标则**照出 + 尾注"未命中目标时长"**；视觉调用预算 `cut_vision_budget`——**初剪页「初剪设置」弹窗可调**（默认 6；设 `0` = **不限**，由用户按机器性能决定，因文本/视觉交替触发 OMLX 换模型、慢，弱机宜限、强机可放开）。**收尾不让 LLM 算术**——时长累计与区间校验全走代码。
 - **纯逻辑格式化**（`cutplan/format.py`，无 IO，本模块测试金矿）：
   ```python
   def to_shotlist_markdown(plan: CutPlan) -> str: ...
@@ -330,7 +330,12 @@ cutfinder/
   - **当天时间线排序**：每天素材按 `capture_time` 排序后再喂模型，上下文带完整时间戳，分镜还原当天真实行程顺序。
   - **拍摄日期入分镜**：`ClipDetail`/`Shot` 增 `capture_time`/`clip_date`，UI 与 Markdown 分镜表均显示日期列，便于回找素材。
   - **会话自动命名**：首条用户消息自动作为会话标题（不再恒为"未命名"）。
-- **独立测**：格式化用黄金串（章节/缩略图引用/时长尾注/边界）；Director 注入**假 LLMAgentClient（脚本化 tool_calls）+ 假工具**，断言 A 主线选段映射 in/out、B 插空、时长护栏回灌、最大轮数/视觉预算护栏、refine 重跑；Retriever/SessionStore 用内存 SQLite（含删除级联）。分镜"质量"不可自动化验收——靠 eval 清单 + 真机抽查。
+  - **按天 mini-agent**（`tasks/26`）：每个拍摄日期跑一个**scoped 工具调用环**——只给 `get_clip_detail`（深挖 transcript）/`inspect_broll`（按需看 B-roll）/`emit_plan`（收口），不给 `search_footage`（当天素材已确定性检索好喂进上下文）。单日小上下文下本地模型收口可靠；不收敛（超 round-cap 或纯文字回复）的天**回落**到原「每天一次纯 JSON 补全」。开关 `cut_director_mode`（`agent`/`staged`，默认 `agent`）；含**每日去重护栏**（防幻觉重复调用）+ round-cap 半程「必须 emit_plan」催收。不用 named/required 强制收口（OMLX 不稳），靠 `tool_choice="auto"` + 兜底。
+  - **实时进度 + 部分分镜先显示**（`tasks/27`）：Director 把逐天/逐片段进度串（检索阶段/本天片段数/clip 文件名/导演思路/回落）与**已完成日期的部分 plan** 写进 store（内存进度 + 覆盖式 `save_plan`），前端 `resumePoll` 轮询增量读取——「第 k/N 天 · 查看片段 #X」实时刷新、已完成日期分镜先渲染、其余标「生成中」；进度 UI 由「单行替换」改为「最近 5 步滚动轨迹」。沿用轮询（无 SSE/线程桥接）。
+  - **refine 按日期合并**（`tasks/28` Part A）：`generate(prior_plan=...)` 以旧 plan 为基底建 `merged: dict[拍摄日期 → shots]`，本轮只重做范围内日期——成功覆盖该天、失败保留旧那天、`_flatten` 按日期排序后再 `_build_plan`。修了「增加一份 5/11 把整表替换成只剩 5/11」的 bug（根因：检索按改窄范围只重做该天 + plan 覆盖式保存）；逐天 partial 与最终 plan 都走合并视图，故 refine 中途不闪掉旧日期；缩到无素材的日期返回 `None` plan（service 不覆盖、旧 plan 保留）。`CutPlanService.handle` 取 `get_latest_plan` 作 `prior_plan`。
+  - **审片 critic agent**（`tasks/28` Part B，默认关 `cut_critic_enabled`）：全片拼好后跑一次 critic LLM 调用，只评**主观质量**（节奏松紧 / 叙事连贯 / A-roll 主线与 B-roll 空镜配比 / 空镜缺位），输出结构化 `{date, issue, action}` 修订意见；主编排对**被点名日期**复用 Part A 的「重做该日期 → 并入」机制修一轮（最多 1 轮；坏/空 JSON 则跳过、原 plan 不变）。时长校验仍由确定性代码兜底，critic 不碰。
+  - **逐次生成参数移到初剪页**（`tasks/28` UI）：`cut_critic_enabled`（审片复检）+ `cut_vision_budget`（视觉确认次数）从全局设置页移到**初剪页面**——原「导演 Prompt」弹窗升级为「初剪设置」弹窗（顶部「生成选项」段 + 下方导演 Prompt 文本框），开弹窗 `GET /settings` 回填、保存 `PUT /settings`（触发 director 重建生效）。
+- **独立测**：格式化用黄金串（章节/缩略图引用/时长尾注/边界）；Director 注入**假 LLMAgentClient（脚本化 tool_calls / 补全字符串）+ 假工具**，断言 A 主线选段映射 in/out、B 插空、时长护栏回灌、最大轮数/视觉预算护栏、按天 agent 收口 + 回落、每日去重护栏、**refine 按日期合并（保留旧日期 / 失败保旧）**、**critic 重做并入 / 坏 JSON 跳过**；Service 断言 `get_latest_plan` 作 `prior_plan` 透传。Retriever/SessionStore 用内存 SQLite（含删除级联）。分镜"质量"不可自动化验收——靠 eval 清单 + 真机抽查。
 
 ---
 
@@ -442,7 +447,7 @@ CREATE TABLE cut_plans (
 | POST | `/api/clips/{id}/reanalyze` | 重新分析单个片段(重跑 AI；保留手动纠正/标签，不重复制)；返回 `job_id` |
 | GET | `/api/search?q=` | 跨简介/描述/转写全文搜索(FTS5) |
 | GET | `/api/clips/{id}/thumbnail` | 缩略图图片 |
-| GET / PUT | `/api/settings` | 读/写配置 |
+| GET / PUT | `/api/settings` | 读/写配置（统一 `prefs` 视图：库级 prefs + machine-global 键 `OMLX_*`/`TEXT_MODEL`/`VISION_MODEL` 合并，密钥 mask；无历史 `"env"` 分组，`tasks/29`） |
 | POST | `/api/subtitles/export` | 字幕导出(§3.13)：body `{video_path, out_dir, formats?, language?}`；返回 `job_id`（复用 `/api/jobs/{id}` + SSE） |
 | GET | `/api/subtitles/{job_id}` | 取该导出 job 的产出文件路径(完成后) |
 | POST | `/api/pick-file` | 原生选**文件**(macOS `choose file`，视频过滤)；对齐已有 `/api/pick-folder` |
@@ -475,7 +480,7 @@ CREATE TABLE cut_plans (
 | `features/settings` | 源/库文件夹、OMLX 配置 | 表单校验与保存 |
 | `features/jobs` | SSE 进度条、逐个完成提示 | mock SSE 事件流断言进度更新 |
 | `features/subtitles` (§3.13) | 选成片/选输出文件夹/勾选 iTT·SRT/进度/产出列表 + Reveal | mock pick/export/SSE，断言请求参数与产出渲染 |
-| `features/cutplan` (§3.15) | 左对话框(会话列表可删)/右实时分镜表(章节+缩略图)/复制 Markdown/进度 | mock 会话 CRUD/发消息/SSE，断言流式回复、分镜渲染、删除会话 |
+| `features/cutplan` (§3.15) | 左对话框(会话列表可删)/右实时分镜表(章节+缩略图)/复制 Markdown/实时进度轨迹/「初剪设置」弹窗(导演 Prompt + 生成选项) | mock 会话 CRUD/发消息/轮询，断言流式回复、分镜渲染、删除会话、初剪设置弹窗读写 `cut_critic_enabled`/`cut_vision_budget`(PUT /settings) |
 
 - **前后端契约**：以 §6 的请求/响应 schema 为准；前端类型从后端 pydantic 模型生成或手写对齐，降低漂移。
 
@@ -524,8 +529,10 @@ CREATE TABLE cut_plans (
 | `output_language` | `zh` | AI 简介/描述语言；字幕导出(§3.13)也沿用 |
 | `subtitle_default_formats` | `["itt","srt"]` | 字幕导出 UI 默认格式（可选项） |
 | `vocal_separation` | `false` | A-roll 转写前是否用 Demucs 去 BGM（JSON）；仅影响之后 scan 的新片。字幕导出强制分离，不受此项影响 |
-| `cut_max_tool_rounds` | `24` | 初剪 Agent(§3.15)工具调用环最大轮数护栏 |
-| `cut_vision_budget` | `6` | 初剪 Agent 单次生成内 `inspect_broll`(现场视觉)调用上限；**Settings 可调**，`0`=不限(由机器性能决定，JSON) |
+| `cut_director_mode` | `agent` | 初剪 Agent(§3.15)生成模式：`agent`=按天 scoped 工具环（不收敛回落 staged）/`staged`=每天一次纯 JSON(`tasks/26`) |
+| `cut_max_tool_rounds` | `24` | 初剪 Agent 工具调用环最大轮数护栏 |
+| `cut_vision_budget` | `6` | 初剪 Agent 单次生成内 `inspect_broll`(现场视觉)调用上限；**初剪页「初剪设置」弹窗可调**，`0`=不限(由机器性能决定，JSON) |
+| `cut_critic_enabled` | `false` | 初剪 Agent 审片复检：拼好后跑一轮 critic 评主观质量并对点名日期重做一轮(`tasks/28`)；**初剪页「初剪设置」弹窗可调** |
 | `cut_default_aspect_ratio` | `16:9` | 初剪 Agent 默认画面比例（用户可在对话里覆盖） |
 | `cut_director_prompt` | （自带默认） | 初剪 Agent 导演 system prompt；用户可在初剪页编辑、存机器全局 `~/.cutfinder/config.json`，含 `{aspect}/{target}/{style}` 占位符；删除即重置回自带默认 |
 

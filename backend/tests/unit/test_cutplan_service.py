@@ -27,6 +27,7 @@ class FakeDirector:
     ) -> None:
         self.result = result
         self.calls: list[tuple[RoughCutRequest, list[Any], str]] = []
+        self.prior_plans: list[CutPlan | None] = []
         self._progress_steps = progress_steps or []
         self._partial_plans = partial_plans or []
 
@@ -36,10 +37,12 @@ class FakeDirector:
         history: list[Any],
         user_text: str,
         *,
+        prior_plan: CutPlan | None = None,
         on_progress: Any = None,
         on_partial: Any = None,
     ) -> CutDirectorResult:
         self.calls.append((request, list(history), user_text))
+        self.prior_plans.append(prior_plan)
         for s in self._progress_steps:
             if on_progress:
                 on_progress(s)
@@ -141,6 +144,21 @@ def test_handle_parses_request_from_message_text() -> None:
     # A refine turn with no new dates keeps the original scope.
     svc.handle(s.id, "第三段太长，整体再紧凑一点")
     assert director.calls[1][0].date_from == "2026-04-25"
+
+
+def test_refine_passes_prior_plan_as_merge_base() -> None:
+    # The latest stored plan is handed to the director as prior_plan so a refine
+    # turn merges over it instead of replacing the whole timeline (task 28).
+    store = MemoryCutSessionStore()
+    s = store.create_session()
+    director = FakeDirector(CutDirectorResult("v1", _plan()))
+    svc = CutPlanService(store, director)  # type: ignore[arg-type]
+
+    svc.handle(s.id, "第一轮", RoughCutRequest())
+    assert director.prior_plans[0] is None          # no plan yet on the first turn
+    svc.handle(s.id, "增加一份 2026-05-11")
+    assert director.prior_plans[1] is not None        # the v1 plan is the merge base
+    assert director.prior_plans[1].total_s == 10.0
 
 
 def test_handle_marks_error_on_director_failure() -> None:

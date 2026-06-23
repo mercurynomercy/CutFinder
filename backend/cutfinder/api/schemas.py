@@ -174,10 +174,12 @@ class PrefsOut(BaseModel):
     cut_max_tool_rounds: int = 24
     cut_vision_budget: int = 6
     cut_default_aspect_ratio: str = "16:9"
+    cut_critic_enabled: bool = False
 
 
 class SettingsOut(BaseModel):
-    env: dict[str, str] = {}  # OMLX_BASE_URL etc. (masked)
+    # One unified view: per-library prefs + machine-global keys (OMLX_BASE_URL
+    # etc., secret masked) merged together — no separate "env" grouping.
     prefs: PrefsOut = Field(default_factory=PrefsOut)
 
 
@@ -199,6 +201,7 @@ class SettingsUpdate(BaseModel):
     cut_max_tool_rounds: Optional[int] = None
     cut_vision_budget: Optional[int] = None
     cut_default_aspect_ratio: Optional[str] = None
+    cut_critic_enabled: Optional[bool] = None
 
 
 # ── SSE event types (internal helper schemas) ───────────────────

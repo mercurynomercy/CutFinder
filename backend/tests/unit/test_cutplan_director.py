@@ -436,6 +436,123 @@ def test_generate_bad_json_returns_retry_message() -> None:
     assert "重试" in result.assistant_text or "失败" in result.assistant_text
 
 
+# ── refine merge by date (task 28 Part A) ───────────────────────
+
+def _prior_plan() -> Any:
+    from cutfinder.domain.models import CutPlan, Shot
+    return CutPlan(shots=[
+        Shot(clip_id=1, roll="a", in_s=0, out_s=12, content="第一天", chapter="2026-04-25"),
+        Shot(clip_id=2, roll="a", in_s=0, out_s=8, content="第二天", chapter="2026-04-26"),
+    ])
+
+
+def test_refine_merges_new_date_keeping_prior_dates() -> None:
+    # Prior plan has 4/25 + 4/26; this turn only regenerates 5/11 → all three
+    # dates survive, ordered by date, and the prior 4/25 shots are kept verbatim.
+    llm = ScriptedCompleteLLM(['{"shots": [{"clip_id": 3, "roll": "a", "in_s": 0, "out_s": 10}]}'])
+    briefs = [ClipBrief(clip_id=3, roll="a", has_transcript=True, capture_time="2026-05-11T09:00:00")]
+    details = {
+        1: ClipDetail(clip_id=1, roll="a", duration_s=60.0, capture_time="2026-04-25T09:00:00"),
+        2: ClipDetail(clip_id=2, roll="a", duration_s=60.0, capture_time="2026-04-26T09:00:00"),
+        3: ClipDetail(clip_id=3, roll="a", duration_s=60.0, capture_time="2026-05-11T09:00:00"),
+    }
+    director = CutDirector(llm, FakeRetriever(briefs, details), mode="staged")
+    result = director.generate(
+        RoughCutRequest(date_from="2026-05-11", date_to="2026-05-11"), [], "增加一份 5/11",
+        prior_plan=_prior_plan(),
+    )
+    assert result.plan is not None
+    assert result.plan.chapters == ["2026-04-25", "2026-04-26", "2026-05-11"]
+    assert [s.clip_id for s in result.plan.shots] == [1, 2, 3]
+    assert result.plan.total_s == 30.0  # 12 + 8 + 10
+
+
+def test_refine_keeps_prior_day_when_regeneration_fails() -> None:
+    # This turn re-does 4/25 but the model returns garbage → the prior 4/25 day
+    # is kept (not dropped, not reported as skipped).
+    llm = ScriptedCompleteLLM(["not json"])
+    briefs = [ClipBrief(clip_id=1, roll="a", has_transcript=True, capture_time="2026-04-25T09:00:00")]
+    details = {1: ClipDetail(clip_id=1, roll="a", duration_s=60.0, capture_time="2026-04-25T09:00:00")}
+    director = CutDirector(llm, FakeRetriever(briefs, details), mode="staged")
+    result = director.generate(
+        RoughCutRequest(date_from="2026-04-25", date_to="2026-04-25"), [], "重做 4/25",
+        prior_plan=_prior_plan(),
+    )
+    assert result.plan is not None
+    # Both prior dates remain; nothing reported as skipped.
+    assert result.plan.chapters == ["2026-04-25", "2026-04-26"]
+    assert "已跳过" not in result.assistant_text
+
+
+# ── critic agent (task 28 Part B) ───────────────────────────────
+
+class CriticLLM:
+    """Staged completions: first the per-day shots, then the critic verdict."""
+
+    def __init__(self, day_raws: list[str], critic_raw: str, redo_raw: str) -> None:
+        self._day_raws = list(day_raws)
+        self._critic_raw = critic_raw
+        self._redo_raw = redo_raw
+        self.critic_seen = False
+
+    def run(self, messages: Any, tools: Any) -> AgentStep:
+        return AgentStep(content="")
+
+    def complete(self, messages: list[dict[str, Any]]) -> str:
+        # The critic call is the one whose system prompt is the critic prompt.
+        if messages and "审片" in str(messages[0].get("content", "")):
+            self.critic_seen = True
+            return self._critic_raw
+        if self.critic_seen:
+            return self._redo_raw  # post-critic per-day redo
+        return self._day_raws.pop(0) if self._day_raws else "{}"
+
+
+def test_critic_redoes_flagged_date_and_merges() -> None:
+    briefs = [ClipBrief(clip_id=1, roll="a", has_transcript=True, capture_time="2026-04-25T09:00:00")]
+    details = {1: ClipDetail(clip_id=1, roll="a", duration_s=60.0, capture_time="2026-04-25T09:00:00")}
+    llm = CriticLLM(
+        day_raws=['{"shots": [{"clip_id": 1, "roll": "a", "in_s": 0, "out_s": 30}]}'],
+        critic_raw='{"revisions": [{"date": "2026-04-25", "issue": "节奏拖沓", "action": "剪短"}]}',
+        redo_raw='{"shots": [{"clip_id": 1, "roll": "a", "in_s": 0, "out_s": 12}]}',
+    )
+    director = CutDirector(llm, FakeRetriever(briefs, details), mode="staged", critic_enabled=True)
+    result = director.generate(RoughCutRequest(date_from="2026-04-25"), [], "剪一条")
+    assert llm.critic_seen is True
+    assert result.plan is not None
+    assert result.plan.total_s == 12.0  # critic redo (12) replaced the first cut (30)
+
+
+def test_critic_disabled_skips_review() -> None:
+    briefs = [ClipBrief(clip_id=1, roll="a", has_transcript=True, capture_time="2026-04-25T09:00:00")]
+    details = {1: ClipDetail(clip_id=1, roll="a", duration_s=60.0, capture_time="2026-04-25T09:00:00")}
+    llm = CriticLLM(
+        day_raws=['{"shots": [{"clip_id": 1, "roll": "a", "in_s": 0, "out_s": 30}]}'],
+        critic_raw='{"revisions": [{"date": "2026-04-25", "action": "剪短"}]}',
+        redo_raw='{"shots": [{"clip_id": 1, "roll": "a", "in_s": 0, "out_s": 12}]}',
+    )
+    director = CutDirector(llm, FakeRetriever(briefs, details), mode="staged")  # critic off
+    result = director.generate(RoughCutRequest(date_from="2026-04-25"), [], "剪一条")
+    assert llm.critic_seen is False
+    assert result.plan is not None
+    assert result.plan.total_s == 30.0  # unchanged, no critic pass
+
+
+def test_critic_bad_json_leaves_plan_unchanged() -> None:
+    briefs = [ClipBrief(clip_id=1, roll="a", has_transcript=True, capture_time="2026-04-25T09:00:00")]
+    details = {1: ClipDetail(clip_id=1, roll="a", duration_s=60.0, capture_time="2026-04-25T09:00:00")}
+    llm = CriticLLM(
+        day_raws=['{"shots": [{"clip_id": 1, "roll": "a", "in_s": 0, "out_s": 30}]}'],
+        critic_raw="garbage, no json",
+        redo_raw='{"shots": [{"clip_id": 1, "roll": "a", "in_s": 0, "out_s": 12}]}',
+    )
+    director = CutDirector(llm, FakeRetriever(briefs, details), mode="staged", critic_enabled=True)
+    result = director.generate(RoughCutRequest(date_from="2026-04-25"), [], "剪一条")
+    assert llm.critic_seen is True
+    assert result.plan is not None
+    assert result.plan.total_s == 30.0  # critic returned nothing actionable → unchanged
+
+
 def test_plain_reply_ends_turn_without_plan() -> None:
     llm = FakeLLM([AgentStep(content="请先扫描素材入库。")])
     director = CutDirector(llm, FakeRetriever([], {}))

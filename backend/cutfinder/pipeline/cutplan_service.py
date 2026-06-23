@@ -69,6 +69,11 @@ class CutPlanService:
         # History excludes the just-appended user message (passed separately).
         history = self._store.get_messages(session_id)[:-1]
 
+        # The latest plan is the merge base: a refine turn regenerates only the
+        # dates in its (possibly narrowed) range and merges them over this plan,
+        # so unrelated dates survive instead of being replaced (task 28 Part A).
+        prior_plan = self._store.get_latest_plan(session_id)
+
         try:
             # Deterministic per-date generation: the director either runs a
             # scoped tool loop per shooting date (agent mode) or one structured
@@ -79,6 +84,7 @@ class CutPlanService:
             # cumulative plan saved after each day so finished shots show early.
             result = self._director.generate(
                 req, history, user_text,
+                prior_plan=prior_plan,
                 on_progress=lambda text: self._store.set_session_progress(session_id, text),
                 on_partial=lambda plan: self._store.save_plan(session_id, plan),
             )

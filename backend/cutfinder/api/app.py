@@ -242,6 +242,7 @@ def _build_into(ctx: LibraryContext, library_path: Union[str, Path]) -> None:
         mode=prefs.cut_director_mode,
         max_tool_rounds=prefs.cut_max_tool_rounds,
         vision_budget=prefs.cut_vision_budget,
+        critic_enabled=prefs.cut_critic_enabled,
     )
     cutplan_service = CutPlanService(cut_store, cut_director)
 

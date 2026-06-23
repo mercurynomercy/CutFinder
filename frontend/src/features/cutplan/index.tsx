@@ -75,6 +75,10 @@ export function CutplanPage({ onClose }: CutplanPageProps) {
   const [promptDefault, setPromptDefault] = useState('')
   const [promptIsDefault, setPromptIsDefault] = useState(true)
   const [promptSaved, setPromptSaved] = useState(false)
+  // Per-generation knobs, edited in the same "初剪设置" modal and persisted as
+  // machine-global prefs (PUT /settings rebuilds the director so they take effect).
+  const [criticEnabled, setCriticEnabled] = useState(false)
+  const [visionBudget, setVisionBudget] = useState(6)
 
   const threadRef = useRef<HTMLDivElement>(null)
   // Tracks the currently-open session so resume polling can bail if the user
@@ -253,6 +257,15 @@ export function CutplanPage({ onClose }: CutplanPageProps) {
     } catch (err) {
       console.error('Load director prompt failed:', err)
     }
+    // Generation options live in machine-global prefs; pull current values so
+    // the toggles reflect what's actually in effect.
+    try {
+      const data = await api.getSettings()
+      setCriticEnabled(data.prefs.cut_critic_enabled ?? false)
+      setVisionBudget(data.prefs.cut_vision_budget ?? 6)
+    } catch {
+      /* no library bound / unreachable — keep defaults */
+    }
   }
 
   const savePrompt = async () => {
@@ -260,10 +273,12 @@ export function CutplanPage({ onClose }: CutplanPageProps) {
       const r = await api.setCutPrompt(promptText)
       setPromptText(r.prompt)
       setPromptIsDefault(r.is_default)
+      // Persist the generation options too (a partial PUT — only these keys).
+      await api.putSettings({ cut_critic_enabled: criticEnabled, cut_vision_budget: visionBudget })
       setPromptSaved(true)
       setTimeout(() => setPromptSaved(false), 1500)
     } catch (err) {
-      console.error('Save director prompt failed:', err)
+      console.error('Save rough-cut settings failed:', err)
     }
   }
 
@@ -524,17 +539,44 @@ export function CutplanPage({ onClose }: CutplanPageProps) {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="flex max-h-[85vh] w-full max-w-2xl flex-col rounded-lg border border-[--border] bg-[--surface-1] shadow-xl">
             <div className="flex items-center justify-between border-b border-[--border] px-5 py-3">
-              <span className="text-sm font-semibold">{t('roughcut.promptTitle')}</span>
+              <span className="text-sm font-semibold">{t('roughcut.settingsTitle')}</span>
               <span className={`text-xs ${promptIsDefault ? 'text-[--text-muted]' : 'text-[--primary]'}`}>
                 {promptIsDefault ? t('roughcut.promptDefault') : t('roughcut.promptCustom')}
               </span>
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto p-5">
+              {/* ── Generation options ─────────────────────── */}
+              <p className="mb-3 text-xs font-medium text-[--text-secondary]">{t('roughcut.genOptions')}</p>
+              <label className="flex items-center gap-2 text-sm text-[--text-primary]">
+                <input
+                  type="checkbox"
+                  checked={criticEnabled}
+                  onChange={(e) => setCriticEnabled(e.target.checked)}
+                  className="h-4 w-4 rounded border-[--border] bg-[--surface-2]"
+                />
+                {t('roughcut.critic')}
+              </label>
+              <p className="mb-3 mt-1 text-xs text-[--text-muted]">{t('roughcut.criticDesc')}</p>
+
+              <label className="block text-sm text-[--text-secondary]">{t('roughcut.visionBudget')}</label>
+              <input
+                type="number"
+                min={0}
+                step={1}
+                value={visionBudget}
+                onChange={(e) => setVisionBudget(parseInt(e.target.value, 10) || 0)}
+                className="mt-1 w-28 rounded-md border border-[--border] bg-[--surface-2] px-3 py-1.5 text-sm outline-none focus:border-[--primary]"
+              />
+              <p className="mt-1 text-xs text-[--text-muted]">{t('roughcut.visionBudgetDesc')}</p>
+
+              {/* ── Director prompt ────────────────────────── */}
+              <hr className="my-5 border-[--border]" />
+              <p className="mb-2 text-xs font-medium text-[--text-secondary]">{t('roughcut.promptSection')}</p>
               <p className="mb-2 text-xs text-[--text-muted]">{t('roughcut.promptHelp')}</p>
               <textarea
                 value={promptText}
                 onChange={(e) => setPromptText(e.target.value)}
-                rows={16}
+                rows={12}
                 spellCheck={false}
                 className="w-full resize-y rounded-md border border-[--border] bg-[--surface-2] px-3 py-2 font-mono text-xs leading-relaxed outline-none focus:border-[--primary]"
               />

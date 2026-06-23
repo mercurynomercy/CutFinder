@@ -267,6 +267,11 @@ class Prefs(BaseModel, frozen=True):
     cut_vision_budget: int = Field(default=6, ge=0)
     # Default aspect ratio when the user doesn't state one in chat.
     cut_default_aspect_ratio: str = "16:9"
+    # Off by default: after assembling the plan, run one extra critic LLM pass
+    # that judges subjective quality (rhythm/narrative/A-B balance) and re-does
+    # the dates it flags. Costs one more LLM call + the flagged days' redo, so
+    # the user opts in. See task 28 Part B.
+    cut_critic_enabled: bool = False
 
     @field_validator(
         "text_model", "vision_model", "whisper_model",

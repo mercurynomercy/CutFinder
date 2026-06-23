@@ -52,6 +52,17 @@ DEFAULT_CUT_DIRECTOR_PROMPT = (
     "画面比例 {aspect}。{target}风格/节奏：{style}"
 )
 
+# Critic (task 28 Part B): a single review pass over the already-assembled plan.
+# It judges only *subjective* quality (rhythm, narrative flow, A/B-roll balance);
+# the duration check stays deterministic in Python. It names shooting dates to
+# redo, which the director re-runs through the same per-day merge mechanism.
+CRITIC_SYSTEM_PROMPT = (
+    "你是资深视频剪辑指导，负责审片。只评判主观质量：节奏松紧、叙事是否连贯、"
+    "A-roll 解说主线与 B-roll 空镜的配比、空镜衔接是否缺位。"
+    "点名需要调整的【拍摄日期】并给出可执行建议；不要改时长（系统会另行校验）。"
+    "只指出最关键的几处。"
+)
+
 # ── Tool schemas (OpenAI function-calling format) ────────────────
 
 TOOLS: list[dict[str, Any]] = [
@@ -157,6 +168,7 @@ class CutDirector:
         mode: str = "agent",
         max_tool_rounds: int = 24,
         vision_budget: int = 6,
+        critic_enabled: bool = False,
     ) -> None:
         self._llm = llm
         self._retriever = retriever
@@ -164,6 +176,7 @@ class CutDirector:
         self._mode = mode
         self._max_tool_rounds = max(1, max_tool_rounds)
         self._vision_budget = max(0, vision_budget)
+        self._critic_enabled = critic_enabled
 
     # ── staged generation (primary path; reliable on local models) ──
 
@@ -173,6 +186,7 @@ class CutDirector:
         history: list[ChatMessage],
         user_text: str,
         *,
+        prior_plan: CutPlan | None = None,
         on_progress: Callable[[str], None] | None = None,
         on_partial: Callable[[CutPlan], None] | None = None,
     ) -> CutDirectorResult:
@@ -218,7 +232,17 @@ class CutDirector:
         per_day = self._per_day_target(request, len(dates))
         vision_used = 0  # inspect_broll budget shared across all days this turn
 
-        all_shots: list[dict[str, Any]] = []
+        # A plan is a dict keyed by chapter (= shooting date). Seed it from any
+        # prior plan so a refine turn that regenerates only the dates in its
+        # (possibly narrowed) range **merges** them over the existing timeline
+        # instead of replacing the whole thing (task 28 Part A). flatten() then
+        # re-orders by date so the merged plan stays a clean timeline.
+        merged: dict[str, list[dict[str, Any]]] = {}
+        if prior_plan is not None:
+            for shot in prior_plan.shots:
+                key = shot.chapter or shot.clip_date or "无日期"
+                merged.setdefault(key, []).append(self._shot_to_dict(shot))
+
         notes: list[str] = []
         failed: list[str] = []
         n_days = len(dates)
@@ -226,60 +250,215 @@ class CutDirector:
             progress(f"正在生成第 {idx}/{n_days} 天（{day}）· 本天 {len(groups[day])} 个片段")
             context = self._build_context(groups[day], cache)
 
-            day_shots: list[dict[str, Any]] | None = None
-            day_note = ""
-            if self._mode == "agent":
-                # Per-day mini-agent: a scoped tool loop (get_clip_detail /
-                # inspect_broll → emit_plan). Reliable on local models because the
-                # context is one day, not the whole multi-day plan (task 26).
-                def day_step(detail: str, _i: int = idx, _d: str = day) -> None:
-                    progress(f"第 {_i}/{n_days} 天（{_d}）· {detail}")
+            def day_step(detail: str, _i: int = idx, _d: str = day) -> None:
+                progress(f"第 {_i}/{n_days} 天（{_d}）· {detail}")
 
-                day_shots, day_note, vision_used = self._run_day(
-                    request, history, user_text, day, context, per_day, cache, vision_used,
-                    on_step=day_step,
-                )
-            if day_shots is None:
-                # Staged JSON path — the original mode, and the fall back when a
-                # day's agent loop doesn't converge within the round cap.
-                if self._mode == "agent":
-                    progress(f"第 {idx}/{n_days} 天（{day}）· 改用快速生成…")
-                day_shots, day_note = self._staged_day(
-                    request, history, user_text, day, context, per_day,
-                )
-            if day_shots is None:
-                logger.warning(
-                    "cutplan: date %s produced no valid shots (%d clips)",
-                    day, len(groups[day]),
-                )
-                failed.append(day)
+            def on_fallback(_i: int = idx, _d: str = day) -> None:
+                progress(f"第 {_i}/{n_days} 天（{_d}）· 改用快速生成…")
+
+            day_shots, day_note, vision_used = self._gen_one_day(
+                request, history, user_text, day, context, per_day, cache, vision_used,
+                on_step=day_step, on_fallback=on_fallback,
+            )
+            day_dicts = self._normalize_day(day_shots, day)
+            if not day_dicts:
+                # No fresh shots this turn. Keep the prior version of the day if we
+                # have one — refine must not drop unrelated dates; only report a
+                # date as "skipped" when there was nothing to fall back on.
+                if day not in merged:
+                    logger.warning(
+                        "cutplan: date %s produced no valid shots (%d clips)",
+                        day, len(groups[day]),
+                    )
+                    failed.append(day)
                 continue
-            for item in day_shots:
-                if isinstance(item, dict):
-                    item["chapter"] = day  # force the chapter to the shooting date
-                    all_shots.append(item)
+            merged[day] = day_dicts  # success → overwrite just this day
             if day_note:
                 notes.append(day_note)
             # Surface completed dates immediately: emit the cumulative plan so the
             # UI can render finished days while the remaining ones generate.
-            progress(f"第 {idx}/{n_days} 天（{day}）完成 · 已选 {len(all_shots)} 个镜头")
-            if all_shots:
-                partial(self._build_plan(
-                    {"shots": all_shots, "note": " ".join(notes)}, request, cache,
-                ))
+            total_shots = sum(len(v) for v in merged.values())
+            progress(f"第 {idx}/{n_days} 天（{day}）完成 · 已选 {total_shots} 个镜头")
+            partial(self._build_plan(
+                {"shots": self._flatten(merged), "note": " ".join(notes)}, request, cache,
+            ))
 
-        if not all_shots:
+        if not self._flatten(merged):
             return CutDirectorResult(
                 "生成分镜表失败（模型未返回有效结果），请重试或把需求说得更具体。", None,
             )
 
-        plan = self._build_plan({"shots": all_shots, "note": " ".join(notes)}, request, cache)
+        # Part B (task 28): an optional one-round critic over the assembled plan,
+        # re-doing the dates it flags through the same per-day merge mechanism.
+        if self._critic_enabled:
+            vision_used = self._apply_critic(
+                request, history, user_text, merged, groups, per_day, cache,
+                vision_used, notes, progress, partial,
+            )
+
+        plan = self._build_plan(
+            {"shots": self._flatten(merged), "note": " ".join(notes)}, request, cache,
+        )
         if not plan.shots:
             return CutDirectorResult("模型没有选出可用片段，请重试或调整需求。", None)
         text = "已生成初剪分镜表。"
         if failed:
             text += f"（{('、').join(failed)} 这些日期未能生成，已跳过。）"
         return CutDirectorResult(text, plan)
+
+    # ── per-day generation + merge helpers (task 26/28) ──────────────
+
+    def _gen_one_day(
+        self,
+        request: RoughCutRequest,
+        history: list[ChatMessage],
+        user_text: str,
+        day: str,
+        context: str,
+        per_day: tuple[float, float] | None,
+        cache: dict[int, ClipDetail],
+        vision_used: int,
+        *,
+        on_step: Callable[[str], None] | None = None,
+        on_fallback: Callable[[], None] | None = None,
+    ) -> tuple[list[dict[str, Any]] | None, str, int]:
+        """Generate one day's shots → (shots, note, vision_used).
+
+        In agent mode runs the scoped tool loop (:meth:`_run_day`) and falls back
+        to one structured-JSON call (:meth:`_staged_day`) when it doesn't
+        converge; *on_fallback* fires when that fall back happens.
+        """
+        day_shots: list[dict[str, Any]] | None = None
+        day_note = ""
+        if self._mode == "agent":
+            day_shots, day_note, vision_used = self._run_day(
+                request, history, user_text, day, context, per_day, cache, vision_used,
+                on_step=on_step,
+            )
+        if day_shots is None:
+            if self._mode == "agent" and on_fallback is not None:
+                on_fallback()
+            day_shots, day_note = self._staged_day(
+                request, history, user_text, day, context, per_day,
+            )
+        return day_shots, day_note, vision_used
+
+    @staticmethod
+    def _normalize_day(
+        day_shots: list[dict[str, Any]] | None, day: str,
+    ) -> list[dict[str, Any]]:
+        """Keep the dict shots for *day*, forcing chapter to the shooting date."""
+        out: list[dict[str, Any]] = []
+        for item in day_shots or []:
+            if isinstance(item, dict):
+                item["chapter"] = day
+                out.append(item)
+        return out
+
+    @staticmethod
+    def _flatten(merged: dict[str, list[dict[str, Any]]]) -> list[dict[str, Any]]:
+        """Concatenate per-date shot dicts in shooting-date order."""
+        out: list[dict[str, Any]] = []
+        for day in sorted(merged):
+            out.extend(merged[day])
+        return out
+
+    @staticmethod
+    def _shot_to_dict(shot: Shot) -> dict[str, Any]:
+        """Turn a stored Shot back into the dict shape :meth:`_build_plan` reads."""
+        return {
+            "clip_id": shot.clip_id,
+            "roll": shot.roll,
+            "in_s": shot.in_s,
+            "out_s": shot.out_s,
+            "content": shot.content,
+            "rationale": shot.rationale,
+            "chapter": shot.chapter,
+        }
+
+    # ── critic pass (task 28 Part B) ─────────────────────────────────
+
+    def _apply_critic(
+        self,
+        request: RoughCutRequest,
+        history: list[ChatMessage],
+        user_text: str,
+        merged: dict[str, list[dict[str, Any]]],
+        groups: dict[str, list[Any]],
+        per_day: tuple[float, float] | None,
+        cache: dict[int, ClipDetail],
+        vision_used: int,
+        notes: list[str],
+        progress: Callable[[str], None],
+        partial: Callable[[CutPlan], None],
+    ) -> int:
+        """One critic round: re-do the dates it flags, merged in place.
+
+        Best-effort — a missing / unparseable critic reply, or a date with no
+        footage, leaves the plan untouched. Returns the updated vision budget.
+        """
+        progress("正在审片…")
+        for rev in self._critique(merged):
+            day = str(rev.get("date") or "")
+            # Only act on dates we still have footage (and a chapter) for.
+            if day not in merged or day not in groups:
+                continue
+            progress(f"按审片意见重做 {day}…")
+            issue = str(rev.get("issue") or "")
+            action = str(rev.get("action") or "")
+            crit_text = f"{user_text}\n\n[审片意见] {day}：{issue} → {action}"
+            context = self._build_context(groups[day], cache)
+            day_shots, day_note, vision_used = self._gen_one_day(
+                request, history, crit_text, day, context, per_day, cache, vision_used,
+            )
+            day_dicts = self._normalize_day(day_shots, day)
+            if not day_dicts:
+                continue  # redo failed → keep the original day
+            merged[day] = day_dicts
+            if day_note:
+                notes.append(day_note)
+            partial(self._build_plan(
+                {"shots": self._flatten(merged), "note": " ".join(notes)}, request, cache,
+            ))
+        return vision_used
+
+    def _critique(
+        self, merged: dict[str, list[dict[str, Any]]],
+    ) -> list[dict[str, Any]]:
+        """Ask the text model to flag subjective issues by shooting date."""
+        from ..adapters._jsonparse import parse_json_object
+
+        messages = [
+            {"role": "system", "content": CRITIC_SYSTEM_PROMPT},
+            {"role": "user", "content": self._plan_digest(merged)},
+        ]
+        raw = self._llm.complete(messages)
+        data = parse_json_object(raw) if raw else None
+        if not isinstance(data, dict):
+            return []
+        revisions = data.get("revisions")
+        if not isinstance(revisions, list):
+            return []
+        return [r for r in revisions if isinstance(r, dict) and r.get("date")]
+
+    @staticmethod
+    def _plan_digest(merged: dict[str, list[dict[str, Any]]]) -> str:
+        """Compact per-date shot summary the critic reviews (no timecodes math)."""
+        lines = ["以下是已拼好的初剪分镜表（按拍摄日期分章）："]
+        for day in sorted(merged):
+            lines.append(f"【{day}】")
+            for i, s in enumerate(merged[day], 1):
+                dur = _as_float(s.get("out_s"), 0.0) - _as_float(s.get("in_s"), 0.0)
+                roll = str(s.get("roll") or "")
+                content = str(s.get("content") or "").replace("\n", " ")[:40]
+                lines.append(f"  {i}. {roll}-roll {dur:.0f}s {content}")
+        lines.append(
+            "\n请审阅主观质量（节奏松紧、叙事是否连贯、A-roll 主线与 B-roll 空镜配比、"
+            "空镜是否缺位），只输出 JSON："
+            '{"revisions": [{"date": "YYYY-MM-DD", "issue": "问题", "action": "可执行的修改建议"}]}。'
+            "整体良好则 revisions 用空数组。"
+        )
+        return "\n".join(lines)
 
     def _day_messages(
         self,

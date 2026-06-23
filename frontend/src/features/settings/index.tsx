@@ -162,11 +162,13 @@ export function SettingsPage({ onSave }: SettingsPageProps) {
       setLibraryPath(lib.library_path)
       if (lib.library_path) {
         const data = await api.getSettings()
+        // Machine-global keys (OMLX endpoint/key, model names) are merged into
+        // the one prefs view now — there is no separate "env" grouping.
         setPrefs(data.prefs)
-        setTextModelGlobal(data.env.TEXT_MODEL || '')
-        setVisionModelGlobal(data.env.VISION_MODEL || '')
-        setOmlxBaseUrl(data.env.OMLX_BASE_URL || '')
-        setApiKeyConfigured(Boolean(data.env.OMLX_API_KEY))
+        setTextModelGlobal(data.prefs.TEXT_MODEL || '')
+        setVisionModelGlobal(data.prefs.VISION_MODEL || '')
+        setOmlxBaseUrl(data.prefs.OMLX_BASE_URL || '')
+        setApiKeyConfigured(Boolean(data.prefs.OMLX_API_KEY))
         setApiKeyInput('')
       }
     } catch (err: unknown) {
@@ -642,14 +644,8 @@ export function SettingsPage({ onSave }: SettingsPageProps) {
               </label>
               <p className="mb-1 mt-1 text-xs text-[--text-muted]">{t('settings.keyframeAutoDesc')}</p>
 
-              {/* Rough-cut director: live B-roll vision budget per generation */}
-              <label className="mt-4 block text-sm text-[--text-secondary]">{t('settings.cutVisionBudget')}</label>
-              <p className="mb-1 text-xs text-[--text-muted]">{t('settings.cutVisionBudgetDesc')}</p>
-              <input
-                type="number" min={0} step={1} value={prefs.cut_vision_budget ?? 6}
-                onChange={(e) => updateField('cut_vision_budget', parseInt(e.target.value, 10))}
-                className="w-full rounded-md border border-[--border] bg-[--surface-2] px-3 py-1.5 text-sm outline-none focus:border-[--primary]"
-              />
+              {/* Rough-cut generation knobs (critic review, vision budget) live
+                  on the 初剪 page's "初剪设置" modal, not here — they're per-cut. */}
 
               {/* Field errors */}
               {fieldErrors.map((err) => (
