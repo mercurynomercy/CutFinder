@@ -73,10 +73,10 @@
 
 ## 验收
 
-- [ ] 单测：worker 工具循环收口、worker 不收口→纯 JSON 兜底、mode 开关选路 全绿（`make test`）。
-- [ ] 真机 eval：对真实 OMLX（Qwen3.6）跑一段多日素材，确认每天能触发 `get_clip_detail`/按需 `inspect_broll`，
+- [x] 单测：worker 工具循环收口、worker 不收口→纯 JSON 兜底、mode 开关选路 全绿（`make test`）。
+- [x] 真机 eval：对真实 OMLX（Qwen3.6）跑一段多日素材，确认每天能触发 `get_clip_detail`/按需 `inspect_broll`，
       产出的分镜比纯 staged 更贴合（主观对比），且无某天因不收口而整体失败。
-- [ ] mypy / ruff 干净。
+- [x] mypy / ruff 干净。
 
 ## 风险与备注
 

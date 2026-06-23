@@ -193,6 +193,7 @@ class CutDirector:
         progress = on_progress or (lambda _s: None)
         partial = on_partial or (lambda _p: None)
 
+        progress("正在检索素材…")
         clips = self._retriever.search_footage(
             date_from=request.date_from, date_to=request.date_to,
         )
@@ -211,6 +212,7 @@ class CutDirector:
         for day_clips in groups.values():
             day_clips.sort(key=lambda b: (getattr(b, "capture_time", None) or ""))
         dates = sorted(groups)
+        progress(f"找到 {len(clips)} 个片段、共 {len(dates)} 天，开始生成…")
 
         cache: dict[int, ClipDetail] = {}
         per_day = self._per_day_target(request, len(dates))
@@ -221,7 +223,7 @@ class CutDirector:
         failed: list[str] = []
         n_days = len(dates)
         for idx, day in enumerate(dates, 1):
-            progress(f"正在生成第 {idx}/{n_days} 天（{day}）…")
+            progress(f"正在生成第 {idx}/{n_days} 天（{day}）· 本天 {len(groups[day])} 个片段")
             context = self._build_context(groups[day], cache)
 
             day_shots: list[dict[str, Any]] | None = None
@@ -240,6 +242,8 @@ class CutDirector:
             if day_shots is None:
                 # Staged JSON path — the original mode, and the fall back when a
                 # day's agent loop doesn't converge within the round cap.
+                if self._mode == "agent":
+                    progress(f"第 {idx}/{n_days} 天（{day}）· 改用快速生成…")
                 day_shots, day_note = self._staged_day(
                     request, history, user_text, day, context, per_day,
                 )
@@ -370,6 +374,12 @@ class CutDirector:
                 ],
             })
 
+            # Surface the model's own reasoning between tool calls ("what it's
+            # thinking"), trimmed — only when it actually wrote something.
+            reasoning = (step.content or "").strip().replace("\n", " ")
+            if reasoning:
+                step_cb(f"导演思路：{reasoning[:50]}")
+
             emitted: list[dict[str, Any]] | None = None
             note = ""
             for tc in step.tool_calls:
@@ -391,12 +401,12 @@ class CutDirector:
                     continue
                 seen.add(key)
                 if tc.name == "get_clip_detail":
-                    step_cb(f"查看片段 #{_as_int(tc.arguments.get('clip_id'))} 台词")
+                    step_cb(f"查看片段 {self._label(_as_int(tc.arguments.get('clip_id')), cache)} 的台词")
                     self._append_tool_result(
                         messages, tc.id, self._do_detail(tc.arguments, cache),
                     )
                 elif tc.name == "inspect_broll":
-                    step_cb(f"查看片段 #{_as_int(tc.arguments.get('clip_id'))} 画面")
+                    step_cb(f"查看片段 {self._label(_as_int(tc.arguments.get('clip_id')), cache)} 的画面")
                     text, vision_used = self._do_inspect(tc.arguments, vision_used)
                     self._append_tool_result(messages, tc.id, text)
                 else:
@@ -656,6 +666,12 @@ class CutDirector:
                 return None
             cache[cid] = detail
         return cache[cid]
+
+    def _label(self, cid: int | None, cache: dict[int, ClipDetail]) -> str:
+        """Human-friendly clip label (file name) for progress text; falls back to #id."""
+        if cid is None:
+            return "#?"
+        return _clip_label(self._fetch_detail(cid, cache)) or f"#{cid}"
 
     # ── plan building (deterministic) ────────────────────────────
 

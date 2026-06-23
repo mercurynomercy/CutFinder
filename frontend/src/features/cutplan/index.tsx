@@ -62,7 +62,10 @@ export function CutplanPage({ onClose }: CutplanPageProps) {
   const [plan, setPlan] = useState<CutPlan | null>(null)
   const [input, setInput] = useState('')
   const [busy, setBusy] = useState(false)
-  const [progress, setProgress] = useState('') // live director status while running
+  // Rolling trajectory of the director's recent steps (so the user can see what
+  // it's thinking through, not just the latest line). Polling only gets the
+  // latest string each tick; we append distinct ones to build the history.
+  const [progressLog, setProgressLog] = useState<string[]>([])
   const [copied, setCopied] = useState(false)
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null)
   const [listCollapsed, setListCollapsed] = useState(false)
@@ -78,6 +81,11 @@ export function CutplanPage({ onClose }: CutplanPageProps) {
   // switches away mid-poll. Set explicitly (not on render) so async guards see
   // the new value immediately.
   const activeRef = useRef<number | null>(null)
+
+  // Append a new step to the trajectory, skipping blanks and adjacent repeats.
+  const pushProgress = (p: string) =>
+    setProgressLog((prev) => (!p || prev[prev.length - 1] === p ? prev : [...prev, p]))
+  const lastProgress = progressLog[progressLog.length - 1] ?? ''
 
   const persistActive = (id: number | null) => {
     try {
@@ -109,11 +117,11 @@ export function CutplanPage({ onClose }: CutplanPageProps) {
         const detail = await api.getCutSession(id)
         if (activeRef.current !== id) return
         if (detail.plan) setPlan(detail.plan)          // show completed dates early
-        setProgress(detail.session.progress ?? '')      // live "正在查看…" status
+        pushProgress(detail.session.progress ?? '')     // live "正在查看…" trajectory
         if (detail.session.status !== 'running') {
           setMessages(detail.messages)
           setPlan(detail.plan)
-          setProgress('')
+          setProgressLog([])
           setBusy(false)
           return
         }
@@ -124,7 +132,7 @@ export function CutplanPage({ onClose }: CutplanPageProps) {
     }
     if (activeRef.current === id) {
       setBusy(false)
-      setProgress('')
+      setProgressLog([])
     }
   }
 
@@ -137,14 +145,14 @@ export function CutplanPage({ onClose }: CutplanPageProps) {
     setPlan(null)
     setMessages([])
     setBusy(false)
-    setProgress('')
+    setProgressLog([])
     try {
       const detail = await api.getCutSession(id)
       if (activeRef.current !== id) return
       setMessages(detail.messages)
       setPlan(detail.plan)
       if (detail.session.status === 'running') {
-        setProgress(detail.session.progress ?? '')
+        pushProgress(detail.session.progress ?? '')
         setBusy(true)
         void resumePoll(id)
       }
@@ -202,7 +210,7 @@ export function CutplanPage({ onClose }: CutplanPageProps) {
     setMessages((prev) => [...prev, { role: 'user', content: text, created_at: null }])
     setInput('')
     setBusy(true)
-    setProgress('')
+    setProgressLog([])
     try {
       // The route marks the session 'running' synchronously, so we can poll the
       // session directly — resumePoll live-updates the partial plan + progress
@@ -214,7 +222,7 @@ export function CutplanPage({ onClose }: CutplanPageProps) {
       console.error('Rough-cut turn failed:', err)
     } finally {
       setBusy(false)
-      setProgress('')
+      setProgressLog([])
     }
   }
 
@@ -381,9 +389,23 @@ export function CutplanPage({ onClose }: CutplanPageProps) {
             )}
             {busy && (
               <div className="text-left">
-                <div className="inline-flex items-center gap-2 rounded-lg bg-[--surface-2] px-3 py-2 text-sm text-[--text-secondary]">
-                  <ThinkingDots />
-                  <span>{progress || t('roughcut.thinking')}</span>
+                <div className="inline-flex max-w-[90%] flex-col gap-1 rounded-lg bg-[--surface-2] px-3 py-2 text-sm text-[--text-secondary]">
+                  {progressLog.length === 0 ? (
+                    <div className="inline-flex items-center gap-2">
+                      <ThinkingDots />
+                      <span>{t('roughcut.thinking')}</span>
+                    </div>
+                  ) : (
+                    progressLog.slice(-5).map((p, i, arr) => (
+                      <div
+                        key={`${i}-${p}`}
+                        className={`inline-flex items-center gap-2 ${i < arr.length - 1 ? 'text-xs text-[--text-muted]' : ''}`}
+                      >
+                        {i === arr.length - 1 ? <ThinkingDots /> : <span aria-hidden="true">·</span>}
+                        <span>{p}</span>
+                      </div>
+                    ))
+                  )}
                 </div>
               </div>
             )}
@@ -459,7 +481,7 @@ export function CutplanPage({ onClose }: CutplanPageProps) {
                 {busy && (
                   <div className="mb-3 flex items-center gap-2 rounded-md bg-[--surface-2] px-3 py-2 text-xs text-[--text-secondary]">
                     <ThinkingDots />
-                    <span>{progress || t('roughcut.partialGenerating')}</span>
+                    <span>{lastProgress || t('roughcut.partialGenerating')}</span>
                   </div>
                 )}
                 <ShotList plan={plan} />
