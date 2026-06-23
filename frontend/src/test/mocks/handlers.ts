@@ -236,9 +236,18 @@ export const handlers = [
     return HttpResponse.json({ path: '/Users/jan/Movies/Vlog' })
   }),
 
-  // GET /api/settings — get current settings
+  // GET /api/settings — get current settings. Model names are machine-global,
+  // so the backend returns them under `env` (TEXT_MODEL/VISION_MODEL), which is
+  // where the settings form reads them from — mirror that here.
   http.get('http://localhost:5080/api/settings', () => {
-    return HttpResponse.json({ env: {}, prefs: makeSettingsPrefs() })
+    return HttpResponse.json({
+      env: {
+        OMLX_BASE_URL: 'http://localhost:8000/v1',
+        TEXT_MODEL: 'Qwen3.6-35B-A3B',
+        VISION_MODEL: 'Qwen3-VL-8B',
+      },
+      prefs: makeSettingsPrefs(),
+    })
   }),
 
   // PUT /api/settings — update settings
