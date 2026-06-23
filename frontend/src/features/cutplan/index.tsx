@@ -77,6 +77,8 @@ export function CutplanPage({ onClose }: CutplanPageProps) {
   const [promptSaved, setPromptSaved] = useState(false)
   // Per-generation knobs, edited in the same "初剪设置" modal and persisted as
   // machine-global prefs (PUT /settings rebuilds the director so they take effect).
+  const [directorMode, setDirectorMode] = useState<'agent' | 'staged'>('agent')
+  const [maxToolRounds, setMaxToolRounds] = useState(24)
   const [criticEnabled, setCriticEnabled] = useState(false)
   const [visionBudget, setVisionBudget] = useState(6)
 
@@ -261,6 +263,8 @@ export function CutplanPage({ onClose }: CutplanPageProps) {
     // the toggles reflect what's actually in effect.
     try {
       const data = await api.getSettings()
+      setDirectorMode(data.prefs.cut_director_mode ?? 'agent')
+      setMaxToolRounds(data.prefs.cut_max_tool_rounds ?? 24)
       setCriticEnabled(data.prefs.cut_critic_enabled ?? false)
       setVisionBudget(data.prefs.cut_vision_budget ?? 6)
     } catch {
@@ -274,7 +278,12 @@ export function CutplanPage({ onClose }: CutplanPageProps) {
       setPromptText(r.prompt)
       setPromptIsDefault(r.is_default)
       // Persist the generation options too (a partial PUT — only these keys).
-      await api.putSettings({ cut_critic_enabled: criticEnabled, cut_vision_budget: visionBudget })
+      await api.putSettings({
+        cut_director_mode: directorMode,
+        cut_max_tool_rounds: maxToolRounds,
+        cut_critic_enabled: criticEnabled,
+        cut_vision_budget: visionBudget,
+      })
       setPromptSaved(true)
       setTimeout(() => setPromptSaved(false), 1500)
     } catch (err) {
@@ -547,7 +556,36 @@ export function CutplanPage({ onClose }: CutplanPageProps) {
             <div className="min-h-0 flex-1 overflow-y-auto p-5">
               {/* ── Generation options ─────────────────────── */}
               <p className="mb-3 text-xs font-medium text-[--text-secondary]">{t('roughcut.genOptions')}</p>
-              <label className="flex items-center gap-2 text-sm text-[--text-primary]">
+
+              <label className="block text-sm text-[--text-secondary]">{t('roughcut.directorMode')}</label>
+              <select
+                value={directorMode}
+                onChange={(e) => setDirectorMode(e.target.value as 'agent' | 'staged')}
+                aria-label={t('roughcut.directorMode')}
+                className="mt-1 w-full max-w-xs rounded-md border border-[--border] bg-[--surface-2] px-3 py-1.5 text-sm outline-none focus:border-[--primary]"
+              >
+                <option value="agent">{t('roughcut.modeAgent')}</option>
+                <option value="staged">{t('roughcut.modeStaged')}</option>
+              </select>
+              <p className="mt-1 text-xs text-[--text-muted]">{t('roughcut.directorModeDesc')}</p>
+
+              {directorMode === 'agent' && (
+                <>
+                  <label className="mt-3 block text-sm text-[--text-secondary]">{t('roughcut.maxRounds')}</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={200}
+                    step={1}
+                    value={maxToolRounds}
+                    onChange={(e) => setMaxToolRounds(parseInt(e.target.value, 10) || 1)}
+                    className="mt-1 w-28 rounded-md border border-[--border] bg-[--surface-2] px-3 py-1.5 text-sm outline-none focus:border-[--primary]"
+                  />
+                  <p className="mt-1 text-xs text-[--text-muted]">{t('roughcut.maxRoundsDesc')}</p>
+                </>
+              )}
+
+              <label className="mt-3 flex items-center gap-2 text-sm text-[--text-primary]">
                 <input
                   type="checkbox"
                   checked={criticEnabled}

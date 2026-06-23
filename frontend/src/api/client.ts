@@ -116,6 +116,7 @@ export interface SettingsPrefs {
   output_language: 'zh' | 'en'
   keyframe_count: number
   keyframe_auto: boolean
+  cut_director_mode?: 'agent' | 'staged'
   cut_max_tool_rounds: number
   cut_vision_budget: number
   cut_default_aspect_ratio: string
@@ -167,6 +168,7 @@ export interface UpdateSettingsBody {
   output_language?: 'zh' | 'en'
   keyframe_count?: number
   keyframe_auto?: boolean
+  cut_director_mode?: 'agent' | 'staged'
   cut_max_tool_rounds?: number
   cut_vision_budget?: number
   cut_default_aspect_ratio?: string

@@ -70,6 +70,7 @@ function makeSettingsPrefs(overrides: Partial<SettingsPrefs> = {}): SettingsPref
     output_language: overrides.output_language ?? 'zh',
     keyframe_count: overrides.keyframe_count ?? 3,
     keyframe_auto: overrides.keyframe_auto ?? false,
+    cut_director_mode: overrides.cut_director_mode ?? 'agent',
     cut_max_tool_rounds: overrides.cut_max_tool_rounds ?? 24,
     cut_vision_budget: overrides.cut_vision_budget ?? 6,
     cut_default_aspect_ratio: overrides.cut_default_aspect_ratio ?? '16:9',

@@ -173,6 +173,9 @@ describe('CutplanPage', () => {
     await waitFor(() => expect(putBody).not.toBeNull())
     expect(putBody!.cut_critic_enabled).toBe(true)
     expect(putBody!.cut_vision_budget).toBe(6)
+    // Director mode + max tool rounds round-trip through the same modal.
+    expect(putBody!.cut_director_mode).toBe('agent')
+    expect(putBody!.cut_max_tool_rounds).toBe(24)
   })
 
   it('deletes a conversation', async () => {
