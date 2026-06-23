@@ -436,6 +436,64 @@ def test_generate_bad_json_returns_retry_message() -> None:
     assert "重试" in result.assistant_text or "失败" in result.assistant_text
 
 
+# ── prose recovery + lean agent context (busy-day fix) ──────────
+
+def test_run_day_nudges_once_on_prose_then_emits() -> None:
+    # First reply is prose (no tool call) → nudged, NOT bailed; second emits.
+    llm = FakeAgentLLM([
+        AgentStep(content="我先看看这天的素材"),  # no tool_calls
+        AgentStep(tool_calls=[_tc("emit_plan", {"shots": [
+            {"clip_id": 1, "roll": "a", "in_s": 0, "out_s": 12},
+        ]})]),
+    ])
+    briefs = [ClipBrief(clip_id=1, roll="a", has_transcript=True, capture_time="2026-04-25T09:00:00")]
+    director = CutDirector(llm, FakeRetriever(briefs, _details()))
+    result = director.generate(RoughCutRequest(date_from="2026-04-25"), [], "剪一条")
+    assert result.plan is not None
+    assert result.plan.total_s == 12.0
+    assert llm.run_calls == 2          # one prose + one retry after the nudge
+    assert llm.complete_calls == 0     # converged via tools, no staged fall back
+
+
+def test_run_day_salvages_prose_embedded_plan() -> None:
+    # Model "answers directly" with plan JSON in prose (no emit_plan call) → taken.
+    llm = FakeAgentLLM([
+        AgentStep(content='{"shots": [{"clip_id": 1, "roll": "a", "in_s": 0, "out_s": 12}]}'),
+    ])
+    briefs = [ClipBrief(clip_id=1, roll="a", has_transcript=True, capture_time="2026-04-25T09:00:00")]
+    director = CutDirector(llm, FakeRetriever(briefs, _details()))
+    result = director.generate(RoughCutRequest(date_from="2026-04-25"), [], "剪一条")
+    assert result.plan is not None
+    assert result.plan.total_s == 12.0
+    assert llm.run_calls == 1          # accepted the very first prose reply
+    assert llm.complete_calls == 0     # no fall back
+
+
+def test_run_day_falls_back_after_repeated_prose() -> None:
+    # Prose, nudge, prose again → give up the agent loop and use staged JSON.
+    raw = '{"shots": [{"clip_id": 1, "roll": "a", "in_s": 0, "out_s": 12}]}'
+    llm = FakeAgentLLM([AgentStep(content="嗯"), AgentStep(content="还在想")], raw=raw)
+    briefs = [ClipBrief(clip_id=1, roll="a", has_transcript=True, capture_time="2026-04-25T09:00:00")]
+    director = CutDirector(llm, FakeRetriever(briefs, _details()))
+    result = director.generate(RoughCutRequest(date_from="2026-04-25"), [], "剪一条")
+    assert llm.run_calls == 2          # prose + one nudge-retry, then bail
+    assert llm.complete_calls == 1     # fell back to staged
+    assert result.plan is not None
+
+
+def test_agent_context_is_lean_staged_is_full() -> None:
+    # Agent context omits inlined transcripts (fetched via get_clip_detail) but
+    # marks A-roll with [有台词]; the staged context inlines the segment text.
+    cache: dict[int, ClipDetail] = {}
+    clips = [ClipBrief(clip_id=1, roll="a", has_transcript=True, capture_time="2026-04-25T09:00:00")]
+    director = CutDirector(FakeAgentLLM([]), FakeRetriever(clips, _details()))
+    lean = director._build_context(clips, cache, include_transcripts=False)
+    full = director._build_context(clips, cache, include_transcripts=True)
+    assert "[有台词]" in lean
+    assert "开场白" not in lean   # transcript text not dumped into the agent prompt
+    assert "开场白" in full       # inlined for the toolless staged path
+
+
 # ── refine merge by date (task 28 Part A) ───────────────────────
 
 def _prior_plan() -> Any:

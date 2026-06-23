@@ -248,7 +248,6 @@ class CutDirector:
         n_days = len(dates)
         for idx, day in enumerate(dates, 1):
             progress(f"正在生成第 {idx}/{n_days} 天（{day}）· 本天 {len(groups[day])} 个片段")
-            context = self._build_context(groups[day], cache)
 
             def day_step(detail: str, _i: int = idx, _d: str = day) -> None:
                 progress(f"第 {_i}/{n_days} 天（{_d}）· {detail}")
@@ -257,7 +256,7 @@ class CutDirector:
                 progress(f"第 {_i}/{n_days} 天（{_d}）· 改用快速生成…")
 
             day_shots, day_note, vision_used = self._gen_one_day(
-                request, history, user_text, day, context, per_day, cache, vision_used,
+                request, history, user_text, day, groups[day], per_day, cache, vision_used,
                 on_step=day_step, on_fallback=on_fallback,
             )
             day_dicts = self._normalize_day(day_shots, day)
@@ -314,7 +313,7 @@ class CutDirector:
         history: list[ChatMessage],
         user_text: str,
         day: str,
-        context: str,
+        clips: list[Any],
         per_day: tuple[float, float] | None,
         cache: dict[int, ClipDetail],
         vision_used: int,
@@ -324,22 +323,25 @@ class CutDirector:
     ) -> tuple[list[dict[str, Any]] | None, str, int]:
         """Generate one day's shots → (shots, note, vision_used).
 
-        In agent mode runs the scoped tool loop (:meth:`_run_day`) and falls back
-        to one structured-JSON call (:meth:`_staged_day`) when it doesn't
-        converge; *on_fallback* fires when that fall back happens.
+        In agent mode runs the scoped tool loop (:meth:`_run_day`) over a **lean**
+        catalog (no inlined transcripts — the agent fetches台词 via the tool) and
+        falls back to one structured-JSON call (:meth:`_staged_day`) over the
+        **full** catalog when it doesn't converge; *on_fallback* fires on fall back.
         """
         day_shots: list[dict[str, Any]] | None = None
         day_note = ""
         if self._mode == "agent":
+            lean = self._build_context(clips, cache, include_transcripts=False)
             day_shots, day_note, vision_used = self._run_day(
-                request, history, user_text, day, context, per_day, cache, vision_used,
+                request, history, user_text, day, lean, per_day, cache, vision_used,
                 on_step=on_step,
             )
         if day_shots is None:
             if self._mode == "agent" and on_fallback is not None:
                 on_fallback()
+            full = self._build_context(clips, cache, include_transcripts=True)
             day_shots, day_note = self._staged_day(
-                request, history, user_text, day, context, per_day,
+                request, history, user_text, day, full, per_day,
             )
         return day_shots, day_note, vision_used
 
@@ -354,6 +356,21 @@ class CutDirector:
                 item["chapter"] = day
                 out.append(item)
         return out
+
+    @staticmethod
+    def _salvage_plan(content: str | None) -> list[dict[str, Any]] | None:
+        """Recover a shot list from a prose reply that embeds plan JSON, else None.
+
+        Lets the agent loop accept a day when the model "answered directly" with
+        a ``{"shots": [...]}`` body instead of wrapping it in an emit_plan call.
+        """
+        from ..adapters._jsonparse import parse_json_object
+
+        data = parse_json_object(content) if content else None
+        if not isinstance(data, dict) or not isinstance(data.get("shots"), list):
+            return None
+        shots = [s for s in data["shots"] if isinstance(s, dict)]
+        return shots or None
 
     @staticmethod
     def _flatten(merged: dict[str, list[dict[str, Any]]]) -> list[dict[str, Any]]:
@@ -407,9 +424,8 @@ class CutDirector:
             issue = str(rev.get("issue") or "")
             action = str(rev.get("action") or "")
             crit_text = f"{user_text}\n\n[审片意见] {day}：{issue} → {action}"
-            context = self._build_context(groups[day], cache)
             day_shots, day_note, vision_used = self._gen_one_day(
-                request, history, crit_text, day, context, per_day, cache, vision_used,
+                request, history, crit_text, day, groups[day], per_day, cache, vision_used,
             )
             day_dicts = self._normalize_day(day_shots, day)
             if not day_dicts:
@@ -533,12 +549,32 @@ class CutDirector:
             request, history, user_text, day, context, per_day, agent=True,
         )
         nudged = False
+        prose_nudged = False  # whether we've already pushed back on a prose reply
         seen: set[tuple[str, str]] = set()  # (tool, args) already executed this day
         for round_i in range(self._max_tool_rounds):
             step = self._llm.run(messages, DAY_TOOLS)
             if not step.tool_calls:
-                # Prose with no tool call → didn't commit; let the caller fall back.
-                return None, "", vision_used
+                # Model replied in prose instead of calling a tool. Don't bail on
+                # the first one (that's why busy days never used tools): (1) if
+                # the prose already carries a usable shot list — the model just
+                # "answered directly" — take it; (2) otherwise nudge it once to
+                # use the tools and retry; only then fall back to staged.
+                salvaged = self._salvage_plan(step.content)
+                if salvaged is not None:
+                    return salvaged, "", vision_used
+                if prose_nudged:
+                    return None, "", vision_used
+                prose_nudged = True
+                messages.append({"role": "assistant", "content": step.content})
+                messages.append({
+                    "role": "system",
+                    "content": (
+                        "不要用纯文字回复。请**用工具**推进：用 get_clip_detail(clip_id) "
+                        "查看标了 [有台词] 的 A-roll 片段台词，或直接调用 emit_plan 工具"
+                        "提交这一天的分镜表（shots 放在工具参数里）。"
+                    ),
+                })
+                continue
 
             messages.append({
                 "role": "assistant",
@@ -628,9 +664,11 @@ class CutDirector:
         )
         if agent:
             return head + (
-                "如有需要，可先用 get_clip_detail 深挖某条 A-roll 的完整台词分段，"
-                "或用 inspect_broll 现场查看某条 B-roll 的画面（尽量少用）；"
-                "掌握足够后调用 emit_plan 给出这一天的最终分镜表。"
+                "上面清单里 A-roll 只给了摘要，标 [有台词] 的片段**完整台词分段要用 "
+                "get_clip_detail(clip_id) 获取**，再据此把 in/out 落在 segment 边界上。"
+                "请**只通过工具推进**：用 get_clip_detail 读取你想用的 A-roll 台词、"
+                "必要时用 inspect_broll 现场看 B-roll 画面（尽量少用），"
+                "**最后必须调用 emit_plan 工具**给出这一天的最终分镜表，不要用纯文字回答。"
             )
         return head + (
             "请只输出 JSON，格式：\n"
@@ -640,8 +678,17 @@ class CutDirector:
 
     def _build_context(
         self, clips: list[Any], cache: dict[int, ClipDetail], char_budget: int = 12000,
+        *, include_transcripts: bool = True,
     ) -> str:
-        """Compact text catalog of candidate clips (A-roll incl. timed segments)."""
+        """Compact text catalog of candidate clips.
+
+        *include_transcripts* — when True (staged mode) each A-roll clip's timed
+        transcript segments are inlined, since the staged path has no tools to
+        fetch them. In **agent** mode it's False: the catalog stays lean (one
+        line per clip, plus an `[有台词]` marker) so all clips fit even on a busy
+        day, and the agent reads台词 on demand via ``get_clip_detail`` — a huge
+        truncated prompt was the reason it bailed to prose on big days.
+        """
         lines: list[str] = []
         used = 0
         for b in clips:
@@ -651,10 +698,11 @@ class CutDirector:
             # Full timestamp (date + time of day) so the model can order shots by
             # the real shooting timeline within a day.
             when = (b.capture_time or "").replace("T", " ")[:19] or "无拍摄时间"
-            head = f"[{b.clip_id}] {when} {b.roll}-roll dur={dur} {desc} tags={tags}"
+            mark = " [有台词]" if (b.roll == "a" and b.has_transcript) else ""
+            head = f"[{b.clip_id}] {when} {b.roll}-roll dur={dur}{mark} {desc} tags={tags}"
             lines.append(head)
             used += len(head)
-            if b.roll == "a" and b.has_transcript:
+            if include_transcripts and b.roll == "a" and b.has_transcript:
                 detail = self._fetch_detail(b.clip_id, cache)
                 if detail is not None:
                     for s in detail.segments[:60]:
