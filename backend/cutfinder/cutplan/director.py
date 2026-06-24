@@ -256,8 +256,9 @@ class CutDirector:
             def day_step(detail: str, _i: int = idx, _d: str = day) -> None:
                 progress(f"第 {_i}/{n_days} 天（{_d}）· {detail}")
 
-            def on_fallback(_i: int = idx, _d: str = day) -> None:
-                progress(f"第 {_i}/{n_days} 天（{_d}）· 改用快速生成…")
+            def on_fallback(n: int = 0, _i: int = idx, _d: str = day) -> None:
+                extra = f"（带入 {n} 条已勘察画面）" if n else ""
+                progress(f"第 {_i}/{n_days} 天（{_d}）· 改用快速生成{extra}…")
 
             day_shots, day_note, vision_used = self._gen_one_day(
                 request, history, user_text, day, groups[day], per_day, cache, vision_used,
@@ -323,7 +324,7 @@ class CutDirector:
         vision_used: int,
         *,
         on_step: Callable[[str], None] | None = None,
-        on_fallback: Callable[[], None] | None = None,
+        on_fallback: Callable[[int], None] | None = None,
     ) -> tuple[list[dict[str, Any]] | None, str, int]:
         """Generate one day's shots → (shots, note, vision_used).
 
@@ -334,22 +335,25 @@ class CutDirector:
         """
         day_shots: list[dict[str, Any]] | None = None
         day_note = ""
+        findings: dict[int, str] = {}  # inspect_broll descriptions gathered by the agent
         if self._mode == "agent":
             lean = self._build_context(
                 clips, cache, self._lean_char_budget, include_transcripts=False,
             )
-            day_shots, day_note, vision_used = self._run_day(
+            day_shots, day_note, vision_used, findings = self._run_day(
                 request, history, user_text, day, lean, per_day, cache, vision_used,
                 on_step=on_step,
             )
         if day_shots is None:
             if self._mode == "agent" and on_fallback is not None:
-                on_fallback()
+                on_fallback(len(findings))
             full = self._build_context(
                 clips, cache, self._staged_char_budget, include_transcripts=True,
             )
+            # Reuse the agent's gathered B-roll vision findings so the spent
+            # vision budget isn't wasted when we fall back to staged.
             day_shots, day_note = self._staged_day(
-                request, history, user_text, day, full, per_day,
+                request, history, user_text, day, full, per_day, findings=findings,
             )
         return day_shots, day_note, vision_used
 
@@ -516,13 +520,29 @@ class CutDirector:
         day: str,
         context: str,
         per_day: tuple[float, float] | None,
+        findings: dict[int, str] | None = None,
     ) -> tuple[list[dict[str, Any]] | None, str]:
-        """One structured-JSON completion for a day → (shots, note) or (None, "")."""
+        """One structured-JSON completion for a day → (shots, note) or (None, "").
+
+        *findings* (clip_id → B-roll vision description) carries over the agent's
+        on-the-spot ``inspect_broll`` look-ups when this runs as a fallback, so
+        the staged model judges those B-roll clips from the fresh描述 rather than
+        only their stored tags.
+        """
         from ..adapters._jsonparse import parse_json_object
 
         messages = self._day_messages(
             request, history, user_text, day, context, per_day, agent=False,
         )
+        if findings:
+            block = "\n".join(f"[{cid}] {desc}" for cid, desc in findings.items())
+            messages.append({
+                "role": "system",
+                "content": (
+                    "导演已现场勘察过以下 B-roll 画面，请优先据此判断其用途（而非仅凭标签）：\n"
+                    + block
+                ),
+            })
         raw = self._llm.complete(messages)
         data = parse_json_object(raw) if raw else None
         if not isinstance(data, dict) or not isinstance(data.get("shots"), list):
@@ -542,17 +562,21 @@ class CutDirector:
         vision_used: int,
         *,
         on_step: Callable[[str], None] | None = None,
-    ) -> tuple[list[dict[str, Any]] | None, str, int]:
-        """Scoped tool loop for one day → (shots, note, vision_used).
+    ) -> tuple[list[dict[str, Any]] | None, str, int, dict[int, str]]:
+        """Scoped tool loop for one day → (shots, note, vision_used, findings).
 
-        Returns ``(None, "", vision_used)`` when the model doesn't converge to
-        emit_plan within the round cap (or replies in prose); the caller then
-        falls back to :meth:`_staged_day` for this day.
+        Returns shots ``None`` when the model doesn't converge to emit_plan
+        within the round cap (or replies in prose); the caller then falls back
+        to :meth:`_staged_day` for this day. *findings* maps clip_id → the
+        ``inspect_broll`` vision description the agent gathered (it cost vision
+        budget and isn't persisted), so a fallback can reuse that work instead
+        of discarding it.
 
         *on_step* (if given) receives a short status string each time the worker
         looks at a clip, so the UI can show what it is doing right now.
         """
         step_cb = on_step or (lambda _s: None)
+        findings: dict[int, str] = {}  # clip_id → inspect_broll description (for fallback reuse)
         messages = self._day_messages(
             request, history, user_text, day, context, per_day, agent=True,
         )
@@ -569,9 +593,9 @@ class CutDirector:
                 # use the tools and retry; only then fall back to staged.
                 salvaged = self._salvage_plan(step.content)
                 if salvaged is not None:
-                    return salvaged, "", vision_used
+                    return salvaged, "", vision_used, findings
                 if prose_nudged:
-                    return None, "", vision_used
+                    return None, "", vision_used, findings
                 prose_nudged = True
                 messages.append({"role": "assistant", "content": step.content})
                 messages.append({
@@ -630,13 +654,20 @@ class CutDirector:
                     )
                 elif tc.name == "inspect_broll":
                     step_cb(f"查看片段 {self._label(_as_int(tc.arguments.get('clip_id')), cache)} 的画面")
-                    text, vision_used = self._do_inspect(tc.arguments, vision_used)
+                    text, used = self._do_inspect(tc.arguments, vision_used)
+                    # vision_used only increments on a real look (not an error/
+                    # budget-exhausted string) — use that as the success signal to
+                    # record the description for a possible staged fallback.
+                    cid = _as_int(tc.arguments.get("clip_id"))
+                    if used > vision_used and cid is not None:
+                        findings[cid] = text
+                    vision_used = used
                     self._append_tool_result(messages, tc.id, text)
                 else:
                     self._append_tool_result(messages, tc.id, f"Unknown tool: {tc.name}")
 
             if emitted is not None:
-                return emitted, note, vision_used
+                return emitted, note, vision_used, findings
 
             # Past the halfway point without a plan → push the model to commit
             # (local tool-callers otherwise keep exploring until the round cap).
@@ -647,7 +678,7 @@ class CutDirector:
                     "content": "你已了解足够。现在**必须**调用 emit_plan 给出这一天的最终分镜表，不要再查看素材。",
                 })
 
-        return None, "", vision_used
+        return None, "", vision_used, findings
 
     @staticmethod
     def _per_day_target(

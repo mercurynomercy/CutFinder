@@ -688,6 +688,7 @@ export function CutplanPage({ onClose }: CutplanPageProps) {
 }
 
 function ShotList({ plan }: { plan: CutPlan }) {
+  const { t } = useI18n()
   const chapters = plan.chapters.length ? plan.chapters : ['']
   let index = 0
   return (
@@ -730,6 +731,8 @@ function ShotList({ plan }: { plan: CutPlan }) {
         {`总时长：${fmtDuration(plan.total_s)}`}
         {plan.target_min_s != null && plan.target_max_s != null &&
           `（目标 ${fmtDuration(plan.target_min_s)}–${fmtDuration(plan.target_max_s)} ${plan.within_target ? '✓' : '⚠️'}）`}
+        {plan.target_min_s != null && plan.target_max_s != null && !plan.within_target &&
+          ` ${t('roughcut.durationFootageHint')}`}
       </div>
     </div>
   )

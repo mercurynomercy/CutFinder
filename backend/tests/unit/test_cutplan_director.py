@@ -339,6 +339,7 @@ class FakeAgentLLM:
         self.raw = raw
         self.run_calls = 0
         self.complete_calls = 0
+        self.complete_msgs: list[list[dict[str, Any]]] = []
 
     def run(self, messages: list[dict[str, Any]], tools: list[dict[str, Any]]) -> AgentStep:
         self.run_calls += 1
@@ -347,6 +348,7 @@ class FakeAgentLLM:
 
     def complete(self, messages: list[dict[str, Any]]) -> str:
         self.complete_calls += 1
+        self.complete_msgs.append([dict(m) for m in messages])
         return self.raw
 
 
@@ -479,6 +481,52 @@ def test_run_day_falls_back_after_repeated_prose() -> None:
     assert llm.run_calls == 2          # prose + one nudge-retry, then bail
     assert llm.complete_calls == 1     # fell back to staged
     assert result.plan is not None
+
+
+def test_fallback_reuses_inspect_findings() -> None:
+    # Agent inspects a B-roll (spends vision budget) then can't converge (prose
+    # twice) → fallback. The gathered vision description must be carried into the
+    # staged prompt, and the fallback progress line reports how many were carried.
+    inspector = FakeInspector()
+    llm = FakeAgentLLM(
+        [
+            AgentStep(tool_calls=[_tc("inspect_broll", {"clip_id": 2})]),
+            AgentStep(content="嗯"),       # prose → nudge
+            AgentStep(content="还在想"),    # prose again → bail to staged
+        ],
+        raw='{"shots": [{"clip_id": 2, "roll": "b", "in_s": 0, "out_s": 6}]}',
+    )
+    briefs = [ClipBrief(clip_id=2, roll="b", capture_time="2026-04-25T09:00:00")]
+    director = CutDirector(llm, FakeRetriever(briefs, _details()), inspector, vision_budget=5)
+    progress_log: list[str] = []
+    result = director.generate(
+        RoughCutRequest(date_from="2026-04-25"), [], "剪一条",
+        on_progress=progress_log.append,
+    )
+
+    assert result.plan is not None
+    assert llm.complete_calls == 1          # fell back to staged
+    assert inspector.count == 1             # the one real look
+    staged_blob = "\n".join(str(m.get("content", "")) for m in llm.complete_msgs[0])
+    assert "导演已现场勘察" in staged_blob   # findings block injected
+    assert "clip 2 visuals" in staged_blob  # the actual description carried over
+    assert any("带入 1 条已勘察画面" in p for p in progress_log)
+
+
+def test_fallback_without_findings_injects_no_block() -> None:
+    # No inspect_broll before falling back → staged prompt is unchanged (no block).
+    llm = FakeAgentLLM(
+        [AgentStep(content="嗯"), AgentStep(content="还在想")],
+        raw='{"shots": [{"clip_id": 1, "roll": "a", "in_s": 0, "out_s": 12}]}',
+    )
+    briefs = [ClipBrief(clip_id=1, roll="a", has_transcript=True, capture_time="2026-04-25T09:00:00")]
+    director = CutDirector(llm, FakeRetriever(briefs, _details()))
+    result = director.generate(RoughCutRequest(date_from="2026-04-25"), [], "剪一条")
+
+    assert result.plan is not None
+    assert llm.complete_calls == 1
+    staged_blob = "\n".join(str(m.get("content", "")) for m in llm.complete_msgs[0])
+    assert "导演已现场勘察" not in staged_blob
 
 
 def test_agent_context_is_lean_staged_is_full() -> None:

@@ -1,6 +1,6 @@
 # 30 · 初剪 fallback 复用 agent 已勘察分析
 
-> **状态：planned（设计已确认，待执行）。** 单天 mini-agent 收不了口回落到快速模式（`_staged_day`）时，把 agent 已经**花视觉预算**勘察到的 B-roll 画面描述带进快速模式的 prompt，不再白费。外加回落进度文本 + 超/欠时长的一句说明文案。
+> **状态：已实现 + 自动测试通过（后端 538 全绿、ruff/mypy 干净；前端 206 全绿、tsc 干净）。真机 eval 待手动。** 单天 mini-agent 收不了口回落到快速模式（`_staged_day`）时，把 agent 已经**花视觉预算**勘察到的 B-roll 画面描述带进快速模式的 prompt，不再白费。外加回落进度文本 + 超/欠时长的一句说明文案。
 >
 > **依赖**：26（按天 mini-agent）、28（refine 合并 / `_gen_one_day`）、本分支「busy days use tools」修复（lean/full 上下文）。
 > **位置**：后端 `cutplan/director.py` 为主；前端 `features/cutplan/index.tsx` + `i18n` 一句文案。
