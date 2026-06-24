@@ -334,8 +334,8 @@ cutfinder/
   - **实时进度 + 部分分镜先显示**（`tasks/27`）：Director 把逐天/逐片段进度串（检索阶段/本天片段数/clip 文件名/导演思路/回落）与**已完成日期的部分 plan** 写进 store（内存进度 + 覆盖式 `save_plan`），前端 `resumePoll` 轮询增量读取——「第 k/N 天 · 查看片段 #X」实时刷新、已完成日期分镜先渲染、其余标「生成中」；进度 UI 由「单行替换」改为「最近 5 步滚动轨迹」。沿用轮询（无 SSE/线程桥接）。
   - **refine 按日期合并**（`tasks/28` Part A）：`generate(prior_plan=...)` 以旧 plan 为基底建 `merged: dict[拍摄日期 → shots]`，本轮只重做范围内日期——成功覆盖该天、失败保留旧那天、`_flatten` 按日期排序后再 `_build_plan`。修了「增加一份 5/11 把整表替换成只剩 5/11」的 bug（根因：检索按改窄范围只重做该天 + plan 覆盖式保存）；逐天 partial 与最终 plan 都走合并视图，故 refine 中途不闪掉旧日期；缩到无素材的日期返回 `None` plan（service 不覆盖、旧 plan 保留）。`CutPlanService.handle` 取 `get_latest_plan` 作 `prior_plan`。
   - **审片 critic agent**（`tasks/28` Part B，默认关 `cut_critic_enabled`）：全片拼好后跑一次 critic LLM 调用，只评**主观质量**（节奏松紧 / 叙事连贯 / A-roll 主线与 B-roll 空镜配比 / 空镜缺位），输出结构化 `{date, issue, action}` 修订意见；主编排对**被点名日期**复用 Part A 的「重做该日期 → 并入」机制修一轮（最多 1 轮；坏/空 JSON 则跳过、原 plan 不变）。时长校验仍由确定性代码兜底，critic 不碰。
-  - **多片段日的 tool 收口修复**（实测：单天 50+ 片段时 agent 从不调工具、直接回落）：根因有二——① **检索/上下文把 agent 废了**：`_build_context` 把每条 A-roll 的 60 条 transcript 分段**内联**进 prompt，单天几十条就撑爆 12000 字符预算、后面片段被截断，且台词已内联→模型没理由再调 `get_clip_detail`。改为**按模式分别建上下文**：agent 用**精简版**（每片段一行 + `[有台词]` 标记，台词靠 `get_clip_detail` 按需取），staged 仍用**完整版**（无工具，需内联台词）。② **回落太急**：首个纯文字回复就放弃→现在**先给一次机会**：先尝试从该 prose 里捞出 `{"shots":[…]}`（模型"直接作答"也认），捞不到就插一条「必须用工具」系统提示重试一次，仍不调工具才回落。导演 day prompt 也加强：明确「标 [有台词] 的片段台词要用 get_clip_detail 取、最后必须 emit_plan、不要纯文字回答」。
-  - **逐次生成参数移到初剪页**（`tasks/28` UI）：`cut_director_mode`（生成模式 agent/staged）、`cut_max_tool_rounds`（最大工具轮数，仅 agent）、`cut_critic_enabled`（审片复检）、`cut_vision_budget`（视觉确认次数）从全局设置页移到**初剪页面**——原「导演 Prompt」弹窗升级为「初剪设置」弹窗（顶部「生成选项」段 + 下方导演 Prompt 文本框），开弹窗 `GET /settings` 回填、保存 `PUT /settings`（触发 director 重建生效）。
+  - **多片段日的 tool 收口修复**（实测：单天 50+ 片段时 agent 从不调工具、直接回落）：根因有二——① **检索/上下文把 agent 废了**：`_build_context` 把每条 A-roll 的 60 条 transcript 分段**内联**进 prompt，单天几十条就撑爆 12000 字符预算、后面片段被截断，且台词已内联→模型没理由再调 `get_clip_detail`。改为**按模式分别建上下文**：agent 用**精简版**（每片段一行 + `[有台词]` 标记，台词靠 `get_clip_detail` 按需取），staged 仍用**完整版**（无工具，需内联台词）。两版的字符预算各成一项设置 `cut_lean_char_budget`（默认 80000）/ `cut_staged_char_budget`（默认 60000），取代原写死的 12000——文本模型可吃 260k token 上下文，故默认放宽，上限只为约束本地 OMLX prefill 开销/内存，并非用来截断。② **回落太急**：首个纯文字回复就放弃→现在**先给一次机会**：先尝试从该 prose 里捞出 `{"shots":[…]}`（模型"直接作答"也认），捞不到就插一条「必须用工具」系统提示重试一次，仍不调工具才回落。导演 day prompt 也加强：明确「标 [有台词] 的片段台词要用 get_clip_detail 取、最后必须 emit_plan、不要纯文字回答」。
+  - **逐次生成参数移到初剪页**（`tasks/28` UI）：`cut_director_mode`（生成模式 agent/staged）、`cut_max_tool_rounds`（最大工具轮数，仅 agent）、`cut_critic_enabled`（审片复检）、`cut_vision_budget`（视觉确认次数）、`cut_lean_char_budget` / `cut_staged_char_budget`（单日素材目录字符上限，分 agent / staged 两档）从全局设置页移到**初剪页面**——原「导演 Prompt」弹窗升级为「初剪设置」弹窗（顶部「生成选项」段 + 下方导演 Prompt 文本框），开弹窗 `GET /settings` 回填、保存 `PUT /settings`（触发 director 重建生效）。
 - **独立测**：格式化用黄金串（章节/缩略图引用/时长尾注/边界）；Director 注入**假 LLMAgentClient（脚本化 tool_calls / 补全字符串）+ 假工具**，断言 A 主线选段映射 in/out、B 插空、时长护栏回灌、最大轮数/视觉预算护栏、按天 agent 收口 + 回落、每日去重护栏、**refine 按日期合并（保留旧日期 / 失败保旧）**、**critic 重做并入 / 坏 JSON 跳过**；Service 断言 `get_latest_plan` 作 `prior_plan` 透传。Retriever/SessionStore 用内存 SQLite（含删除级联）。分镜"质量"不可自动化验收——靠 eval 清单 + 真机抽查。
 
 ---
@@ -534,6 +534,8 @@ CREATE TABLE cut_plans (
 | `cut_max_tool_rounds` | `24` | 初剪 Agent 单天工具调用环最大轮数护栏（仅 agent 模式生效）；**初剪页「初剪设置」弹窗可调** |
 | `cut_vision_budget` | `6` | 初剪 Agent 单次生成内 `inspect_broll`(现场视觉)调用上限；**初剪页「初剪设置」弹窗可调**，`0`=不限(由机器性能决定，JSON) |
 | `cut_critic_enabled` | `false` | 初剪 Agent 审片复检：拼好后跑一轮 critic 评主观质量并对点名日期重做一轮(`tasks/28`)；**初剪页「初剪设置」弹窗可调** |
+| `cut_lean_char_budget` | `80000` | 初剪 **agent** 模式单日素材目录字符上限（每片段一行精简版，台词按需取）；**初剪页「初剪设置」弹窗可调**，范围 2000–240000 |
+| `cut_staged_char_budget` | `60000` | 初剪 **staged** 模式单日素材目录字符上限（内联台词，填得更快）；**初剪页「初剪设置」弹窗可调**，范围 2000–240000 |
 | `cut_default_aspect_ratio` | `16:9` | 初剪 Agent 默认画面比例（用户可在对话里覆盖） |
 | `cut_director_prompt` | （自带默认） | 初剪 Agent 导演 system prompt；用户可在初剪页编辑、存机器全局 `~/.cutfinder/config.json`，含 `{aspect}/{target}/{style}` 占位符；删除即重置回自带默认 |
 

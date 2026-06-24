@@ -272,6 +272,13 @@ class Prefs(BaseModel, frozen=True):
     # the dates it flags. Costs one more LLM call + the flagged days' redo, so
     # the user opts in. See task 28 Part B.
     cut_critic_enabled: bool = False
+    # Per-shooting-date catalog size caps (characters), fed to the day generator.
+    # The Qwen3.6 text model takes a 260k-token context, so these are generous on
+    # purpose — they exist to bound local OMLX prefill cost/RAM, not to truncate.
+    # lean = agent mode (one short line per clip, transcripts fetched on demand);
+    # staged = fast mode (台词 inlined since it has no tools, so it fills faster).
+    cut_lean_char_budget: int = Field(default=80000, ge=2000, le=240000)
+    cut_staged_char_budget: int = Field(default=60000, ge=2000, le=240000)
 
     @field_validator(
         "text_model", "vision_model", "whisper_model",

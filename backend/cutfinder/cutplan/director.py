@@ -169,6 +169,8 @@ class CutDirector:
         max_tool_rounds: int = 24,
         vision_budget: int = 6,
         critic_enabled: bool = False,
+        lean_char_budget: int = 80000,
+        staged_char_budget: int = 60000,
     ) -> None:
         self._llm = llm
         self._retriever = retriever
@@ -177,6 +179,8 @@ class CutDirector:
         self._max_tool_rounds = max(1, max_tool_rounds)
         self._vision_budget = max(0, vision_budget)
         self._critic_enabled = critic_enabled
+        self._lean_char_budget = lean_char_budget
+        self._staged_char_budget = staged_char_budget
 
     # ── staged generation (primary path; reliable on local models) ──
 
@@ -331,7 +335,9 @@ class CutDirector:
         day_shots: list[dict[str, Any]] | None = None
         day_note = ""
         if self._mode == "agent":
-            lean = self._build_context(clips, cache, include_transcripts=False)
+            lean = self._build_context(
+                clips, cache, self._lean_char_budget, include_transcripts=False,
+            )
             day_shots, day_note, vision_used = self._run_day(
                 request, history, user_text, day, lean, per_day, cache, vision_used,
                 on_step=on_step,
@@ -339,7 +345,9 @@ class CutDirector:
         if day_shots is None:
             if self._mode == "agent" and on_fallback is not None:
                 on_fallback()
-            full = self._build_context(clips, cache, include_transcripts=True)
+            full = self._build_context(
+                clips, cache, self._staged_char_budget, include_transcripts=True,
+            )
             day_shots, day_note = self._staged_day(
                 request, history, user_text, day, full, per_day,
             )

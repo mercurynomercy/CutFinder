@@ -92,6 +92,8 @@ def test_create_app_with_library_serves_settings(
         "cut_vision_budget",
         "cut_default_aspect_ratio",
         "cut_critic_enabled",
+        "cut_lean_char_budget",
+        "cut_staged_char_budget",
         # Machine-global keys are merged into the one prefs view (no "env" group).
         "OMLX_BASE_URL",
         "OMLX_API_KEY",
