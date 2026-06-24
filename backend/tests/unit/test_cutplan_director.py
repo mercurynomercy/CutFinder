@@ -477,10 +477,16 @@ def test_run_day_falls_back_after_repeated_prose() -> None:
     llm = FakeAgentLLM([AgentStep(content="嗯"), AgentStep(content="还在想")], raw=raw)
     briefs = [ClipBrief(clip_id=1, roll="a", has_transcript=True, capture_time="2026-04-25T09:00:00")]
     director = CutDirector(llm, FakeRetriever(briefs, _details()))
-    result = director.generate(RoughCutRequest(date_from="2026-04-25"), [], "剪一条")
+    progress_log: list[str] = []
+    result = director.generate(
+        RoughCutRequest(date_from="2026-04-25"), [], "剪一条",
+        on_progress=progress_log.append,
+    )
     assert llm.run_calls == 2          # prose + one nudge-retry, then bail
     assert llm.complete_calls == 1     # fell back to staged
     assert result.plan is not None
+    # The prose rounds are surfaced (not invisible) so the UI shows why it bailed.
+    assert any("直接回了文字" in p and "嗯" in p for p in progress_log)
 
 
 def test_fallback_reuses_inspect_findings() -> None:

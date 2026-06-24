@@ -593,7 +593,13 @@ class CutDirector:
                 # use the tools and retry; only then fall back to staged.
                 salvaged = self._salvage_plan(step.content)
                 if salvaged is not None:
+                    step_cb("导演直接给出文字分镜，已采纳")
                     return salvaged, "", vision_used, findings
+                # Surface the prose so these no-tool rounds aren't invisible —
+                # otherwise it looks like the agent bailed right after the first
+                # clip, when really it replied in text (here's what it said).
+                reply = (step.content or "").strip().replace("\n", " ") or "（空回复）"
+                step_cb(f"导演未用工具、直接回了文字：{reply[:60]}")
                 if prose_nudged:
                     return None, "", vision_used, findings
                 prose_nudged = True
