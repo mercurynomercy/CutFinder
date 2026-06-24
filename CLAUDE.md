@@ -4,6 +4,15 @@ Behavioral guidelines to reduce common LLM coding mistakes. Merge with project-s
 
 **Tradeoff:** These guidelines bias toward caution over speed. For trivial tasks, use judgment.
 
+## 0. Code Work Goes Through codebase-memory-mcp (Hard Boundary)
+
+**Reading, planning, or editing code — ground in the code graph first, not memory.**
+
+- **Plan/edit:** `search_graph`, `trace_path`, `get_code_snippet` to find symbols and know every caller before touching them.
+- **After editing:** re-trace callers of changed symbols and run tests/build. "Looks right" ≠ verified.
+- Not indexed → `index_repository` first; changed outside this session → `detect_changes` / re-index.
+- Text, configs, docs: Grep/Glob/Read freely. Always Read before editing.
+
 ## 1. Think Before Coding
 
 **Don't assume. Don't hide confusion. Surface tradeoffs.**
