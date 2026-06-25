@@ -9,7 +9,7 @@
  * Usage: <CutplanPage onClose={() => ...} />
  */
 
-import { useEffect, useRef, useState } from 'react'
+import { Fragment, useEffect, useRef, useState } from 'react'
 
 import type { CutMessage, CutPlan, CutSession } from '@/api/client'
 import { api } from '@/api/client'
@@ -66,6 +66,9 @@ export function CutplanPage({ onClose }: CutplanPageProps) {
   // it's thinking through, not just the latest line). Polling only gets the
   // latest string each tick; we append distinct ones to build the history.
   const [progressLog, setProgressLog] = useState<string[]>([])
+  // Whether the progress trajectory is expanded. Open while a turn runs; collapses
+  // once it finishes so the finished log sits quietly between the request and reply.
+  const [progressOpen, setProgressOpen] = useState(false)
   const [copied, setCopied] = useState(false)
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null)
   const [listCollapsed, setListCollapsed] = useState(false)
@@ -134,6 +137,7 @@ export function CutplanPage({ onClose }: CutplanPageProps) {
           setMessages(detail.messages)                  // restore the assistant reply
           setPlan(detail.plan)
           setBusy(false)
+          setProgressOpen(false)                        // collapse the finished log
           return                                        // keep progressLog for review
         }
       } catch {
@@ -154,6 +158,7 @@ export function CutplanPage({ onClose }: CutplanPageProps) {
         /* ignore */
       }
       setBusy(false)
+      setProgressOpen(false)
     }
   }
 
@@ -175,6 +180,7 @@ export function CutplanPage({ onClose }: CutplanPageProps) {
       if (detail.session.status === 'running') {
         pushProgress(detail.session.progress ?? '')
         setBusy(true)
+        setProgressOpen(true)
         void resumePoll(id)
       }
     } catch {
@@ -210,8 +216,10 @@ export function CutplanPage({ onClose }: CutplanPageProps) {
   // Tail the progress log to its latest line while a turn runs; once it stops the
   // user is free to scroll up through the full trajectory.
   useEffect(() => {
-    if (busy && progressRef.current) progressRef.current.scrollTop = progressRef.current.scrollHeight
-  }, [progressLog, busy])
+    if (busy && progressOpen && progressRef.current) {
+      progressRef.current.scrollTop = progressRef.current.scrollHeight
+    }
+  }, [progressLog, busy, progressOpen])
 
   const newSession = async () => {
     const s = await api.createCutSession('')
@@ -238,6 +246,7 @@ export function CutplanPage({ onClose }: CutplanPageProps) {
     setInput('')
     setBusy(true)
     setProgressLog([])
+    setProgressOpen(true)
     try {
       // The route marks the session 'running' synchronously, so we can poll the
       // session directly — resumePoll live-updates the partial plan + progress
@@ -338,6 +347,54 @@ export function CutplanPage({ onClose }: CutplanPageProps) {
     }
   }
 
+  // The progress trajectory belongs to the latest turn: while it runs it trails
+  // the last (user) message; once the assistant reply lands it sits *between* the
+  // request and that reply (anchored just before the trailing assistant message),
+  // collapsed by default.
+  const showProgress = busy || progressLog.length > 0
+  const lastIsAssistant = messages.length > 0 && messages[messages.length - 1].role === 'assistant'
+  const progressAnchor = !busy && lastIsAssistant ? messages.length - 1 : messages.length
+  const progressNode = (
+    <div className="text-left">
+      <div className="inline-flex max-w-[90%] flex-col gap-1 rounded-lg bg-[--surface-2] px-3 py-2 text-sm text-[--text-secondary]">
+        {busy && progressLog.length === 0 ? (
+          <div className="inline-flex items-center gap-2">
+            <ThinkingDots />
+            <span>{t('roughcut.thinking')}</span>
+          </div>
+        ) : (
+          <>
+            <button
+              type="button"
+              onClick={() => setProgressOpen((v) => !v)}
+              className="inline-flex items-center gap-1.5 text-xs text-[--text-muted] hover:text-[--text-secondary]"
+            >
+              <span aria-hidden="true">{progressOpen ? '▾' : '▸'}</span>
+              <span>{t('roughcut.progressTitle', { n: progressLog.length })}</span>
+              {busy && <ThinkingDots />}
+            </button>
+            {progressOpen && (
+              <div ref={progressRef} className="mt-1 flex max-h-48 flex-col gap-1 overflow-y-auto pr-1">
+                {progressLog.map((p, i, arr) => {
+                  const isLast = i === arr.length - 1
+                  return (
+                    <div
+                      key={`${i}-${p}`}
+                      className={`inline-flex items-center gap-2 ${busy && isLast ? '' : 'text-xs text-[--text-muted]'}`}
+                    >
+                      {busy && isLast ? <ThinkingDots /> : <span aria-hidden="true">·</span>}
+                      <span>{p}</span>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  )
+
   return (
     <div className="flex h-screen w-full flex-col bg-[--bg-canvas] text-[--text-primary]">
       {/* Header */}
@@ -420,49 +477,28 @@ export function CutplanPage({ onClose }: CutplanPageProps) {
         {/* Conversation column */}
         <section className="flex min-w-0 flex-1 flex-col border-r border-[--border]">
           <div ref={threadRef} className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
-            {messages.length === 0 && !busy ? (
+            {messages.length === 0 && !showProgress ? (
               <p className="text-sm text-[--text-muted]">{t('roughcut.emptyConvo')}</p>
             ) : (
-              messages.map((m, i) => (
-                <div key={i} className={m.role === 'user' ? 'text-right' : 'text-left'}>
-                  <div
-                    className={`inline-block max-w-[85%] whitespace-pre-wrap rounded-lg px-3 py-2 text-left text-sm ${
-                      m.role === 'user'
-                        ? 'bg-[--primary] text-white'
-                        : 'bg-[--surface-2] text-[--text-primary]'
-                    }`}
-                  >
-                    {m.content}
-                  </div>
-                </div>
-              ))
-            )}
-            {(busy || progressLog.length > 0) && (
-              <div className="text-left">
-                <div className="inline-flex max-w-[90%] flex-col gap-1 rounded-lg bg-[--surface-2] px-3 py-2 text-sm text-[--text-secondary]">
-                  {busy && progressLog.length === 0 ? (
-                    <div className="inline-flex items-center gap-2">
-                      <ThinkingDots />
-                      <span>{t('roughcut.thinking')}</span>
+              <>
+                {messages.map((m, i) => (
+                  <Fragment key={i}>
+                    {showProgress && i === progressAnchor && progressNode}
+                    <div className={m.role === 'user' ? 'text-right' : 'text-left'}>
+                      <div
+                        className={`inline-block max-w-[85%] whitespace-pre-wrap rounded-lg px-3 py-2 text-left text-sm ${
+                          m.role === 'user'
+                            ? 'bg-[--primary] text-white'
+                            : 'bg-[--surface-2] text-[--text-primary]'
+                        }`}
+                      >
+                        {m.content}
+                      </div>
                     </div>
-                  ) : (
-                    <div ref={progressRef} className="flex max-h-48 flex-col gap-1 overflow-y-auto pr-1">
-                      {progressLog.map((p, i, arr) => {
-                        const isLast = i === arr.length - 1
-                        return (
-                          <div
-                            key={`${i}-${p}`}
-                            className={`inline-flex items-center gap-2 ${busy && isLast ? '' : 'text-xs text-[--text-muted]'}`}
-                          >
-                            {busy && isLast ? <ThinkingDots /> : <span aria-hidden="true">·</span>}
-                            <span>{p}</span>
-                          </div>
-                        )
-                      })}
-                    </div>
-                  )}
-                </div>
-              </div>
+                  </Fragment>
+                ))}
+                {showProgress && progressAnchor >= messages.length && progressNode}
+              </>
             )}
           </div>
           <div className="shrink-0 border-t border-[--border] p-3">
