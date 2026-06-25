@@ -85,6 +85,7 @@ export function CutplanPage({ onClose }: CutplanPageProps) {
   const [stagedTokenBudget, setStagedTokenBudget] = useState(40000)
 
   const threadRef = useRef<HTMLDivElement>(null)
+  const progressRef = useRef<HTMLDivElement>(null)
   // Tracks the currently-open session so resume polling can bail if the user
   // switches away mid-poll. Set explicitly (not on render) so async guards see
   // the new value immediately.
@@ -118,7 +119,10 @@ export function CutplanPage({ onClose }: CutplanPageProps) {
   // partial plan + the director's current step on every tick (so completed
   // dates and "查看片段 #N" status show while the rest still generates).
   const resumePoll = async (id: number) => {
-    const deadline = Date.now() + 10 * 60_000
+    // Generous backstop: a multi-day 15–20 min vlog in agent mode can run a long
+    // time. The real exit is status going non-running; this only stops us polling
+    // a hung/dead backend forever.
+    const deadline = Date.now() + 60 * 60_000
     while (Date.now() < deadline) {
       if (activeRef.current !== id) return // user switched away
       try {
@@ -127,20 +131,29 @@ export function CutplanPage({ onClose }: CutplanPageProps) {
         if (detail.plan) setPlan(detail.plan)          // show completed dates early
         pushProgress(detail.session.progress ?? '')     // live "正在查看…" trajectory
         if (detail.session.status !== 'running') {
-          setMessages(detail.messages)
+          setMessages(detail.messages)                  // restore the assistant reply
           setPlan(detail.plan)
-          setProgressLog([])
           setBusy(false)
-          return
+          return                                        // keep progressLog for review
         }
       } catch {
         /* transient — keep polling */
       }
       await new Promise((r) => setTimeout(r, 1500))
     }
+    // Deadline reached: do one final sync so a turn that finished right at the
+    // boundary still shows its reply instead of silently vanishing.
     if (activeRef.current === id) {
+      try {
+        const detail = await api.getCutSession(id)
+        if (activeRef.current === id) {
+          setMessages(detail.messages)
+          if (detail.plan) setPlan(detail.plan)
+        }
+      } catch {
+        /* ignore */
+      }
       setBusy(false)
-      setProgressLog([])
     }
   }
 
@@ -194,6 +207,12 @@ export function CutplanPage({ onClose }: CutplanPageProps) {
     if (threadRef.current) threadRef.current.scrollTop = threadRef.current.scrollHeight
   }, [messages, busy])
 
+  // Tail the progress log to its latest line while a turn runs; once it stops the
+  // user is free to scroll up through the full trajectory.
+  useEffect(() => {
+    if (busy && progressRef.current) progressRef.current.scrollTop = progressRef.current.scrollHeight
+  }, [progressLog, busy])
+
   const newSession = async () => {
     const s = await api.createCutSession('')
     await loadSessions()
@@ -230,7 +249,8 @@ export function CutplanPage({ onClose }: CutplanPageProps) {
       console.error('Rough-cut turn failed:', err)
     } finally {
       setBusy(false)
-      setProgressLog([])
+      // Keep progressLog so the finished run's trajectory stays visible; it's
+      // cleared when the next turn starts (above) or another session is opened.
     }
   }
 
@@ -417,24 +437,29 @@ export function CutplanPage({ onClose }: CutplanPageProps) {
                 </div>
               ))
             )}
-            {busy && (
+            {(busy || progressLog.length > 0) && (
               <div className="text-left">
                 <div className="inline-flex max-w-[90%] flex-col gap-1 rounded-lg bg-[--surface-2] px-3 py-2 text-sm text-[--text-secondary]">
-                  {progressLog.length === 0 ? (
+                  {busy && progressLog.length === 0 ? (
                     <div className="inline-flex items-center gap-2">
                       <ThinkingDots />
                       <span>{t('roughcut.thinking')}</span>
                     </div>
                   ) : (
-                    progressLog.slice(-5).map((p, i, arr) => (
-                      <div
-                        key={`${i}-${p}`}
-                        className={`inline-flex items-center gap-2 ${i < arr.length - 1 ? 'text-xs text-[--text-muted]' : ''}`}
-                      >
-                        {i === arr.length - 1 ? <ThinkingDots /> : <span aria-hidden="true">·</span>}
-                        <span>{p}</span>
-                      </div>
-                    ))
+                    <div ref={progressRef} className="flex max-h-48 flex-col gap-1 overflow-y-auto pr-1">
+                      {progressLog.map((p, i, arr) => {
+                        const isLast = i === arr.length - 1
+                        return (
+                          <div
+                            key={`${i}-${p}`}
+                            className={`inline-flex items-center gap-2 ${busy && isLast ? '' : 'text-xs text-[--text-muted]'}`}
+                          >
+                            {busy && isLast ? <ThinkingDots /> : <span aria-hidden="true">·</span>}
+                            <span>{p}</span>
+                          </div>
+                        )
+                      })}
+                    </div>
                   )}
                 </div>
               </div>
