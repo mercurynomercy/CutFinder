@@ -351,6 +351,11 @@ class FakeAgentLLM:
         self.complete_msgs.append([dict(m) for m in messages])
         return self.raw
 
+    def count_tokens(self, text: str) -> int:
+        # Deterministic stand-in for OMLX count_tokens: ~2 chars per token.
+        self.count_calls = getattr(self, "count_calls", 0) + 1
+        return (len(text) + 1) // 2
+
 
 def test_generate_agent_mode_converges_via_tool_loop() -> None:
     # Day worker deep-dives one A-roll (get_clip_detail) then emit_plan.
@@ -546,6 +551,32 @@ def test_agent_context_is_lean_staged_is_full() -> None:
     assert "[有台词]" in lean
     assert "开场白" not in lean   # transcript text not dumped into the agent prompt
     assert "开场白" in full       # inlined for the toolless staged path
+
+
+def test_build_context_caps_by_token_count() -> None:
+    # Catalog is bounded by real token count (FakeAgentLLM.count_tokens), trimming
+    # only the overflow and marking it — not the old character-length cap.
+    cache: dict[int, ClipDetail] = {}
+    clips = [
+        ClipBrief(clip_id=i, roll="b", description="风景画面描述" * 8,
+                  capture_time=f"2026-04-25T09:{i:02d}:00")
+        for i in range(1, 13)
+    ]
+    director = CutDirector(FakeAgentLLM([]), FakeRetriever(clips, _details()))
+    out = director._build_context(clips, cache, token_budget=60, include_transcripts=False)
+    assert "…(更多素材已省略)" in out      # overflow was trimmed
+    assert "[1]" in out                     # earliest clips kept
+    assert "[12]" not in out                # latest clips dropped
+
+
+def test_build_context_keeps_all_within_budget() -> None:
+    # Under budget → full catalog, no trim marker.
+    cache: dict[int, ClipDetail] = {}
+    clips = [ClipBrief(clip_id=1, roll="b", description="短", capture_time="2026-04-25T09:00:00")]
+    director = CutDirector(FakeAgentLLM([]), FakeRetriever(clips, _details()))
+    out = director._build_context(clips, cache, token_budget=5000, include_transcripts=False)
+    assert "…(更多素材已省略)" not in out
+    assert "[1]" in out
 
 
 # ── refine merge by date (task 28 Part A) ───────────────────────

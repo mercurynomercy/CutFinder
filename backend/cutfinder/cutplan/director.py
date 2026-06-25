@@ -32,6 +32,11 @@ from ..ports.cutplan import BrollInspector, FootageRetriever, LLMAgentClient
 
 logger = logging.getLogger(__name__)
 
+# Chars-per-token used only when the server can't count tokens (e.g. offline):
+# a conservative estimate for this mixed Chinese-prose + ASCII-metadata catalog,
+# so the token budget still maps to a sane character cap as a fallback.
+_FALLBACK_CHARS_PER_TOKEN = 1.8
+
 # Built-in default director prompt for the staged generator. Editable in the UI
 # (persisted to ~/.cutfinder/config.json); the "重置" button restores this text.
 # Placeholders {aspect}/{target}/{style} are substituted per request — keep them
@@ -171,8 +176,8 @@ class CutDirector:
         max_tool_rounds: int = 24,
         vision_budget: int = 6,
         critic_enabled: bool = False,
-        lean_char_budget: int = 80000,
-        staged_char_budget: int = 60000,
+        lean_token_budget: int = 50000,
+        staged_token_budget: int = 40000,
     ) -> None:
         self._llm = llm
         self._retriever = retriever
@@ -181,8 +186,8 @@ class CutDirector:
         self._max_tool_rounds = max(1, max_tool_rounds)
         self._vision_budget = max(0, vision_budget)
         self._critic_enabled = critic_enabled
-        self._lean_char_budget = lean_char_budget
-        self._staged_char_budget = staged_char_budget
+        self._lean_token_budget = lean_token_budget
+        self._staged_token_budget = staged_token_budget
 
     # ── staged generation (primary path; reliable on local models) ──
 
@@ -340,7 +345,7 @@ class CutDirector:
         findings: dict[int, str] = {}  # inspect_broll descriptions gathered by the agent
         if self._mode == "agent":
             lean = self._build_context(
-                clips, cache, self._lean_char_budget, include_transcripts=False,
+                clips, cache, self._lean_token_budget, include_transcripts=False,
             )
             day_shots, day_note, vision_used, findings = self._run_day(
                 request, history, user_text, day, lean, per_day, cache, vision_used,
@@ -350,7 +355,7 @@ class CutDirector:
             if self._mode == "agent" and on_fallback is not None:
                 on_fallback(len(findings))
             full = self._build_context(
-                clips, cache, self._staged_char_budget, include_transcripts=True,
+                clips, cache, self._staged_token_budget, include_transcripts=True,
             )
             # Reuse the agent's gathered B-roll vision findings so the spent
             # vision budget isn't wasted when we fall back to staged.
@@ -656,7 +661,12 @@ class CutDirector:
                     continue
                 seen.add(key)
                 if tc.name == "get_clip_detail":
-                    step_cb(f"查看片段 {self._label(_as_int(tc.arguments.get('clip_id')), cache)} 的台词")
+                    _cid = _as_int(tc.arguments.get("clip_id"))
+                    _d = self._fetch_detail(_cid, cache) if _cid is not None else None
+                    # get_clip_detail returns台词 for A-roll but stored画面描述/切点 for
+                    # B-roll (which has no transcript) — label by roll, not always "台词".
+                    _what = "台词" if (_d is not None and _d.roll == "a") else "画面信息"
+                    step_cb(f"查看片段 {self._label(_cid, cache)} 的{_what}")
                     self._append_tool_result(
                         messages, tc.id, self._do_detail(tc.arguments, cache),
                     )
@@ -724,10 +734,10 @@ class CutDirector:
         )
 
     def _build_context(
-        self, clips: list[Any], cache: dict[int, ClipDetail], char_budget: int = 12000,
+        self, clips: list[Any], cache: dict[int, ClipDetail], token_budget: int = 8000,
         *, include_transcripts: bool = True,
     ) -> str:
-        """Compact text catalog of candidate clips.
+        """Compact text catalog of candidate clips, capped by real token count.
 
         *include_transcripts* — when True (staged mode) each A-roll clip's timed
         transcript segments are inlined, since the staged path has no tools to
@@ -735,9 +745,14 @@ class CutDirector:
         line per clip, plus an `[有台词]` marker) so all clips fit even on a busy
         day, and the agent reads台词 on demand via ``get_clip_detail`` — a huge
         truncated prompt was the reason it bailed to prose on big days.
+
+        The catalog is built in full, then bounded by *token_budget*: we ask the
+        server (``count_tokens``) for the catalog's exact token count — the same
+        tokenizer the model serves with — and only trim when it actually exceeds
+        the budget, cutting by the measured chars/token ratio. If counting is
+        unavailable, fall back to a character estimate (``_FALLBACK_CHARS_PER_TOKEN``).
         """
         lines: list[str] = []
-        used = 0
         for b in clips:
             dur = f"{b.duration_s:.0f}s" if b.duration_s else "?"
             desc = (b.summary or b.description or "").strip().replace("\n", " ")[:120]
@@ -748,18 +763,32 @@ class CutDirector:
             mark = " [有台词]" if (b.roll == "a" and b.has_transcript) else ""
             head = f"[{b.clip_id}] {when} {b.roll}-roll dur={dur}{mark} {desc} tags={tags}"
             lines.append(head)
-            used += len(head)
             if include_transcripts and b.roll == "a" and b.has_transcript:
                 detail = self._fetch_detail(b.clip_id, cache)
                 if detail is not None:
                     for s in detail.segments[:60]:
-                        seg = f"   ({s.start_s:.1f}-{s.end_s:.1f}) {s.text}"
-                        lines.append(seg)
-                        used += len(seg)
-            if used > char_budget:
-                lines.append("   …(更多素材已省略)")
+                        lines.append(f"   ({s.start_s:.1f}-{s.end_s:.1f}) {s.text}")
+        catalog = "\n".join(lines)
+
+        counter = getattr(self._llm, "count_tokens", None)
+        n_tok = counter(catalog) if counter is not None else None
+        if n_tok is not None and n_tok <= token_budget:
+            return catalog
+        # Over budget (or counting unavailable) → trim by a chars/token ratio:
+        # the real measured one when we have a count, else a conservative default.
+        ratio = (len(catalog) / n_tok) if n_tok else _FALLBACK_CHARS_PER_TOKEN
+        char_cap = int(token_budget * ratio)
+        if len(catalog) <= char_cap:
+            return catalog
+        kept: list[str] = []
+        used = 0
+        for line in lines:
+            if used > char_cap:
+                kept.append("   …(更多素材已省略)")
                 break
-        return "\n".join(lines)
+            kept.append(line)
+            used += len(line)
+        return "\n".join(kept)
 
     @staticmethod
     def _staged_system_prompt(request: RoughCutRequest) -> str:

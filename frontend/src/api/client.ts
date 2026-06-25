@@ -121,8 +121,8 @@ export interface SettingsPrefs {
   cut_vision_budget: number
   cut_default_aspect_ratio: string
   cut_critic_enabled?: boolean
-  cut_lean_char_budget?: number
-  cut_staged_char_budget?: number
+  cut_lean_token_budget?: number
+  cut_staged_token_budget?: number
   // Machine-global keys are merged into this one view (no separate "env" group);
   // the OMLX secret comes back masked. Optional so test fixtures can omit them.
   OMLX_BASE_URL?: string
@@ -175,8 +175,8 @@ export interface UpdateSettingsBody {
   cut_vision_budget?: number
   cut_default_aspect_ratio?: string
   cut_critic_enabled?: boolean
-  cut_lean_char_budget?: number
-  cut_staged_char_budget?: number
+  cut_lean_token_budget?: number
+  cut_staged_token_budget?: number
   // Machine-global keys (persisted to ~/.cutfinder/config.json, shared across
   // libraries). Omit OMLX_API_KEY to leave the stored secret unchanged.
   OMLX_BASE_URL?: string

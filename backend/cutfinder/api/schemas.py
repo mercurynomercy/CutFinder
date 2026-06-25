@@ -175,8 +175,8 @@ class PrefsOut(BaseModel):
     cut_vision_budget: int = 6
     cut_default_aspect_ratio: str = "16:9"
     cut_critic_enabled: bool = False
-    cut_lean_char_budget: int = 80000
-    cut_staged_char_budget: int = 60000
+    cut_lean_token_budget: int = 50000
+    cut_staged_token_budget: int = 40000
 
 
 class SettingsOut(BaseModel):
@@ -204,8 +204,8 @@ class SettingsUpdate(BaseModel):
     cut_vision_budget: Optional[int] = None
     cut_default_aspect_ratio: Optional[str] = None
     cut_critic_enabled: Optional[bool] = None
-    cut_lean_char_budget: Optional[int] = None
-    cut_staged_char_budget: Optional[int] = None
+    cut_lean_token_budget: Optional[int] = None
+    cut_staged_token_budget: Optional[int] = None
 
 
 # ── SSE event types (internal helper schemas) ───────────────────

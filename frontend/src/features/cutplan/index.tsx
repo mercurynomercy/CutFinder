@@ -81,8 +81,8 @@ export function CutplanPage({ onClose }: CutplanPageProps) {
   const [maxToolRounds, setMaxToolRounds] = useState(24)
   const [criticEnabled, setCriticEnabled] = useState(false)
   const [visionBudget, setVisionBudget] = useState(6)
-  const [leanCharBudget, setLeanCharBudget] = useState(80000)
-  const [stagedCharBudget, setStagedCharBudget] = useState(60000)
+  const [leanTokenBudget, setLeanTokenBudget] = useState(50000)
+  const [stagedTokenBudget, setStagedTokenBudget] = useState(40000)
 
   const threadRef = useRef<HTMLDivElement>(null)
   // Tracks the currently-open session so resume polling can bail if the user
@@ -269,8 +269,8 @@ export function CutplanPage({ onClose }: CutplanPageProps) {
       setMaxToolRounds(data.prefs.cut_max_tool_rounds ?? 24)
       setCriticEnabled(data.prefs.cut_critic_enabled ?? false)
       setVisionBudget(data.prefs.cut_vision_budget ?? 6)
-      setLeanCharBudget(data.prefs.cut_lean_char_budget ?? 80000)
-      setStagedCharBudget(data.prefs.cut_staged_char_budget ?? 60000)
+      setLeanTokenBudget(data.prefs.cut_lean_token_budget ?? 50000)
+      setStagedTokenBudget(data.prefs.cut_staged_token_budget ?? 40000)
     } catch {
       /* no library bound / unreachable — keep defaults */
     }
@@ -287,8 +287,8 @@ export function CutplanPage({ onClose }: CutplanPageProps) {
         cut_max_tool_rounds: maxToolRounds,
         cut_critic_enabled: criticEnabled,
         cut_vision_budget: visionBudget,
-        cut_lean_char_budget: leanCharBudget,
-        cut_staged_char_budget: stagedCharBudget,
+        cut_lean_token_budget: leanTokenBudget,
+        cut_staged_token_budget: stagedTokenBudget,
       })
       setPromptSaved(true)
       setTimeout(() => setPromptSaved(false), 1500)
@@ -592,11 +592,11 @@ export function CutplanPage({ onClose }: CutplanPageProps) {
                   <label className="mt-3 block text-sm text-[--text-secondary]">{t('roughcut.leanBudget')}</label>
                   <input
                     type="number"
-                    min={2000}
-                    max={240000}
+                    min={1000}
+                    max={200000}
                     step={1000}
-                    value={leanCharBudget}
-                    onChange={(e) => setLeanCharBudget(parseInt(e.target.value, 10) || 2000)}
+                    value={leanTokenBudget}
+                    onChange={(e) => setLeanTokenBudget(parseInt(e.target.value, 10) || 1000)}
                     className="mt-1 w-32 rounded-md border border-[--border] bg-[--surface-2] px-3 py-1.5 text-sm outline-none focus:border-[--primary]"
                   />
                   <p className="mt-1 text-xs text-[--text-muted]">{t('roughcut.leanBudgetDesc')}</p>
@@ -628,11 +628,11 @@ export function CutplanPage({ onClose }: CutplanPageProps) {
               <label className="mt-3 block text-sm text-[--text-secondary]">{t('roughcut.stagedBudget')}</label>
               <input
                 type="number"
-                min={2000}
-                max={240000}
+                min={1000}
+                max={200000}
                 step={1000}
-                value={stagedCharBudget}
-                onChange={(e) => setStagedCharBudget(parseInt(e.target.value, 10) || 2000)}
+                value={stagedTokenBudget}
+                onChange={(e) => setStagedTokenBudget(parseInt(e.target.value, 10) || 1000)}
                 className="mt-1 w-32 rounded-md border border-[--border] bg-[--surface-2] px-3 py-1.5 text-sm outline-none focus:border-[--primary]"
               />
               <p className="mt-1 text-xs text-[--text-muted]">{t('roughcut.stagedBudgetDesc')}</p>

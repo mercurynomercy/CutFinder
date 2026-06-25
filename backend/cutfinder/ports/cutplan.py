@@ -86,6 +86,14 @@ class LLMAgentClient(Protocol):
     def complete(self, messages: list[dict[str, Any]]) -> str:
         """Plain (no-tools) chat completion → raw text. Used by staged generation."""
 
+    def count_tokens(self, text: str) -> int | None:
+        """Exact token count of *text* under the served model's tokenizer.
+
+        Returns ``None`` when counting is unavailable (server down, endpoint
+        missing) so callers can fall back to a character estimate. Used to cap
+        the per-day catalog by real token budget instead of characters.
+        """
+
 
 class CutSessionStore(Protocol):
     """Persist rough-cut conversations + their generated plans (SQLite)."""

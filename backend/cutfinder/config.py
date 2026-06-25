@@ -275,10 +275,11 @@ class Prefs(BaseModel, frozen=True):
     # Per-shooting-date catalog size caps (characters), fed to the day generator.
     # The Qwen3.6 text model takes a 260k-token context, so these are generous on
     # purpose — they exist to bound local OMLX prefill cost/RAM, not to truncate.
+    # Counted as real tokens (OMLX /messages/count_tokens), not characters.
     # lean = agent mode (one short line per clip, transcripts fetched on demand);
     # staged = fast mode (台词 inlined since it has no tools, so it fills faster).
-    cut_lean_char_budget: int = Field(default=80000, ge=2000, le=240000)
-    cut_staged_char_budget: int = Field(default=60000, ge=2000, le=240000)
+    cut_lean_token_budget: int = Field(default=50000, ge=1000, le=200000)
+    cut_staged_token_budget: int = Field(default=40000, ge=1000, le=200000)
 
     @field_validator(
         "text_model", "vision_model", "whisper_model",
