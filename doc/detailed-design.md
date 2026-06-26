@@ -2,7 +2,7 @@
 
 > 配套需求文档：[`doc/proposal.md`](./proposal.md)。本文件把需求拆成可独立开发、独立测试的模块，给出每个模块的职责、接口、输入输出、依赖与测试方式。
 >
-> - **日期**：2026-06-13（v1）；2026-06-18 增补 §3.13 字幕导出（独立成片 → FCP iTT/SRT）；2026-06-22 增补 §3.15 初剪导演 Agent（对话生成分镜表，**beta，持续改进中**）：分阶段生成已细化为**按拍摄日期逐日生成**、消息内自然语言参数解析、可编辑导演 Prompt（`~/.cutfinder/config.json`，可重置）、分镜表带拍摄日期列并按当天真实时间线排序。2026-06-24 §3.15 再迭代（`tasks/26–28`）：**按天 mini-agent**（scoped 工具环 + 回落，开关 `cut_director_mode`）、**实时进度 + 部分分镜先显示**、**refine 按日期合并**（修「增加某天却整表替换」bug）、**审片 critic agent**（默认关 `cut_critic_enabled`）；逐次生成参数（审片复检 / 视觉确认次数）移到初剪页「初剪设置」弹窗。`tasks/29`：设置去掉历史 `"env"` 分组，machine-global 键并入统一 `prefs` 视图（仍存 `~/.cutfinder/config.json`）。2026-06-25 §3.15 小修：单日素材目录上限改**按真实 token 计**（OMLX `/v1/messages/count_tokens`，`cut_lean_char_budget`→`cut_lean_token_budget` 等）、修长任务生成完不恢复回复（轮询上限 10→60 分钟 + 超时再同步）、进度轨迹完成后保留且完整可滚动、`get_clip_detail` 进度文案按 roll 区分（A-roll 台词 / B-roll 画面信息）。
+> - **日期**：2026-06-13（v1）；2026-06-18 增补 §3.13 字幕导出（独立成片 → FCP iTT/SRT）；2026-06-22 增补 §3.15 初剪导演 Agent（对话生成分镜表，**beta，持续改进中**）：分阶段生成已细化为**按拍摄日期逐日生成**、消息内自然语言参数解析、可编辑导演 Prompt（`~/.cutfinder/config.json`，可重置）、分镜表带拍摄日期列并按当天真实时间线排序。2026-06-24 §3.15 再迭代（`tasks/26–28`）：**按天 mini-agent**（scoped 工具环 + 回落，开关 `cut_director_mode`）、**实时进度 + 部分分镜先显示**、**refine 按日期合并**（修「增加某天却整表替换」bug）、**审片 critic agent**（默认关 `cut_critic_enabled`）；逐次生成参数（审片复检 / 视觉确认次数）移到初剪页「初剪设置」弹窗。`tasks/29`：设置去掉历史 `"env"` 分组，machine-global 键并入统一 `prefs` 视图（仍存 `~/.cutfinder/config.json`）。2026-06-25 §3.15 小修：单日素材目录上限改**按真实 token 计**（OMLX `/v1/messages/count_tokens`，`cut_lean_char_budget`→`cut_lean_token_budget` 等）、修长任务生成完不恢复回复（轮询上限 10→60 分钟 + 超时再同步）、进度轨迹完成后保留且完整可滚动、`get_clip_detail` 进度文案按 roll 区分（A-roll 台词 / B-roll 画面信息）、进度轨迹完成后**折叠成一行**并夹在请求与回复之间。2026-06-26 §3.15 双语化：新增机器全局 `ui_language`（默认 `en`），导演/critic 默认 Prompt 与全部进度文案按界面语言出 EN/ZH；并把 prompt 常量 / 工具 schema / 双语文案抽到新 `cutplan/prompts.py`（`director.py` 1245→973 行）。
 > - **范围**：proposal v1（需求 0–7）。需求 8（关键帧建议）已实现（见 `tasks/16-keyframes.md`）。**字幕导出**（§3.13、`tasks/17`）与**初剪导演 Agent**（§3.15、`tasks/25`）均为 v1 之外的独立工具，复用已有适配器/队列/SSE，**不改动 v1 per-clip 流水线接口**。
 
 ---
@@ -338,6 +338,9 @@ cutfinder/
   - **回落复用已勘察分析**（`tasks/30`）：`_run_day` 在 tool 循环里把 `inspect_broll` 成功看到的 B-roll 画面描述累积进 `findings`（`vision_used` 自增作成功信号，错误串不记），回落时一并带出；`_gen_one_day` 透传给 `_staged_day`，后者在 prompt 追加「导演已现场勘察过以下 B-roll 画面…」段。这样花掉的视觉预算不再随回落白费，快速模式据**新鲜描述**而非仅存量标签判断。回落进度行显示「带入 N 条已勘察画面」。时长仍**不裁**——超/欠目标只由前端 `within_target` 的 ⚠️ + 一句"素材有限"说明呈现（用户：时长非硬性要求，多为素材限制）。
   - **逐次生成参数移到初剪页**（`tasks/28` UI）：`cut_director_mode`（生成模式 agent/staged）、`cut_max_tool_rounds`（最大工具轮数，仅 agent）、`cut_critic_enabled`（审片复检）、`cut_vision_budget`（视觉确认次数）、`cut_lean_token_budget` / `cut_staged_token_budget`（单日素材目录 token 上限，分 agent / staged 两档）从全局设置页移到**初剪页面**——原「导演 Prompt」弹窗升级为「初剪设置」弹窗（顶部「生成选项」段 + 下方导演 Prompt 文本框），开弹窗 `GET /settings` 回填、保存 `PUT /settings`（触发 director 重建生效）。
   - **素材目录上限改按真实 token 计 + 进度 UI 修复 + B-roll 标签**（2026-06-25）：①「单日素材目录上限」从**字符数**改为**真实 token 数**——`_build_context` 先整目录拼好，调 OMLX `/v1/messages/count_tokens`（与所服务模型同一分词器）拿精确 token，仅在超预算时按实测 chars/token 比例回切；端点不可用则回退字符估算（`_FALLBACK_CHARS_PER_TOKEN=1.8`）。设置项 `cut_lean_char_budget`/`cut_staged_char_budget` 改名 `cut_lean_token_budget`/`cut_staged_token_budget`（默认 50000/40000，范围 1000–200000），UI 中英标签改「token」。新增 `LLMAgentClient.count_tokens()`（`OmlxAgentClient` 用 httpx 实现，best-effort 返回 `None`）。② 前端 `resumePoll` 轮询上限 10 分钟→60 分钟，且超时退出前再同步一次会话——修「长任务（多天 15–20 分钟 vlog）生成完没恢复助手回复」。③ 完成后**保留**进度轨迹（原会清空），渲染**完整可滚动**日志（原仅末 5 步、`max-h-48 overflow-y-auto` + 运行中贴底），完成后也显示。④ `get_clip_detail` 进度文案按 roll 区分：A-roll「的台词」、B-roll「的画面信息」（B-roll 无台词，读的是扫描入库时 VL 已分析存下的画面描述/切点；现场再看一眼仍是 `inspect_broll`「的画面」）。
+  - **进度轨迹完成后折叠**（`tasks/27` UI 续，2026-06-25）：一轮跑完后进度轨迹**折叠成一行**「生成过程（N 步）」disclosure（点开看完整可滚动日志），不再常驻展开；位置**夹在该轮 请求 与 回复 之间**（贴在末尾助手消息前），不再吊在整条对话底部。运行中仍跟在用户消息后、贴底实时刷新；开始时展开、完成时折叠。
+  - **导演 Prompt 与进度全面双语（EN/ZH）**（2026-06-26）：新增机器全局 `ui_language`（默认 `en`），前端随设置 `PUT /settings` 持久化，后端贯穿初剪流水线据此切换语言。导演 / critic 的**默认 system prompt** 拆 `_ZH`/`_EN` 两版；**所有进度串**（检索 / 逐日生成 / 回落 / 完成 / 导演思路 / 收口催收）、day prompt、回落 B-roll 上下文段均按 `ui_language` 出对应语言（英文用 `[day]` 方括号，`【】` 仅 zh）；`get_clip_detail` 进度 `_what` 修正英文路径取值。`output_language`（成片口语语言）与 `ui_language`（界面/文案语言）相互独立。
+  - **`cutplan/prompts.py` 抽离 + 双语文案集中**（重构，2026-06-26）：4 个 prompt 常量（导演/critic 各 `_ZH`/`_EN`）与 `TOOLS`/`DAY_TOOLS` schema 从 `director.py` 移入新 `cutplan/prompts.py`；同时把散落各方法的 `if lang=="zh" else …` 内联双语文案收进 `prompts.py` 的 `_MESSAGES`（`key→(zh,en)` 模板对）+ `message(key, lang, **kw)` 帮助函数，director 内用 `self._t(...)` 取。`director.py` 1245→973 行，控制流与文案分离。`cut_routes.py` 改从 `prompts` import 常量。顺带修正 `run()`（自治环，未接生产）收敛催收里 zh 路径恒发「尽力 emit」的非对称分支——改为按 `clips_seen` 选「无素材 / emit-now」文案。
 - **独立测**：格式化用黄金串（章节/缩略图引用/时长尾注/边界）；Director 注入**假 LLMAgentClient（脚本化 tool_calls / 补全字符串）+ 假工具**，断言 A 主线选段映射 in/out、B 插空、时长护栏回灌、最大轮数/视觉预算护栏、按天 agent 收口 + 回落、每日去重护栏、**refine 按日期合并（保留旧日期 / 失败保旧）**、**critic 重做并入 / 坏 JSON 跳过**；Service 断言 `get_latest_plan` 作 `prior_plan` 透传。Retriever/SessionStore 用内存 SQLite（含删除级联）。分镜"质量"不可自动化验收——靠 eval 清单 + 真机抽查。
 
 ---
@@ -530,6 +533,7 @@ CREATE TABLE cut_plans (
 | `vad_threshold` | `0.15` | speech_ratio ≥ 阈值判 A-roll |
 | `worker_concurrency` | `1` | 顺序处理，尊重模型显存 |
 | `output_language` | `zh` | AI 简介/描述语言；字幕导出(§3.13)也沿用 |
+| `ui_language` | `en` | 界面语言（EN/ZH），与 `output_language` 独立；机器全局，前端 `PUT /settings` 持久化。后端据此选初剪导演**默认 Prompt** 与**实时进度文案**的 `_EN`/`_ZH` 版本 |
 | `subtitle_default_formats` | `["itt","srt"]` | 字幕导出 UI 默认格式（可选项） |
 | `vocal_separation` | `false` | A-roll 转写前是否用 Demucs 去 BGM（JSON）；仅影响之后 scan 的新片。字幕导出强制分离，不受此项影响 |
 | `cut_director_mode` | `agent` | 初剪 Agent(§3.15)生成模式：`agent`=按天 scoped 工具环（不收敛回落 staged）/`staged`=每天一次纯 JSON(`tasks/26`)；**初剪页「初剪设置」弹窗可调** |
@@ -539,7 +543,7 @@ CREATE TABLE cut_plans (
 | `cut_lean_token_budget` | `50000` | 初剪 **agent** 模式单日素材目录 **token** 上限（每片段一行精简版，台词按需取）；按真实 token 计（OMLX `/v1/messages/count_tokens`，端点不可用时回退字符估算）；**初剪页「初剪设置」弹窗可调**，范围 1000–200000 |
 | `cut_staged_token_budget` | `40000` | 初剪 **staged** 模式单日素材目录 **token** 上限（内联台词，填得更快）；按真实 token 计（同上）；**初剪页「初剪设置」弹窗可调**，范围 1000–200000 |
 | `cut_default_aspect_ratio` | `16:9` | 初剪 Agent 默认画面比例（用户可在对话里覆盖） |
-| `cut_director_prompt` | （自带默认） | 初剪 Agent 导演 system prompt；用户可在初剪页编辑、存机器全局 `~/.cutfinder/config.json`，含 `{aspect}/{target}/{style}` 占位符；删除即重置回自带默认 |
+| `cut_director_prompt` | （自带默认） | 初剪 Agent 导演 system prompt；用户可在初剪页编辑、存机器全局 `~/.cutfinder/config.json`，含 `{aspect}/{target}/{style}` 占位符；删除即重置回自带默认（自带默认有 `_ZH`/`_EN` 两版，按 `ui_language` 选） |
 
 ---
 
