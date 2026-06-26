@@ -23,9 +23,10 @@ logger = logging.getLogger(__name__)
 class CutPlanService:
     """Handle a single user message in a rough-cut conversation."""
 
-    def __init__(self, store: CutSessionStore, director: CutDirector) -> None:
+    def __init__(self, store: CutSessionStore, director: CutDirector, *, ui_language: str = "zh") -> None:
         self._store = store
         self._director = director
+        self._ui_language = ui_language
 
     def handle(
         self,
@@ -50,7 +51,7 @@ class CutPlanService:
         # Auto-title an untitled conversation from its first user message, so the
         # sidebar shows something other than "未命名" after the opening turn.
         if not (session.title or "").strip():
-            self._store.set_session_title(session_id, _derive_title(user_text))
+            self._store.set_session_title(session_id, _derive_title(user_text, lang=self._ui_language))
 
         # Resolve the request. Precedence: an explicit request object (from a
         # future structured UI) wins; otherwise parse scoping (date range /
@@ -113,7 +114,7 @@ class CutPlanService:
             return None
 
 
-def _derive_title(user_text: str, max_len: int = 24) -> str:
+def _derive_title(user_text: str, max_len: int = 24, lang: str = "zh") -> str:
     """A short sidebar title from the first user message (first line, clipped)."""
     line = (user_text or "").strip().splitlines()[0].strip() if user_text.strip() else ""
-    return line[:max_len] or "未命名"
+    return line[:max_len] or ("Untitled" if lang == "en" else "未命名")

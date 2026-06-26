@@ -42,6 +42,8 @@ _GLOBAL_PREF_KEYS = (
     "qwen_asr_model",
     "qwen_aligner_model",
     "qwen_max_chunk_s",
+    # UI language is per-device (not per-library) — one setting for the whole machine.
+    "ui_language",
 )
 
 # Repo root, anchored to this file (backend/cutfinder/config.py -> repo root).
@@ -244,6 +246,9 @@ class Prefs(BaseModel, frozen=True):
     vad_threshold: float = Field(default=0.35, gt=0, le=1)
     # Language for AI-generated summaries / visual descriptions ("zh" or "en").
     output_language: Literal["zh", "en"] = "zh"
+    # UI interface language — per-device (one value for the whole machine). Drives
+    # which default director prompt is shown and used, as well as progress messages.
+    ui_language: Literal["en", "zh"] = "en"
     # Keyframe recommendation: max ranked cut/frame suggestions per clip, and
     # whether to auto-queue a keyframes job after each scan completes.
     keyframe_count: int = Field(default=3, ge=1, le=10)

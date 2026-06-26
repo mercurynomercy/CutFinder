@@ -265,6 +265,9 @@ export function SettingsPage({ onSave }: SettingsPageProps) {
       // saved pref from diverging from the real binding.
       const body: UpdateSettingsBody = { ...prefs }
       delete body.library_path
+      // Persist the current UI language as a machine-global pref so the backend can
+      // pick it up (bilingual director prompt + progress messages).
+      body.ui_language = lang as 'zh' | 'en'
       // Machine-global keys: always send the (non-secret) endpoint and model names; only send
       // the API key when the user typed a new one, so the stored secret is
       // never overwritten by the mask.

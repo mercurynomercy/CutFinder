@@ -38,10 +38,11 @@ logger = logging.getLogger(__name__)
 _FALLBACK_CHARS_PER_TOKEN = 1.8
 
 # Built-in default director prompt for the staged generator. Editable in the UI
-# (persisted to ~/.cutfinder/config.json); the "重置" button restores this text.
+# (persisted to ~/.cutfinder/config.json); the "reset" button restores this text.
 # Placeholders {aspect}/{target}/{style} are substituted per request — keep them
-# if you want the画面比例/目标时长/风格 to appear in the prompt.
-DEFAULT_CUT_DIRECTOR_PROMPT = (
+# if you want the aspect ratio / target duration / style to appear in the prompt.
+
+DEFAULT_CUT_DIRECTOR_PROMPT_ZH = (
     "你是专业的视频初剪导演。基于下面给出的已编目素材，生成一份精确到片段内 in/out 的"
     "分镜表，供用户照搬到剪辑软件。\n"
     "按【拍摄日期】分章：每个拍摄日期作为一个章节，chapter 字段直接填该日期（ISO 格式，"
@@ -59,15 +60,38 @@ DEFAULT_CUT_DIRECTOR_PROMPT = (
     "画面比例 {aspect}。{target}风格/节奏：{style}"
 )
 
+DEFAULT_CUT_DIRECTOR_PROMPT_EN = (
+    "You are a professional rough-cut editor. From the cataloged footage below, produce a shot list\n"
+    "with precise in/out points within each clip so the user can load it into their editing software.\n"
+    "Organize by shooting date: each date is a chapter (ISO format, e.g. 2026-04-25).\n"
+    "Order chapters chronologically; within each day, keep clips in shooting-time order — what happened first\n"
+    "comes first. The clip list is already sorted by capture time; preserve that order.\n"
+    "Use A-roll (with narration) as the narrative spine. Base A-roll cuts on transcript content;\n"
+    "set in/out at segment boundaries, not existing keyframes. Follow each A-roll with B-roll from the same scene/time.\n"
+    "For B-roll, pick a suitable window within its duration.\n"
+    "Use only clip_ids from the catalog — do not invent. Keep total duration close to target.\n"
+    "You **do not need every clip**: curate actively. Drop duplicates, filler, or weak shots;\n"
+    "for similar B-roll / burst photos from the same scene, pick only 1–2. Quality over quantity.\n"
+    "Aspect ratio: {aspect}. {target} Style/rhythm: {style}"
+)
+
 # Critic (task 28 Part B): a single review pass over the already-assembled plan.
 # It judges only *subjective* quality (rhythm, narrative flow, A/B-roll balance);
 # the duration check stays deterministic in Python. It names shooting dates to
 # redo, which the director re-runs through the same per-day merge mechanism.
-CRITIC_SYSTEM_PROMPT = (
+
+CRITIC_SYSTEM_PROMPT_ZH = (
     "你是资深视频剪辑指导，负责审片。只评判主观质量：节奏松紧、叙事是否连贯、"
     "A-roll 解说主线与 B-roll 空镜的配比、空镜衔接是否缺位。"
     "点名需要调整的【拍摄日期】并给出可执行建议；不要改时长（系统会另行校验）。"
     "只指出最关键的几处。"
+)
+
+CRITIC_SYSTEM_PROMPT_EN = (
+    "You are a senior video editor reviewing an assembled rough cut. Judge only subjective quality:\n"
+    "rhythm and pacing, narrative flow, A-roll / B-roll balance, whether coverage is missing.\n"
+    "Name shooting dates that need adjustment and give actionable suggestions. Do not change durations.\n"
+    "Flag only the most critical issues."
 )
 
 # ── Tool schemas (OpenAI function-calling format) ────────────────
@@ -178,6 +202,7 @@ class CutDirector:
         critic_enabled: bool = False,
         lean_token_budget: int = 50000,
         staged_token_budget: int = 40000,
+        ui_language: str = "zh",
     ) -> None:
         self._llm = llm
         self._retriever = retriever
@@ -188,6 +213,17 @@ class CutDirector:
         self._critic_enabled = critic_enabled
         self._lean_token_budget = lean_token_budget
         self._staged_token_budget = staged_token_budget
+        self._ui_language = ui_language
+
+    def _default_prompt(self) -> str:
+        """Return the default director prompt matching *ui_language*."""
+        return (DEFAULT_CUT_DIRECTOR_PROMPT_EN if self._ui_language == "en"
+                else DEFAULT_CUT_DIRECTOR_PROMPT_ZH)
+
+    def _critic_system_prompt(self) -> str:
+        """Return the critic system prompt matching *ui_language*."""
+        return (CRITIC_SYSTEM_PROMPT_EN if self._ui_language == "en"
+                else CRITIC_SYSTEM_PROMPT_ZH)
 
     # ── staged generation (primary path; reliable on local models) ──
 
@@ -217,27 +253,34 @@ class CutDirector:
 
         progress = on_progress or (lambda _s: None)
         partial = on_partial or (lambda _p: None)
+        lang = self._ui_language
 
-        progress("正在检索素材…")
+        progress("正在检索素材…" if lang == "zh" else "Searching footage…")
         clips = self._retriever.search_footage(
             date_from=request.date_from, date_to=request.date_to,
         )
         if not clips:
             return CutDirectorResult(
-                "没有在该日期范围找到已编目的素材。请确认素材已扫描入库，或调整日期范围。",
+                ("没有在该日期范围找到已编目的素材。请确认素材已扫描入库，或调整日期范围。"
+                 if lang == "zh"
+                 else "No cataloged footage in that date range. Check your scan or adjust the range."),
                 None,
             )
 
         groups: dict[str, list[Any]] = defaultdict(list)
+        no_date = "无日期" if lang == "zh" else "No date"
         for b in clips:
-            day = (getattr(b, "capture_time", None) or "")[:10] or "无日期"
+            day = (getattr(b, "capture_time", None) or "")[:10] or no_date
             groups[day].append(b)
         # Sort each day's clips by capture time so the context — and therefore the
         # shot order the model produces — follows the real shooting timeline.
         for day_clips in groups.values():
             day_clips.sort(key=lambda b: (getattr(b, "capture_time", None) or ""))
         dates = sorted(groups)
-        progress(f"找到 {len(clips)} 个片段、共 {len(dates)} 天，开始生成…")
+        progress(
+            f"找到 {len(clips)} 个片段、共 {len(dates)} 天，开始生成…"
+            if lang == "zh" else f"Found {len(clips)} clips across {len(dates)} days, generating…",
+        )
 
         cache: dict[int, ClipDetail] = {}
         per_day = self._per_day_target(request, len(dates))
@@ -251,21 +294,29 @@ class CutDirector:
         merged: dict[str, list[dict[str, Any]]] = {}
         if prior_plan is not None:
             for shot in prior_plan.shots:
-                key = shot.chapter or shot.clip_date or "无日期"
+                key = shot.chapter or shot.clip_date or no_date
                 merged.setdefault(key, []).append(self._shot_to_dict(shot))
 
         notes: list[str] = []
         failed: list[str] = []
         n_days = len(dates)
         for idx, day in enumerate(dates, 1):
-            progress(f"正在生成第 {idx}/{n_days} 天（{day}）· 本天 {len(groups[day])} 个片段")
+            progress(
+                f"正在生成第 {idx}/{n_days} 天（{day}）· 本天 {len(groups[day])} 个片段"
+                if lang == "zh" else f"Generating day {idx}/{n_days} ({day}) · {len(groups[day])} clips",
+            )
 
             def day_step(detail: str, _i: int = idx, _d: str = day) -> None:
-                progress(f"第 {_i}/{n_days} 天（{_d}）· {detail}")
+                progress(f"第 {_i}/{n_days} 天（{_d}）· {detail}" if lang == "zh"
+                         else f"Day {_i}/{n_days} ({_d}) · {detail}")
 
             def on_fallback(n: int = 0, _i: int = idx, _d: str = day) -> None:
-                extra = f"（带入 {n} 条已勘察画面）" if n else ""
-                progress(f"第 {_i}/{n_days} 天（{_d}）· 改用快速生成{extra}…")
+                extra_zh = f"（带入 {n} 条已勘察画面）" if n else ""
+                extra_en = f"(with {n} inspected frames)" if n else ""
+                progress(
+                    f"第 {_i}/{n_days} 天（{_d}）· 改用快速生成{extra_zh}…"
+                    if lang == "zh" else f"Day {_i}/{n_days} ({_d}) · Falling back to fast generation{extra_en}…",
+                )
 
             day_shots, day_note, vision_used = self._gen_one_day(
                 request, history, user_text, day, groups[day], per_day, cache, vision_used,
@@ -289,14 +340,19 @@ class CutDirector:
             # Surface completed dates immediately: emit the cumulative plan so the
             # UI can render finished days while the remaining ones generate.
             total_shots = sum(len(v) for v in merged.values())
-            progress(f"第 {idx}/{n_days} 天（{day}）完成 · 已选 {total_shots} 个镜头")
+            progress(
+                f"第 {idx}/{n_days} 天（{day}）完成 · 已选 {total_shots} 个镜头"
+                if lang == "zh" else f"Day {idx}/{n_days} ({day}) done · {total_shots} shots selected",
+            )
             partial(self._build_plan(
                 {"shots": self._flatten(merged), "note": " ".join(notes)}, request, cache,
             ))
 
         if not self._flatten(merged):
             return CutDirectorResult(
-                "生成分镜表失败（模型未返回有效结果），请重试或把需求说得更具体。", None,
+                ("生成分镜表失败（模型未返回有效结果），请重试或把需求说得更具体。"
+                 if lang == "zh" else "Shot list generation failed (no valid output). Retry or refine your request."),
+                None,
             )
 
         # Part B (task 28): an optional one-round critic over the assembled plan,
@@ -311,10 +367,13 @@ class CutDirector:
             {"shots": self._flatten(merged), "note": " ".join(notes)}, request, cache,
         )
         if not plan.shots:
-            return CutDirectorResult("模型没有选出可用片段，请重试或调整需求。", None)
-        text = "已生成初剪分镜表。"
+            return CutDirectorResult(
+                ("模型没有选出可用片段，请重试或调整需求。" if lang == "zh"
+                 else "No clips selected. Retry or adjust your request."), None)
+        text = "已生成初剪分镜表。" if lang == "zh" else "Rough-cut shot list generated."
         if failed:
-            text += f"（{('、').join(failed)} 这些日期未能生成，已跳过。）"
+            text += (f"（{('、').join(failed)} 这些日期未能生成，已跳过。)"
+                      if lang == "zh" else f" (dates {', '.join(failed)} failed and were skipped).")
         return CutDirectorResult(text, plan)
 
     # ── per-day generation + merge helpers (task 26/28) ──────────────
@@ -433,16 +492,18 @@ class CutDirector:
         Best-effort — a missing / unparseable critic reply, or a date with no
         footage, leaves the plan untouched. Returns the updated vision budget.
         """
-        progress("正在审片…")
+        lang = self._ui_language
+        progress("正在审片…" if lang == "zh" else "Reviewing cut…")
         for rev in self._critique(merged):
             day = str(rev.get("date") or "")
             # Only act on dates we still have footage (and a chapter) for.
             if day not in merged or day not in groups:
                 continue
-            progress(f"按审片意见重做 {day}…")
+            progress(f"按审片意见重做 {day}…" if lang == "zh" else f"Redoing {day} per critic feedback…")
             issue = str(rev.get("issue") or "")
             action = str(rev.get("action") or "")
-            crit_text = f"{user_text}\n\n[审片意见] {day}：{issue} → {action}"
+            crit_text = (f"{user_text}\n\n[审片意见] {day}：{issue} → {action}"
+                          if lang == "zh" else f"{user_text}\n\n[Critic feedback] {day}: {issue} → {action}")
             day_shots, day_note, vision_used = self._gen_one_day(
                 request, history, crit_text, day, groups[day], per_day, cache, vision_used,
             )
@@ -464,7 +525,7 @@ class CutDirector:
         from ..adapters._jsonparse import parse_json_object
 
         messages = [
-            {"role": "system", "content": CRITIC_SYSTEM_PROMPT},
+            {"role": "system", "content": self._critic_system_prompt()},
             {"role": "user", "content": self._plan_digest(merged)},
         ]
         raw = self._llm.complete(messages)
@@ -476,23 +537,34 @@ class CutDirector:
             return []
         return [r for r in revisions if isinstance(r, dict) and r.get("date")]
 
-    @staticmethod
-    def _plan_digest(merged: dict[str, list[dict[str, Any]]]) -> str:
+    def _plan_digest(self, merged: dict[str, list[dict[str, Any]]]) -> str:
         """Compact per-date shot summary the critic reviews (no timecodes math)."""
-        lines = ["以下是已拼好的初剪分镜表（按拍摄日期分章）："]
+        lang = self._ui_language
+        if lang == "zh":
+            header = "以下是已拼好的初剪分镜表（按拍摄日期分章）："
+            footer = (
+                "\n请审阅主观质量（节奏松紧、叙事是否连贯、A-roll 主线与 B-roll 空镜配比、"
+                "空镜是否缺位），只输出 JSON："
+                '{"revisions": [{"date": "YYYY-MM-DD", "issue": "问题", "action": "可执行的修改建议"}]}。'
+                "整体良好则 revisions 用空数组。"
+            )
+        else:
+            header = "Here is the assembled rough-cut shot list (organized by shooting date):"
+            footer = (
+                "\nReview subjective quality (rhythm, narrative flow, A-roll / B-roll balance, missing coverage).\n"
+                "Output only JSON: "
+                '{"revisions": [{"date": "YYYY-MM-DD", "issue": "issue", "action": "suggestion"}]}.'
+                "Use an empty array if overall fine."
+            )
+        lines = [header]
         for day in sorted(merged):
-            lines.append(f"【{day}】")
+            lines.append(f"【{day}】" if lang == "zh" else f"[{day}]")
             for i, s in enumerate(merged[day], 1):
                 dur = _as_float(s.get("out_s"), 0.0) - _as_float(s.get("in_s"), 0.0)
                 roll = str(s.get("roll") or "")
                 content = str(s.get("content") or "").replace("\n", " ")[:40]
                 lines.append(f"  {i}. {roll}-roll {dur:.0f}s {content}")
-        lines.append(
-            "\n请审阅主观质量（节奏松紧、叙事是否连贯、A-roll 主线与 B-roll 空镜配比、"
-            "空镜是否缺位），只输出 JSON："
-            '{"revisions": [{"date": "YYYY-MM-DD", "issue": "问题", "action": "可执行的修改建议"}]}。'
-            "整体良好则 revisions 用空数组。"
-        )
+        lines.append(footer)
         return "\n".join(lines)
 
     def _day_messages(
@@ -543,11 +615,13 @@ class CutDirector:
         )
         if findings:
             block = "\n".join(f"[{cid}] {desc}" for cid, desc in findings.items())
+            _lang = self._ui_language
             messages.append({
                 "role": "system",
                 "content": (
-                    "导演已现场勘察过以下 B-roll 画面，请优先据此判断其用途（而非仅凭标签）：\n"
-                    + block
+                    ("导演已现场勘察过以下 B-roll 画面，请优先据此判断其用途（而非仅凭标签）：\n"
+                     if _lang == "zh" else ("Director has already inspected the following B-roll frames — use these descriptions first instead of relying only on tags:\n"
+                                            if _lang == "en" else "\n")) + block
                 ),
             })
         raw = self._llm.complete(messages)
@@ -582,6 +656,7 @@ class CutDirector:
         *on_step* (if given) receives a short status string each time the worker
         looks at a clip, so the UI can show what it is doing right now.
         """
+        lang = self._ui_language
         step_cb = on_step or (lambda _s: None)
         findings: dict[int, str] = {}  # clip_id → inspect_broll description (for fallback reuse)
         messages = self._day_messages(
@@ -600,13 +675,14 @@ class CutDirector:
                 # use the tools and retry; only then fall back to staged.
                 salvaged = self._salvage_plan(step.content)
                 if salvaged is not None:
-                    step_cb("导演直接给出文字分镜，已采纳")
+                    step_cb("导演直接给出文字分镜，已采纳" if lang == "zh" else "Director gave a text shot list directly — accepted")
                     return salvaged, "", vision_used, findings
                 # Surface the prose so these no-tool rounds aren't invisible —
                 # otherwise it looks like the agent bailed right after the first
                 # clip, when really it replied in text (here's what it said).
                 reply = (step.content or "").strip().replace("\n", " ") or "（空回复）"
-                step_cb(f"导演未用工具、直接回了文字：{reply[:60]}")
+                step_cb(f"导演未用工具、直接回了文字：{reply[:60]}"
+                        if lang == "zh" else f"Director replied in text without tools: {reply[:60]}")
                 if prose_nudged:
                     return None, "", vision_used, findings
                 prose_nudged = True
@@ -614,9 +690,12 @@ class CutDirector:
                 messages.append({
                     "role": "system",
                     "content": (
-                        "不要用纯文字回复。请**用工具**推进：用 get_clip_detail(clip_id) "
-                        "查看标了 [有台词] 的 A-roll 片段台词，或直接调用 emit_plan 工具"
-                        "提交这一天的分镜表（shots 放在工具参数里）。"
+                        ("不要用纯文字回复。请**用工具**推进：用 get_clip_detail(clip_id) "
+                         "查看标了 [有台词] 的 A-roll 片段台词，或直接调用 emit_plan 工具"
+                         "提交这一天的分镜表（shots 放在工具参数里）。")
+                        if lang == "zh" else ("Do not reply in plain text. **Use tools**: call get_clip_detail(clip_id) "
+                         "to read transcripts for A-roll clips marked [has transcript], or call emit_plan directly"
+                         "to submit today's shot list (shots in tool arguments).")
                     ),
                 })
                 continue
@@ -638,7 +717,8 @@ class CutDirector:
             # thinking"), trimmed — only when it actually wrote something.
             reasoning = (step.content or "").strip().replace("\n", " ")
             if reasoning:
-                step_cb(f"导演思路：{reasoning[:50]}")
+                step_cb(f"导演思路：{reasoning[:50]}" if lang == "zh"
+                        else f"Director thinking: {reasoning[:50]}")
 
             emitted: list[dict[str, Any]] | None = None
             note = ""
@@ -656,22 +736,32 @@ class CutDirector:
                 if key in seen:
                     self._append_tool_result(
                         messages, tc.id,
-                        "（你已用相同参数调用过该工具，结果同上；请改用已有信息，或直接调用 emit_plan。）",
+                        ("（你已用相同参数调用过该工具，结果同上；请改用已有信息，或直接调用 emit_plan。）"
+                         if lang == "zh" else ("You already called this tool with the same arguments — use what you have, "
+                                                "or call emit_plan directly."))
                     )
                     continue
                 seen.add(key)
                 if tc.name == "get_clip_detail":
                     _cid = _as_int(tc.arguments.get("clip_id"))
                     _d = self._fetch_detail(_cid, cache) if _cid is not None else None
-                    # get_clip_detail returns台词 for A-roll but stored画面描述/切点 for
-                    # B-roll (which has no transcript) — label by roll, not always "台词".
-                    _what = "台词" if (_d is not None and _d.roll == "a") else "画面信息"
-                    step_cb(f"查看片段 {self._label(_cid, cache)} 的{_what}")
+                    # get_clip_detail returns transcripts for A-roll but stored visual description/cut points
+                    # for B-roll (which has no transcript) — label by roll, not always "transcript".
+                    _what = (
+                        ("台词" if (_d is not None and _d.roll == "a") else "画面信息")
+                        if lang == "zh"
+                        else ("transcript" if (_d is not None and _d.roll == "a") else "visual info")
+                    )
+                    step_cb(
+                        f"查看片段 {self._label(_cid, cache)} 的{_what}" if lang == "zh"
+                        else f"Checking {self._label(_cid, cache)} {_what}"
+                    )
                     self._append_tool_result(
                         messages, tc.id, self._do_detail(tc.arguments, cache),
                     )
                 elif tc.name == "inspect_broll":
-                    step_cb(f"查看片段 {self._label(_as_int(tc.arguments.get('clip_id')), cache)} 的画面")
+                    step_cb(f"查看片段 {self._label(_as_int(tc.arguments.get('clip_id')), cache)} 的画面" if lang == "zh"
+                            else f"Inspecting frames for {self._label(_as_int(tc.arguments.get('clip_id')), cache)}")
                     text, used = self._do_inspect(tc.arguments, vision_used)
                     # vision_used only increments on a real look (not an error/
                     # budget-exhausted string) — use that as the success signal to
@@ -693,7 +783,9 @@ class CutDirector:
                 nudged = True
                 messages.append({
                     "role": "system",
-                    "content": "你已了解足够。现在**必须**调用 emit_plan 给出这一天的最终分镜表，不要再查看素材。",
+                    "content": ("你已了解足够。现在**必须**调用 emit_plan 给出这一天的最终分镜表，不要再查看素材。"
+                               if lang == "zh" else ("You have enough context. **Call emit_plan now** to finalize today's shot list."
+                                                      " Do not inspect more clips."))
                 })
 
         return None, "", vision_used, findings
@@ -707,17 +799,21 @@ class CutDirector:
             return None
         return request.target_min_s / n_days, request.target_max_s / n_days
 
-    @staticmethod
     def _day_user_prompt(
-        user_text: str, day: str, context: str, per_day: tuple[float, float] | None,
+        self, user_text: str, day: str, context: str, per_day: tuple[float, float] | None,
         *, agent: bool = False,
     ) -> str:
-        budget = ""
+        lang = self._ui_language
         if per_day is not None:
-            budget = f"\n这一天的目标时长约 {per_day[0]/60:.1f}–{per_day[1]/60:.1f} 分钟。"
+            budget = (f"\n这一天的目标时长约 {per_day[0]/60:.1f}–{per_day[1]/60:.1f} 分钟。"
+                       if lang == "zh" else f"\nTarget duration for this day: ~{per_day[0]/60:.1f}–{per_day[1]/60:.1f} min.")
+        else:
+            budget = ""
         head = (
             f"{user_text}\n\n本次只为【{day}】这一天生成分镜，chapter 一律填 \"{day}\"。{budget}\n\n"
             f"该日期可用素材（只能用下列 clip_id）：\n{context}\n\n"
+            if lang == "zh" else (f"{user_text}\n\nGenerate shots only for {day}, chapter = \"{day}\".{budget}\n\n"
+                                   f"Available clips for this date (use only these clip_ids):\n{context}\n\n")
         )
         if agent:
             return head + (
@@ -726,11 +822,22 @@ class CutDirector:
                 "请**只通过工具推进**：用 get_clip_detail 读取你想用的 A-roll 台词、"
                 "必要时用 inspect_broll 现场看 B-roll 画面（尽量少用），"
                 "**最后必须调用 emit_plan 工具**给出这一天的最终分镜表，不要用纯文字回答。"
+                if lang == "zh" else (
+                    "The list above gives only summaries for A-roll. For clips marked [has transcript],\n"
+                    "**use get_clip_detail(clip_id) to fetch full transcripts**, then set in/out at segment boundaries.\n"
+                    "**Use tools only**: get_clip_detail for A-roll transcripts, inspect_broll to check B-roll frames (sparingly),\n"
+                    "and **finally call emit_plan** to submit today's shot list. Do not reply in plain text."
+                )
             )
         return head + (
             "请只输出 JSON，格式：\n"
             '{"note": "可选备注", "shots": [{"clip_id": 整数, "roll": "a"或"b", '
             '"in_s": 数字, "out_s": 数字, "content": "台词或画面", "rationale": "用途理由"}]}'
+            if lang == "zh" else (
+                'Output only JSON, format:\n'
+                '{"note": "optional note", "shots": [{"clip_id": int, "roll": "a" or "b",'
+                '"in_s": number, "out_s": number, "content": "text or visual", "rationale": "reason"}]}'
+            )
         )
 
     def _build_context(
@@ -739,19 +846,23 @@ class CutDirector:
     ) -> str:
         """Compact text catalog of candidate clips, capped by real token count.
 
+
         *include_transcripts* — when True (staged mode) each A-roll clip's timed
         transcript segments are inlined, since the staged path has no tools to
         fetch them. In **agent** mode it's False: the catalog stays lean (one
-        line per clip, plus an `[有台词]` marker) so all clips fit even on a busy
-        day, and the agent reads台词 on demand via ``get_clip_detail`` — a huge
+        line per clip, plus an `[has transcript]` marker) so all clips fit even on a busy
+        day, and the agent reads transcripts on demand via ``get_clip_detail`` — a huge
+
         truncated prompt was the reason it bailed to prose on big days.
 
         The catalog is built in full, then bounded by *token_budget*: we ask the
         server (``count_tokens``) for the catalog's exact token count — the same
         tokenizer the model serves with — and only trim when it actually exceeds
         the budget, cutting by the measured chars/token ratio. If counting is
+
         unavailable, fall back to a character estimate (``_FALLBACK_CHARS_PER_TOKEN``).
         """
+        lang = self._ui_language
         lines: list[str] = []
         for b in clips:
             dur = f"{b.duration_s:.0f}s" if b.duration_s else "?"
@@ -759,8 +870,8 @@ class CutDirector:
             tags = ",".join(b.tags[:6]) if b.tags else ""
             # Full timestamp (date + time of day) so the model can order shots by
             # the real shooting timeline within a day.
-            when = (b.capture_time or "").replace("T", " ")[:19] or "无拍摄时间"
-            mark = " [有台词]" if (b.roll == "a" and b.has_transcript) else ""
+            when = (b.capture_time or "").replace("T", " ")[:19] or ("无拍摄时间" if lang == "zh" else "no capture time")
+            mark = (" [有台词]" if lang == "zh" else " [has transcript]") if (b.roll == "a" and b.has_transcript) else ""
             head = f"[{b.clip_id}] {when} {b.roll}-roll dur={dur}{mark} {desc} tags={tags}"
             lines.append(head)
             if include_transcripts and b.roll == "a" and b.has_transcript:
@@ -790,21 +901,24 @@ class CutDirector:
             used += len(line)
         return "\n".join(kept)
 
-    @staticmethod
-    def _staged_system_prompt(request: RoughCutRequest) -> str:
+    def _staged_system_prompt(self, request: RoughCutRequest) -> str:
         from ..config import load_cut_director_prompt
 
-        template = load_cut_director_prompt() or DEFAULT_CUT_DIRECTOR_PROMPT
-        target = ""
+        template = load_cut_director_prompt() or self._default_prompt()
+        lang = self._ui_language
         if request.target_min_s is not None and request.target_max_s is not None:
-            target = f"目标时长 {request.target_min_s/60:.0f}–{request.target_max_s/60:.0f} 分钟。"
+            target = (f"目标时长 {request.target_min_s/60:.0f}–{request.target_max_s/60:.0f} 分钟。"
+                       if lang == "zh" else f"Target duration: {request.target_min_s/60:.0f}–{request.target_max_s/60:.0f} min.")
+        else:
+            target = ""
+        style_fallback = "（自行把握）" if lang == "zh" else "(at your discretion)"
         # Plain replace (not str.format) so stray braces in a custom prompt can't
         # raise; unknown placeholders are simply left as-is.
         return (
             template
             .replace("{aspect}", request.aspect_ratio)
             .replace("{target}", target)
-            .replace("{style}", request.style_notes or "（自行把握）")
+            .replace("{style}", request.style_notes or style_fallback)
         )
 
     # ── public entry (autonomous tool loop; advanced/experimental) ──
@@ -825,8 +939,11 @@ class CutDirector:
         clip_cache: dict[int, ClipDetail] = {}
         vision_used = 0
         searches = 0          # how many search_footage calls were made
-        clips_seen = 0        # max clips any single search returned
-        nudged = False        # whether we force-pushed an emit_plan reminder
+
+        clips_seen = 0          # max clips any single search returned
+        nudged = False          # whether we force-pushed an emit_plan reminder
+        lang = self._ui_language
+
         last_plan: CutPlan | None = None
         reprompted = False
 
@@ -895,26 +1012,38 @@ class CutDirector:
                 messages.append({
                     "role": "system",
                     "content": (
-                        "你已检索足够。现在**必须**调用 emit_plan 给出最终分镜表，"
-                        "用目前掌握的素材尽力而为，不要再检索。"
-                        if clips_seen > 0
-                        else "多次检索未找到素材。请直接用文字回复用户：该日期范围内没有"
-                        "已编目的素材，提示其确认素材已扫描入库或调整日期范围。"
+                        ("你已检索足够。现在**必须**调用 emit_plan 给出最终分镜表，"
+                         "用目前掌握的素材尽力而为，不要再检索。")
+                        if lang == "zh" else (
+                            ("You have searched enough. **Call emit_plan now** to finalize the shot list, "
+                             "doing your best with what you have. Do not search further.")
+                        ) if clips_seen > 0 else (
+                            ("多次检索未找到素材。请直接用文字回复用户：该日期范围内没有"
+                             "已编目的素材，提示其确认素材已扫描入库或调整日期范围。")
+                            if lang == "zh" else (
+                                ("No results from multiple searches. Reply directly to the user: no cataloged footage "
+                                 "in this date range; suggest they scan and add clips or adjust the range.")
+                            )
+                        )
                     ),
                 })
 
         # Round cap hit — finalize with the best plan we have + a diagnostic note.
         if last_plan is not None:
-            note = "（已返回当前分镜草稿。）"
+            note = "（已返回当前分镜草稿。）" if lang == "zh" else "(Returned current shot list draft.)"
         elif searches > 0 and clips_seen == 0:
             note = (
-                "没有在该日期范围找到已编目的素材。请确认素材已扫描入库，"
-                "或调整日期范围后重试。"
+                ("没有在该日期范围找到已编目的素材。请确认素材已扫描入库，"
+                 "或调整日期范围后重试。") if lang == "zh" else (
+                    "No cataloged footage found in this date range. Confirm clips are scanned and added, or adjust the range.")
             )
         else:
             note = (
-                "尝试多次仍未能生成分镜表（本地模型的工具调用可能不稳定）。"
-                "请重试，或把需求说得更具体一些。"
+                ("尝试多次仍未能生成分镜表（本地模型的工具调用可能不稳定）。"
+                 "请重试，或把需求说得更具体一些。") if lang == "zh" else (
+                    ("Multiple attempts still failed to produce a shot list — local model tool calls may be unstable. "
+                     "Retry or provide more specific requirements.")
+                )
             )
         return CutDirectorResult(note, last_plan)
 
@@ -932,8 +1061,8 @@ class CutDirector:
         if not briefs:
             # Steer the model away from repeating the same empty search.
             payload += (
-                "  // 无结果：不要重复相同筛选；放宽日期/类型，"
-                "或若确无素材则直接用文字告知用户先扫描入库。"
+                "  // No results: do not repeat the same filters; broaden date/type, or"
+                " if there truly is no footage, tell the user to scan and add clips first."
             )
         return payload, len(briefs)
 
@@ -1051,25 +1180,45 @@ class CutDirector:
     def _append_tool_result(messages: list[dict[str, Any]], call_id: str, content: str) -> None:
         messages.append({"role": "tool", "tool_call_id": call_id, "content": content})
 
-    @staticmethod
-    def _system_prompt(request: RoughCutRequest) -> str:
+
+    def _system_prompt(self, request: RoughCutRequest) -> str:
+        lang = self._ui_language
+        if lang == "zh":
+            target = ""
+            if request.target_min_s is not None and request.target_max_s is not None:
+                target = f"目标时长 {request.target_min_s/60:.0f}–{request.target_max_s/60:.0f} 分钟。"
+            date_range = ""
+            if request.date_from or request.date_to:
+                date_range = f"素材日期范围 {request.date_from or '不限'} 到 {request.date_to or '不限'}。"
+            return (
+                "你是专业的视频初剪导演。基于已编目的素材库，为用户生成一份精确到片段内 in/out 的"
+                "文字分镜表，供其照搬到剪辑软件。\n"
+                "结构：以 A-roll（有解说）的句子作为叙事主线，再为每段配合适的 B-roll 空镜插空。\n"
+                "A-roll 选段以 transcript（台词内容）为主要依据，in/out 落在 segment 边界上，不要依赖已有关键帧切点。\n"
+                "工具：search_footage 检索素材，get_clip_detail 取 transcript 分段（A-roll 的"
+                " in/out 应落在 segment 边界上），inspect_broll 仅在文本元数据不足时现场看 B-roll 画面（尽量少用、"
+                "可批量），最后用 emit_plan 给出最终分镜表。\n"
+                "不要自己计算总时长，系统会校验。只使用素材库里真实存在的 clip。\n"
+                f"画面比例 {request.aspect_ratio}。{target}{date_range}\n"
+            )
         target = ""
         if request.target_min_s is not None and request.target_max_s is not None:
-            target = f"目标时长 {request.target_min_s/60:.0f}–{request.target_max_s/60:.0f} 分钟。"
+            target = f"Target duration: {request.target_min_s/60:.0f}–{request.target_max_s/60:.0f} min."
         date_range = ""
         if request.date_from or request.date_to:
-            date_range = f"素材日期范围 {request.date_from or '不限'} 到 {request.date_to or '不限'}。"
+            df = request.date_from or "unlimited"
+            dt = request.date_to or "unlimited"
+            date_range = f"Footage range: {df} to {dt}. "
         return (
-            "你是专业的视频初剪导演。基于已编目的素材库，为用户生成一份精确到片段内 in/out 的"
-            "文字分镜表，供其照搬到剪辑软件。\n"
-            "结构：以 A-roll（有解说）的句子作为叙事主线，再为每段配合适的 B-roll 空镜插空。\n"
-            "A-roll 选段以 transcript（台词内容）为主要依据，in/out 落在 segment 边界上，不要依赖已有关键帧切点。\n"
-            "工具：search_footage 检索素材，get_clip_detail 取 transcript 分段（A-roll 的"
-            " in/out 应落在 segment 边界上），inspect_broll 仅在文本元数据不足时现场看 B-roll 画面（尽量少用、"
-            "可批量），最后用 emit_plan 给出最终分镜表。\n"
-            "不要自己计算总时长，系统会校验。只使用素材库里真实存在的 clip。\n"
-            f"画面比例 {request.aspect_ratio}。{target}{date_range}\n"
-            f"风格/节奏：{request.style_notes or '（用户未指定，自行把握）'}"
+            "You are a professional rough-cut editor. From the cataloged footage, produce an ordered\n"
+            "shot list with precise in/out points for the user to load into their editing software.\n"
+            "Structure: A-roll (with narration) forms the narrative spine, with B-roll coverage inserted.\n"
+            "Base A-roll cuts on transcript content; set in/out at segment boundaries, not existing keyframes.\n"
+            "Tools: search_footage to find clips, get_clip_detail for transcript segments,\n"
+            "inspect_broll only when text metadata is insufficient (sparingly, batchable),\n"
+            "finally emit_plan to submit the shot list.\n"
+            "Do not compute total duration yourself — the system checks it. Use only real clips from the catalog.\n"
+            f"Aspect ratio: {request.aspect_ratio}. {target}{date_range}"
         )
 
 

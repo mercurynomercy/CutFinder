@@ -245,8 +245,9 @@ def _build_into(ctx: LibraryContext, library_path: Union[str, Path]) -> None:
         critic_enabled=prefs.cut_critic_enabled,
         lean_token_budget=prefs.cut_lean_token_budget,
         staged_token_budget=prefs.cut_staged_token_budget,
+        ui_language=prefs.ui_language,
     )
-    cutplan_service = CutPlanService(cut_store, cut_director)
+    cutplan_service = CutPlanService(cut_store, cut_director, ui_language=prefs.ui_language)
 
     # When the work queue drains, unload the in-process models (whisper +
     # demucs) so they stop occupying RAM while idle. They reload lazily on
@@ -273,6 +274,7 @@ def _build_into(ctx: LibraryContext, library_path: Union[str, Path]) -> None:
     ctx.orchestrator = orchestrator
     ctx.worker_queue = worker_queue
     ctx.cut_store = cut_store
+    ctx.prefs = config.prefs  # per-library prefs (incl. ui_language) for route access
 
 
 async def rebind_library(ctx: LibraryContext, library_path: Union[str, Path]) -> None:

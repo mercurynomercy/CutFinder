@@ -114,6 +114,9 @@ export interface SettingsPrefs {
   vad_threshold: number
   vocal_separation: boolean
   output_language: 'zh' | 'en'
+  // UI interface language — per-device (one value for the whole machine). Drives
+  // which default director prompt is shown and used, as well as progress messages.
+  ui_language?: 'zh' | 'en'
   keyframe_count: number
   keyframe_auto: boolean
   cut_director_mode?: 'agent' | 'staged'
@@ -168,6 +171,7 @@ export interface UpdateSettingsBody {
   vad_threshold?: number
   vocal_separation?: boolean
   output_language?: 'zh' | 'en'
+  ui_language?: 'zh' | 'en'
   keyframe_count?: number
   keyframe_auto?: boolean
   cut_director_mode?: 'agent' | 'staged'

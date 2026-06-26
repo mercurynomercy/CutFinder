@@ -85,7 +85,7 @@ def test_aroll_spine_plus_broll_finalizes() -> None:
         ]})]),
     ])
     retr = FakeRetriever([ClipBrief(clip_id=1, roll="a")], _details())
-    director = CutDirector(llm, retr, FakeInspector())
+    director = CutDirector(llm, retr, FakeInspector(), ui_language="zh")
 
     result = director.run(RoughCutRequest(date_from="2026-04-25"), [], "剪一条开场")
 
@@ -718,3 +718,58 @@ def test_history_is_included_in_messages() -> None:
     assert "第一轮需求" in contents
     assert "第一版分镜" in contents
     assert "第三段太长" in contents
+
+
+# ── i18n: bilingual output (task 29) ───────────────────────────
+
+def test_fallback_message_is_english_when_ui_language_en() -> None:
+    llm = FakeLLM([AgentStep(tool_calls=[_tc("search_footage", {})]) for _ in range(5)])
+    director = CutDirector(llm, FakeRetriever([], {}), max_tool_rounds=3, ui_language="en")
+    result = director.run(RoughCutRequest(), [], "go")
+    assert result.plan is None
+    # English fallback: mentions missing cataloged footage.
+    assert "cataloged footage" in result.assistant_text.lower()
+
+
+def test_fallback_message_is_chinese_by_default() -> None:
+    llm = FakeLLM([AgentStep(tool_calls=[_tc("search_footage", {})]) for _ in range(5)])
+    director = CutDirector(llm, FakeRetriever([], {}), max_tool_rounds=3)
+    result = director.run(RoughCutRequest(), [], "go")
+    assert result.plan is None
+    # Default Chinese fallback.
+    assert "素材" in result.assistant_text
+
+
+def test_progress_log_english_on_fallback() -> None:
+    # Prose twice → bail to staged; fallback line should appear in English.
+    llm = FakeAgentLLM(
+        [AgentStep(content="嗯"), AgentStep(content="还在想")],
+    )
+    briefs = [ClipBrief(clip_id=1, roll="a", has_transcript=True, capture_time="2026-04-25T09:00:00")]
+    director = CutDirector(llm, FakeRetriever(briefs, _details()), ui_language="en")
+    progress_log: list[str] = []
+    director.generate(RoughCutRequest(date_from="2026-04-25"), [], "go", on_progress=progress_log.append)
+    # English prose reply line should appear.
+    assert any("director replied in text" in p.lower() for p in progress_log) or \
+        any("no valid shots" in p.lower() for p in progress_log)
+
+
+def test_build_context_english_markers() -> None:
+    cache: dict[int, ClipDetail] = {}
+    clips = [ClipBrief(clip_id=1, roll="a", has_transcript=True, capture_time="2026-04-25T09:00:00")]
+    director = CutDirector(FakeAgentLLM([]), FakeRetriever(clips, _details()), ui_language="en")
+    out = director._build_context(clips, cache, include_transcripts=False)
+    # English marker replaces Chinese "[有台词]".
+    assert "[has transcript]" in out
+
+
+def test_default_prompt_is_english() -> None:
+    director = CutDirector(FakeCompleteLLM("{}"), FakeRetriever([], []), ui_language="en")
+    prompt = director._default_prompt()
+    assert "rough-cut editor" in prompt.lower() or "professional rough-cut" in prompt.lower()
+
+
+def test_default_prompt_is_chinese_by_default() -> None:
+    director = CutDirector(FakeCompleteLLM("{}"), FakeRetriever([], []))
+    prompt = director._default_prompt()
+    assert "初剪" in prompt or "粗剪" in prompt
