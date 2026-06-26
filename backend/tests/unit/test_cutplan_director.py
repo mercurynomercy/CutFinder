@@ -85,7 +85,7 @@ def test_aroll_spine_plus_broll_finalizes() -> None:
         ]})]),
     ])
     retr = FakeRetriever([ClipBrief(clip_id=1, roll="a")], _details())
-    director = CutDirector(llm, retr, FakeInspector())
+    director = CutDirector(llm, retr, FakeInspector(), ui_language="zh")
 
     result = director.run(RoughCutRequest(date_from="2026-04-25"), [], "剪一条开场")
 
@@ -329,6 +329,103 @@ def test_generate_fills_clip_date_and_uses_custom_prompt(
     assert "风格=轻快" in system                        # {style} substituted
 
 
+# ── per-day mini-agent (mode="agent", task 26) ──────────────────
+
+class FakeAgentLLM:
+    """run() pops scripted AgentSteps; complete() returns canned JSON (fallback)."""
+
+    def __init__(self, steps: list[AgentStep], raw: str = "{}") -> None:
+        self._steps = steps
+        self.raw = raw
+        self.run_calls = 0
+        self.complete_calls = 0
+        self.complete_msgs: list[list[dict[str, Any]]] = []
+
+    def run(self, messages: list[dict[str, Any]], tools: list[dict[str, Any]]) -> AgentStep:
+        self.run_calls += 1
+        self.tools_seen = tools
+        return self._steps.pop(0) if self._steps else AgentStep(content="done")
+
+    def complete(self, messages: list[dict[str, Any]]) -> str:
+        self.complete_calls += 1
+        self.complete_msgs.append([dict(m) for m in messages])
+        return self.raw
+
+    def count_tokens(self, text: str) -> int:
+        # Deterministic stand-in for OMLX count_tokens: ~2 chars per token.
+        self.count_calls = getattr(self, "count_calls", 0) + 1
+        return (len(text) + 1) // 2
+
+
+def test_generate_agent_mode_converges_via_tool_loop() -> None:
+    # Day worker deep-dives one A-roll (get_clip_detail) then emit_plan.
+    llm = FakeAgentLLM([
+        AgentStep(tool_calls=[_tc("get_clip_detail", {"clip_id": 1})]),
+        AgentStep(content="搞定", tool_calls=[_tc("emit_plan", {"shots": [
+            {"clip_id": 1, "roll": "a", "in_s": 0, "out_s": 12, "content": "开场白"},
+        ]})]),
+    ])
+    briefs = [ClipBrief(clip_id=1, roll="a", has_transcript=True, capture_time="2026-04-25T09:00:00")]
+    director = CutDirector(llm, FakeRetriever(briefs, _details()))  # default mode="agent"
+    result = director.generate(RoughCutRequest(date_from="2026-04-25"), [], "剪一条")
+
+    assert result.plan is not None
+    assert result.plan.total_s == 12.0
+    assert result.plan.chapters == ["2026-04-25"]
+    assert llm.complete_calls == 0  # converged via tools, no staged fall back
+    # Worker is not given search_footage (only detail / inspect / emit).
+    assert {t["function"]["name"] for t in llm.tools_seen} == {
+        "get_clip_detail", "inspect_broll", "emit_plan",
+    }
+
+
+def test_generate_agent_falls_back_to_staged_on_nonconvergence() -> None:
+    # run() never emits a plan (keeps inspecting) → round cap → staged complete().
+    looping = [AgentStep(tool_calls=[_tc("get_clip_detail", {"clip_id": 1})]) for _ in range(50)]
+    raw = '{"shots": [{"clip_id": 1, "roll": "a", "in_s": 0, "out_s": 12}]}'
+    llm = FakeAgentLLM(looping, raw=raw)
+    briefs = [ClipBrief(clip_id=1, roll="a", has_transcript=True, capture_time="2026-04-25T09:00:00")]
+    director = CutDirector(llm, FakeRetriever(briefs, _details()), max_tool_rounds=3)
+    result = director.generate(RoughCutRequest(date_from="2026-04-25"), [], "剪一条")
+
+    assert llm.run_calls == 3          # hit the per-day round cap
+    assert llm.complete_calls == 1     # then fell back to staged JSON for the day
+    assert result.plan is not None
+    assert result.plan.total_s == 12.0
+
+
+def test_run_day_dedups_repeated_tool_calls() -> None:
+    # Model inspects the same B-roll twice (hallucinated repeat) → the second is
+    # short-circuited by the dedup guard, not re-executed (inspector hit once).
+    inspector = FakeInspector()
+    llm = FakeAgentLLM([
+        AgentStep(tool_calls=[_tc("inspect_broll", {"clip_id": 2})]),
+        AgentStep(tool_calls=[_tc("inspect_broll", {"clip_id": 2})]),  # identical → deduped
+        AgentStep(content="ok", tool_calls=[_tc("emit_plan", {"shots": [
+            {"clip_id": 2, "roll": "b", "in_s": 0, "out_s": 6},
+        ]})]),
+    ])
+    briefs = [ClipBrief(clip_id=2, roll="b", capture_time="2026-04-25T09:00:00")]
+    director = CutDirector(llm, FakeRetriever(briefs, _details()), inspector, vision_budget=5)
+    result = director.generate(RoughCutRequest(date_from="2026-04-25"), [], "剪一条")
+
+    assert result.plan is not None
+    assert inspector.count == 1  # second identical inspect_broll deduped, not re-run
+    assert llm.complete_calls == 0
+
+
+def test_generate_staged_mode_skips_tool_loop() -> None:
+    raw = '{"shots": [{"clip_id": 1, "roll": "a", "in_s": 0, "out_s": 12}]}'
+    llm = FakeAgentLLM([], raw=raw)
+    briefs = [ClipBrief(clip_id=1, roll="a", has_transcript=True, capture_time="2026-04-25T09:00:00")]
+    director = CutDirector(llm, FakeRetriever(briefs, _details()), mode="staged")
+    result = director.generate(RoughCutRequest(date_from="2026-04-25"), [], "剪一条")
+
+    assert llm.run_calls == 0          # staged mode never enters the tool loop
+    assert llm.complete_calls == 1
+    assert result.plan is not None
+
+
 def test_generate_no_footage_returns_scan_hint() -> None:
     director = CutDirector(FakeCompleteLLM("{}"), FakeRetriever([], {}))
     result = director.generate(RoughCutRequest(date_from="2026-04-25"), [], "go")
@@ -344,6 +441,259 @@ def test_generate_bad_json_returns_retry_message() -> None:
     result = director.generate(RoughCutRequest(), [], "go")
     assert result.plan is None
     assert "重试" in result.assistant_text or "失败" in result.assistant_text
+
+
+# ── prose recovery + lean agent context (busy-day fix) ──────────
+
+def test_run_day_nudges_once_on_prose_then_emits() -> None:
+    # First reply is prose (no tool call) → nudged, NOT bailed; second emits.
+    llm = FakeAgentLLM([
+        AgentStep(content="我先看看这天的素材"),  # no tool_calls
+        AgentStep(tool_calls=[_tc("emit_plan", {"shots": [
+            {"clip_id": 1, "roll": "a", "in_s": 0, "out_s": 12},
+        ]})]),
+    ])
+    briefs = [ClipBrief(clip_id=1, roll="a", has_transcript=True, capture_time="2026-04-25T09:00:00")]
+    director = CutDirector(llm, FakeRetriever(briefs, _details()))
+    result = director.generate(RoughCutRequest(date_from="2026-04-25"), [], "剪一条")
+    assert result.plan is not None
+    assert result.plan.total_s == 12.0
+    assert llm.run_calls == 2          # one prose + one retry after the nudge
+    assert llm.complete_calls == 0     # converged via tools, no staged fall back
+
+
+def test_run_day_salvages_prose_embedded_plan() -> None:
+    # Model "answers directly" with plan JSON in prose (no emit_plan call) → taken.
+    llm = FakeAgentLLM([
+        AgentStep(content='{"shots": [{"clip_id": 1, "roll": "a", "in_s": 0, "out_s": 12}]}'),
+    ])
+    briefs = [ClipBrief(clip_id=1, roll="a", has_transcript=True, capture_time="2026-04-25T09:00:00")]
+    director = CutDirector(llm, FakeRetriever(briefs, _details()))
+    result = director.generate(RoughCutRequest(date_from="2026-04-25"), [], "剪一条")
+    assert result.plan is not None
+    assert result.plan.total_s == 12.0
+    assert llm.run_calls == 1          # accepted the very first prose reply
+    assert llm.complete_calls == 0     # no fall back
+
+
+def test_run_day_falls_back_after_repeated_prose() -> None:
+    # Prose, nudge, prose again → give up the agent loop and use staged JSON.
+    raw = '{"shots": [{"clip_id": 1, "roll": "a", "in_s": 0, "out_s": 12}]}'
+    llm = FakeAgentLLM([AgentStep(content="嗯"), AgentStep(content="还在想")], raw=raw)
+    briefs = [ClipBrief(clip_id=1, roll="a", has_transcript=True, capture_time="2026-04-25T09:00:00")]
+    director = CutDirector(llm, FakeRetriever(briefs, _details()))
+    progress_log: list[str] = []
+    result = director.generate(
+        RoughCutRequest(date_from="2026-04-25"), [], "剪一条",
+        on_progress=progress_log.append,
+    )
+    assert llm.run_calls == 2          # prose + one nudge-retry, then bail
+    assert llm.complete_calls == 1     # fell back to staged
+    assert result.plan is not None
+    # The prose rounds are surfaced (not invisible) so the UI shows why it bailed.
+    assert any("直接回了文字" in p and "嗯" in p for p in progress_log)
+
+
+def test_fallback_reuses_inspect_findings() -> None:
+    # Agent inspects a B-roll (spends vision budget) then can't converge (prose
+    # twice) → fallback. The gathered vision description must be carried into the
+    # staged prompt, and the fallback progress line reports how many were carried.
+    inspector = FakeInspector()
+    llm = FakeAgentLLM(
+        [
+            AgentStep(tool_calls=[_tc("inspect_broll", {"clip_id": 2})]),
+            AgentStep(content="嗯"),       # prose → nudge
+            AgentStep(content="还在想"),    # prose again → bail to staged
+        ],
+        raw='{"shots": [{"clip_id": 2, "roll": "b", "in_s": 0, "out_s": 6}]}',
+    )
+    briefs = [ClipBrief(clip_id=2, roll="b", capture_time="2026-04-25T09:00:00")]
+    director = CutDirector(llm, FakeRetriever(briefs, _details()), inspector, vision_budget=5)
+    progress_log: list[str] = []
+    result = director.generate(
+        RoughCutRequest(date_from="2026-04-25"), [], "剪一条",
+        on_progress=progress_log.append,
+    )
+
+    assert result.plan is not None
+    assert llm.complete_calls == 1          # fell back to staged
+    assert inspector.count == 1             # the one real look
+    staged_blob = "\n".join(str(m.get("content", "")) for m in llm.complete_msgs[0])
+    assert "导演已现场勘察" in staged_blob   # findings block injected
+    assert "clip 2 visuals" in staged_blob  # the actual description carried over
+    assert any("带入 1 条已勘察画面" in p for p in progress_log)
+
+
+def test_fallback_without_findings_injects_no_block() -> None:
+    # No inspect_broll before falling back → staged prompt is unchanged (no block).
+    llm = FakeAgentLLM(
+        [AgentStep(content="嗯"), AgentStep(content="还在想")],
+        raw='{"shots": [{"clip_id": 1, "roll": "a", "in_s": 0, "out_s": 12}]}',
+    )
+    briefs = [ClipBrief(clip_id=1, roll="a", has_transcript=True, capture_time="2026-04-25T09:00:00")]
+    director = CutDirector(llm, FakeRetriever(briefs, _details()))
+    result = director.generate(RoughCutRequest(date_from="2026-04-25"), [], "剪一条")
+
+    assert result.plan is not None
+    assert llm.complete_calls == 1
+    staged_blob = "\n".join(str(m.get("content", "")) for m in llm.complete_msgs[0])
+    assert "导演已现场勘察" not in staged_blob
+
+
+def test_agent_context_is_lean_staged_is_full() -> None:
+    # Agent context omits inlined transcripts (fetched via get_clip_detail) but
+    # marks A-roll with [有台词]; the staged context inlines the segment text.
+    cache: dict[int, ClipDetail] = {}
+    clips = [ClipBrief(clip_id=1, roll="a", has_transcript=True, capture_time="2026-04-25T09:00:00")]
+    director = CutDirector(FakeAgentLLM([]), FakeRetriever(clips, _details()))
+    lean = director._build_context(clips, cache, include_transcripts=False)
+    full = director._build_context(clips, cache, include_transcripts=True)
+    assert "[有台词]" in lean
+    assert "开场白" not in lean   # transcript text not dumped into the agent prompt
+    assert "开场白" in full       # inlined for the toolless staged path
+
+
+def test_build_context_caps_by_token_count() -> None:
+    # Catalog is bounded by real token count (FakeAgentLLM.count_tokens), trimming
+    # only the overflow and marking it — not the old character-length cap.
+    cache: dict[int, ClipDetail] = {}
+    clips = [
+        ClipBrief(clip_id=i, roll="b", description="风景画面描述" * 8,
+                  capture_time=f"2026-04-25T09:{i:02d}:00")
+        for i in range(1, 13)
+    ]
+    director = CutDirector(FakeAgentLLM([]), FakeRetriever(clips, _details()))
+    out = director._build_context(clips, cache, token_budget=60, include_transcripts=False)
+    assert "…(更多素材已省略)" in out      # overflow was trimmed
+    assert "[1]" in out                     # earliest clips kept
+    assert "[12]" not in out                # latest clips dropped
+
+
+def test_build_context_keeps_all_within_budget() -> None:
+    # Under budget → full catalog, no trim marker.
+    cache: dict[int, ClipDetail] = {}
+    clips = [ClipBrief(clip_id=1, roll="b", description="短", capture_time="2026-04-25T09:00:00")]
+    director = CutDirector(FakeAgentLLM([]), FakeRetriever(clips, _details()))
+    out = director._build_context(clips, cache, token_budget=5000, include_transcripts=False)
+    assert "…(更多素材已省略)" not in out
+    assert "[1]" in out
+
+
+# ── refine merge by date (task 28 Part A) ───────────────────────
+
+def _prior_plan() -> Any:
+    from cutfinder.domain.models import CutPlan, Shot
+    return CutPlan(shots=[
+        Shot(clip_id=1, roll="a", in_s=0, out_s=12, content="第一天", chapter="2026-04-25"),
+        Shot(clip_id=2, roll="a", in_s=0, out_s=8, content="第二天", chapter="2026-04-26"),
+    ])
+
+
+def test_refine_merges_new_date_keeping_prior_dates() -> None:
+    # Prior plan has 4/25 + 4/26; this turn only regenerates 5/11 → all three
+    # dates survive, ordered by date, and the prior 4/25 shots are kept verbatim.
+    llm = ScriptedCompleteLLM(['{"shots": [{"clip_id": 3, "roll": "a", "in_s": 0, "out_s": 10}]}'])
+    briefs = [ClipBrief(clip_id=3, roll="a", has_transcript=True, capture_time="2026-05-11T09:00:00")]
+    details = {
+        1: ClipDetail(clip_id=1, roll="a", duration_s=60.0, capture_time="2026-04-25T09:00:00"),
+        2: ClipDetail(clip_id=2, roll="a", duration_s=60.0, capture_time="2026-04-26T09:00:00"),
+        3: ClipDetail(clip_id=3, roll="a", duration_s=60.0, capture_time="2026-05-11T09:00:00"),
+    }
+    director = CutDirector(llm, FakeRetriever(briefs, details), mode="staged")
+    result = director.generate(
+        RoughCutRequest(date_from="2026-05-11", date_to="2026-05-11"), [], "增加一份 5/11",
+        prior_plan=_prior_plan(),
+    )
+    assert result.plan is not None
+    assert result.plan.chapters == ["2026-04-25", "2026-04-26", "2026-05-11"]
+    assert [s.clip_id for s in result.plan.shots] == [1, 2, 3]
+    assert result.plan.total_s == 30.0  # 12 + 8 + 10
+
+
+def test_refine_keeps_prior_day_when_regeneration_fails() -> None:
+    # This turn re-does 4/25 but the model returns garbage → the prior 4/25 day
+    # is kept (not dropped, not reported as skipped).
+    llm = ScriptedCompleteLLM(["not json"])
+    briefs = [ClipBrief(clip_id=1, roll="a", has_transcript=True, capture_time="2026-04-25T09:00:00")]
+    details = {1: ClipDetail(clip_id=1, roll="a", duration_s=60.0, capture_time="2026-04-25T09:00:00")}
+    director = CutDirector(llm, FakeRetriever(briefs, details), mode="staged")
+    result = director.generate(
+        RoughCutRequest(date_from="2026-04-25", date_to="2026-04-25"), [], "重做 4/25",
+        prior_plan=_prior_plan(),
+    )
+    assert result.plan is not None
+    # Both prior dates remain; nothing reported as skipped.
+    assert result.plan.chapters == ["2026-04-25", "2026-04-26"]
+    assert "已跳过" not in result.assistant_text
+
+
+# ── critic agent (task 28 Part B) ───────────────────────────────
+
+class CriticLLM:
+    """Staged completions: first the per-day shots, then the critic verdict."""
+
+    def __init__(self, day_raws: list[str], critic_raw: str, redo_raw: str) -> None:
+        self._day_raws = list(day_raws)
+        self._critic_raw = critic_raw
+        self._redo_raw = redo_raw
+        self.critic_seen = False
+
+    def run(self, messages: Any, tools: Any) -> AgentStep:
+        return AgentStep(content="")
+
+    def complete(self, messages: list[dict[str, Any]]) -> str:
+        # The critic call is the one whose system prompt is the critic prompt.
+        if messages and "审片" in str(messages[0].get("content", "")):
+            self.critic_seen = True
+            return self._critic_raw
+        if self.critic_seen:
+            return self._redo_raw  # post-critic per-day redo
+        return self._day_raws.pop(0) if self._day_raws else "{}"
+
+
+def test_critic_redoes_flagged_date_and_merges() -> None:
+    briefs = [ClipBrief(clip_id=1, roll="a", has_transcript=True, capture_time="2026-04-25T09:00:00")]
+    details = {1: ClipDetail(clip_id=1, roll="a", duration_s=60.0, capture_time="2026-04-25T09:00:00")}
+    llm = CriticLLM(
+        day_raws=['{"shots": [{"clip_id": 1, "roll": "a", "in_s": 0, "out_s": 30}]}'],
+        critic_raw='{"revisions": [{"date": "2026-04-25", "issue": "节奏拖沓", "action": "剪短"}]}',
+        redo_raw='{"shots": [{"clip_id": 1, "roll": "a", "in_s": 0, "out_s": 12}]}',
+    )
+    director = CutDirector(llm, FakeRetriever(briefs, details), mode="staged", critic_enabled=True)
+    result = director.generate(RoughCutRequest(date_from="2026-04-25"), [], "剪一条")
+    assert llm.critic_seen is True
+    assert result.plan is not None
+    assert result.plan.total_s == 12.0  # critic redo (12) replaced the first cut (30)
+
+
+def test_critic_disabled_skips_review() -> None:
+    briefs = [ClipBrief(clip_id=1, roll="a", has_transcript=True, capture_time="2026-04-25T09:00:00")]
+    details = {1: ClipDetail(clip_id=1, roll="a", duration_s=60.0, capture_time="2026-04-25T09:00:00")}
+    llm = CriticLLM(
+        day_raws=['{"shots": [{"clip_id": 1, "roll": "a", "in_s": 0, "out_s": 30}]}'],
+        critic_raw='{"revisions": [{"date": "2026-04-25", "action": "剪短"}]}',
+        redo_raw='{"shots": [{"clip_id": 1, "roll": "a", "in_s": 0, "out_s": 12}]}',
+    )
+    director = CutDirector(llm, FakeRetriever(briefs, details), mode="staged")  # critic off
+    result = director.generate(RoughCutRequest(date_from="2026-04-25"), [], "剪一条")
+    assert llm.critic_seen is False
+    assert result.plan is not None
+    assert result.plan.total_s == 30.0  # unchanged, no critic pass
+
+
+def test_critic_bad_json_leaves_plan_unchanged() -> None:
+    briefs = [ClipBrief(clip_id=1, roll="a", has_transcript=True, capture_time="2026-04-25T09:00:00")]
+    details = {1: ClipDetail(clip_id=1, roll="a", duration_s=60.0, capture_time="2026-04-25T09:00:00")}
+    llm = CriticLLM(
+        day_raws=['{"shots": [{"clip_id": 1, "roll": "a", "in_s": 0, "out_s": 30}]}'],
+        critic_raw="garbage, no json",
+        redo_raw='{"shots": [{"clip_id": 1, "roll": "a", "in_s": 0, "out_s": 12}]}',
+    )
+    director = CutDirector(llm, FakeRetriever(briefs, details), mode="staged", critic_enabled=True)
+    result = director.generate(RoughCutRequest(date_from="2026-04-25"), [], "剪一条")
+    assert llm.critic_seen is True
+    assert result.plan is not None
+    assert result.plan.total_s == 30.0  # critic returned nothing actionable → unchanged
 
 
 def test_plain_reply_ends_turn_without_plan() -> None:
@@ -368,3 +718,58 @@ def test_history_is_included_in_messages() -> None:
     assert "第一轮需求" in contents
     assert "第一版分镜" in contents
     assert "第三段太长" in contents
+
+
+# ── i18n: bilingual output (task 29) ───────────────────────────
+
+def test_fallback_message_is_english_when_ui_language_en() -> None:
+    llm = FakeLLM([AgentStep(tool_calls=[_tc("search_footage", {})]) for _ in range(5)])
+    director = CutDirector(llm, FakeRetriever([], {}), max_tool_rounds=3, ui_language="en")
+    result = director.run(RoughCutRequest(), [], "go")
+    assert result.plan is None
+    # English fallback: mentions missing cataloged footage.
+    assert "cataloged footage" in result.assistant_text.lower()
+
+
+def test_fallback_message_is_chinese_by_default() -> None:
+    llm = FakeLLM([AgentStep(tool_calls=[_tc("search_footage", {})]) for _ in range(5)])
+    director = CutDirector(llm, FakeRetriever([], {}), max_tool_rounds=3)
+    result = director.run(RoughCutRequest(), [], "go")
+    assert result.plan is None
+    # Default Chinese fallback.
+    assert "素材" in result.assistant_text
+
+
+def test_progress_log_english_on_fallback() -> None:
+    # Prose twice → bail to staged; fallback line should appear in English.
+    llm = FakeAgentLLM(
+        [AgentStep(content="嗯"), AgentStep(content="还在想")],
+    )
+    briefs = [ClipBrief(clip_id=1, roll="a", has_transcript=True, capture_time="2026-04-25T09:00:00")]
+    director = CutDirector(llm, FakeRetriever(briefs, _details()), ui_language="en")
+    progress_log: list[str] = []
+    director.generate(RoughCutRequest(date_from="2026-04-25"), [], "go", on_progress=progress_log.append)
+    # English prose reply line should appear.
+    assert any("director replied in text" in p.lower() for p in progress_log) or \
+        any("no valid shots" in p.lower() for p in progress_log)
+
+
+def test_build_context_english_markers() -> None:
+    cache: dict[int, ClipDetail] = {}
+    clips = [ClipBrief(clip_id=1, roll="a", has_transcript=True, capture_time="2026-04-25T09:00:00")]
+    director = CutDirector(FakeAgentLLM([]), FakeRetriever(clips, _details()), ui_language="en")
+    out = director._build_context(clips, cache, include_transcripts=False)
+    # English marker replaces Chinese "[有台词]".
+    assert "[has transcript]" in out
+
+
+def test_default_prompt_is_english() -> None:
+    director = CutDirector(FakeCompleteLLM("{}"), FakeRetriever([], []), ui_language="en")
+    prompt = director._default_prompt()
+    assert "rough-cut editor" in prompt.lower() or "professional rough-cut" in prompt.lower()
+
+
+def test_default_prompt_is_chinese_by_default() -> None:
+    director = CutDirector(FakeCompleteLLM("{}"), FakeRetriever([], []))
+    prompt = director._default_prompt()
+    assert "初剪" in prompt or "粗剪" in prompt

@@ -258,6 +258,8 @@
 - 表单：可见标签（非 placeholder-only）、错误就近显示、blur 时校验。
 - OMLX 显「已连接 / 未连接」状态点（调 `check-omlx` 同款探测）。
 - **人声分离开关**（`vocal_separation`，默认关）：开启后**之后** scan 的新 A-roll 先用 Demucs 去 BGM 再转写；副文案点明仅影响新片、较慢。字幕导出强制分离，不在此开关范围。
+- **初剪逐次生成参数不在此页**：`cut_director_mode`（生成模式）、`cut_max_tool_rounds`（最大工具轮数）、`cut_critic_enabled`（审片复检）、`cut_vision_budget`（视觉确认次数）、`cut_lean_token_budget` / `cut_staged_token_budget`（单日素材目录 token 上限，agent / staged 两档）属于初剪导演的逐次生成参数，放在**初剪页**的「初剪设置」弹窗（与导演 Prompt 同处），不在全局设置里（`tasks/28`）。
+- **统一配置视图**（`tasks/29`）：machine-global 键（OMLX 端点/密钥、文本/视觉模型名）与库级 prefs 在 `GET /api/settings` 合并为同一 `prefs` 视图返回（密钥 mask），不再有历史的 `"env"` 分组——前端按一个视图读写。
 
 ---
 

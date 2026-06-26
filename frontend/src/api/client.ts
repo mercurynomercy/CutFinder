@@ -114,15 +114,27 @@ export interface SettingsPrefs {
   vad_threshold: number
   vocal_separation: boolean
   output_language: 'zh' | 'en'
+  // UI interface language — per-device (one value for the whole machine). Drives
+  // which default director prompt is shown and used, as well as progress messages.
+  ui_language?: 'zh' | 'en'
   keyframe_count: number
   keyframe_auto: boolean
+  cut_director_mode?: 'agent' | 'staged'
   cut_max_tool_rounds: number
   cut_vision_budget: number
   cut_default_aspect_ratio: string
+  cut_critic_enabled?: boolean
+  cut_lean_token_budget?: number
+  cut_staged_token_budget?: number
+  // Machine-global keys are merged into this one view (no separate "env" group);
+  // the OMLX secret comes back masked. Optional so test fixtures can omit them.
+  OMLX_BASE_URL?: string
+  OMLX_API_KEY?: string
+  TEXT_MODEL?: string
+  VISION_MODEL?: string
 }
 
 export interface SettingsResponse {
-  env: Record<string, string>
   prefs: SettingsPrefs
 }
 
@@ -159,11 +171,16 @@ export interface UpdateSettingsBody {
   vad_threshold?: number
   vocal_separation?: boolean
   output_language?: 'zh' | 'en'
+  ui_language?: 'zh' | 'en'
   keyframe_count?: number
   keyframe_auto?: boolean
+  cut_director_mode?: 'agent' | 'staged'
   cut_max_tool_rounds?: number
   cut_vision_budget?: number
   cut_default_aspect_ratio?: string
+  cut_critic_enabled?: boolean
+  cut_lean_token_budget?: number
+  cut_staged_token_budget?: number
   // Machine-global keys (persisted to ~/.cutfinder/config.json, shared across
   // libraries). Omit OMLX_API_KEY to leave the stored secret unchanged.
   OMLX_BASE_URL?: string
@@ -184,6 +201,7 @@ export interface CutSession {
   id: number
   title: string
   status: string // 'idle' | 'running' | 'error'
+  progress?: string // live status while a turn runs (e.g. "第 2/6 天 · 查看片段 #123")
   created_at: string | null
   updated_at: string | null
 }

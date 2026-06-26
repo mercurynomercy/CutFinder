@@ -30,6 +30,7 @@ def _build_router(ctx: Any) -> Any:
     def _session_dict(s: Any) -> dict[str, Any]:
         return {
             "id": s.id, "title": s.title, "status": s.status,
+            "progress": getattr(s, "progress", ""),
             "created_at": s.created_at, "updated_at": s.updated_at,
         }
 
@@ -43,19 +44,33 @@ def _build_router(ctx: Any) -> Any:
     @router.get("/prompt")
     async def get_prompt() -> dict[str, Any]:
         from cutfinder.config import load_cut_director_prompt
-        from cutfinder.cutplan.director import DEFAULT_CUT_DIRECTOR_PROMPT
+        from cutfinder.cutplan.prompts import (
+            DEFAULT_CUT_DIRECTOR_PROMPT_EN,
+            DEFAULT_CUT_DIRECTOR_PROMPT_ZH,
+        )
 
         custom = load_cut_director_prompt()
+        # Pick default prompt based on UI language preference.
+        lang = "zh"
+        try:
+            if getattr(ctx, "prefs", None):
+                lang = ctx.prefs.ui_language or "zh"
+        except Exception:  # noqa: BLE001 — non-fatal for this route
+            pass
+        default = DEFAULT_CUT_DIRECTOR_PROMPT_EN if lang == "en" else DEFAULT_CUT_DIRECTOR_PROMPT_ZH
         return {
-            "prompt": custom or DEFAULT_CUT_DIRECTOR_PROMPT,
-            "default": DEFAULT_CUT_DIRECTOR_PROMPT,
+            "prompt": custom or default,
+            "default": default,
             "is_default": custom is None,
         }
 
     @router.put("/prompt")
     async def set_prompt(request: Request) -> dict[str, Any]:
         from cutfinder.config import load_cut_director_prompt, save_cut_director_prompt
-        from cutfinder.cutplan.director import DEFAULT_CUT_DIRECTOR_PROMPT
+        from cutfinder.cutplan.prompts import (
+            DEFAULT_CUT_DIRECTOR_PROMPT_EN,
+            DEFAULT_CUT_DIRECTOR_PROMPT_ZH,
+        )
 
         prompt = ""
         try:
@@ -66,21 +81,38 @@ def _build_router(ctx: Any) -> Any:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         save_cut_director_prompt(prompt)
         custom = load_cut_director_prompt()
+        lang = "zh"
+        try:
+            if getattr(ctx, "prefs", None):
+                lang = ctx.prefs.ui_language or "zh"
+        except Exception:  # noqa: BLE001 — non-fatal for this route
+            pass
+        default = DEFAULT_CUT_DIRECTOR_PROMPT_EN if lang == "en" else DEFAULT_CUT_DIRECTOR_PROMPT_ZH
         return {
-            "prompt": custom or DEFAULT_CUT_DIRECTOR_PROMPT,
-            "default": DEFAULT_CUT_DIRECTOR_PROMPT,
+            "prompt": custom or default,
+            "default": default,
             "is_default": custom is None,
         }
 
     @router.delete("/prompt")
     async def reset_prompt() -> dict[str, Any]:
         from cutfinder.config import save_cut_director_prompt
-        from cutfinder.cutplan.director import DEFAULT_CUT_DIRECTOR_PROMPT
+        from cutfinder.cutplan.prompts import (
+            DEFAULT_CUT_DIRECTOR_PROMPT_EN,
+            DEFAULT_CUT_DIRECTOR_PROMPT_ZH,
+        )
 
         save_cut_director_prompt(None)
+        lang = "zh"
+        try:
+            if getattr(ctx, "prefs", None):
+                lang = ctx.prefs.ui_language or "zh"
+        except Exception:  # noqa: BLE001 — non-fatal for this route
+            pass
+        default = DEFAULT_CUT_DIRECTOR_PROMPT_EN if lang == "en" else DEFAULT_CUT_DIRECTOR_PROMPT_ZH
         return {
-            "prompt": DEFAULT_CUT_DIRECTOR_PROMPT,
-            "default": DEFAULT_CUT_DIRECTOR_PROMPT,
+            "prompt": default,
+            "default": default,
             "is_default": True,
         }
 

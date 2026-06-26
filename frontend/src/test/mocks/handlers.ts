@@ -70,6 +70,11 @@ function makeSettingsPrefs(overrides: Partial<SettingsPrefs> = {}): SettingsPref
     output_language: overrides.output_language ?? 'zh',
     keyframe_count: overrides.keyframe_count ?? 3,
     keyframe_auto: overrides.keyframe_auto ?? false,
+    cut_director_mode: overrides.cut_director_mode ?? 'agent',
+    cut_max_tool_rounds: overrides.cut_max_tool_rounds ?? 24,
+    cut_vision_budget: overrides.cut_vision_budget ?? 6,
+    cut_default_aspect_ratio: overrides.cut_default_aspect_ratio ?? '16:9',
+    cut_critic_enabled: overrides.cut_critic_enabled ?? false,
   }
 }
 
@@ -236,9 +241,17 @@ export const handlers = [
     return HttpResponse.json({ path: '/Users/jan/Movies/Vlog' })
   }),
 
-  // GET /api/settings — get current settings
+  // GET /api/settings — get current settings. Machine-global keys (model names,
+  // OMLX endpoint) are merged into the one `prefs` view now — no `env` group.
   http.get('http://localhost:5080/api/settings', () => {
-    return HttpResponse.json({ env: {}, prefs: makeSettingsPrefs() })
+    return HttpResponse.json({
+      prefs: {
+        ...makeSettingsPrefs(),
+        OMLX_BASE_URL: 'http://localhost:8000/v1',
+        TEXT_MODEL: 'Qwen3.6-35B-A3B',
+        VISION_MODEL: 'Qwen3-VL-8B',
+      },
+    })
   }),
 
   // PUT /api/settings — update settings

@@ -170,13 +170,18 @@ class PrefsOut(BaseModel):
     keyframe_count: int = 3
     keyframe_auto: bool = False
     vocal_separation: bool = False
+    cut_director_mode: str = "agent"
     cut_max_tool_rounds: int = 24
     cut_vision_budget: int = 6
     cut_default_aspect_ratio: str = "16:9"
+    cut_critic_enabled: bool = False
+    cut_lean_token_budget: int = 50000
+    cut_staged_token_budget: int = 40000
 
 
 class SettingsOut(BaseModel):
-    env: dict[str, str] = {}  # OMLX_BASE_URL etc. (masked)
+    # One unified view: per-library prefs + machine-global keys (OMLX_BASE_URL
+    # etc., secret masked) merged together — no separate "env" grouping.
     prefs: PrefsOut = Field(default_factory=PrefsOut)
 
 
@@ -194,9 +199,13 @@ class SettingsUpdate(BaseModel):
     keyframe_count: Optional[int] = None
     keyframe_auto: Optional[bool] = None
     vocal_separation: Optional[bool] = None
+    cut_director_mode: Optional[str] = None
     cut_max_tool_rounds: Optional[int] = None
     cut_vision_budget: Optional[int] = None
     cut_default_aspect_ratio: Optional[str] = None
+    cut_critic_enabled: Optional[bool] = None
+    cut_lean_token_budget: Optional[int] = None
+    cut_staged_token_budget: Optional[int] = None
 
 
 # ── SSE event types (internal helper schemas) ───────────────────

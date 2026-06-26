@@ -9,7 +9,7 @@
  * Usage: <CutplanPage onClose={() => ...} />
  */
 
-import { useEffect, useRef, useState } from 'react'
+import { Fragment, useEffect, useRef, useState } from 'react'
 
 import type { CutMessage, CutPlan, CutSession } from '@/api/client'
 import { api } from '@/api/client'
@@ -17,20 +17,6 @@ import { useI18n } from '@/i18n'
 import { ConfirmDialog } from '@/components'
 
 const ACTIVE_KEY = 'cutfinder:cut-active-session'
-
-// Poll a job until it reaches a terminal state (or the timeout elapses).
-async function waitForJob(jobId: number, timeoutMs = 10 * 60_000): Promise<void> {
-  const deadline = Date.now() + timeoutMs
-  while (Date.now() < deadline) {
-    try {
-      const job = await api.getJob(jobId)
-      if (['done', 'failed', 'cancelled'].includes(job.status)) return
-    } catch {
-      /* transient — keep polling */
-    }
-    await new Promise((r) => setTimeout(r, 1200))
-  }
-}
 
 function fmtTimecode(s: number): string {
   const ms = Math.max(0, Math.round(s * 1000))
@@ -76,6 +62,13 @@ export function CutplanPage({ onClose }: CutplanPageProps) {
   const [plan, setPlan] = useState<CutPlan | null>(null)
   const [input, setInput] = useState('')
   const [busy, setBusy] = useState(false)
+  // Rolling trajectory of the director's recent steps (so the user can see what
+  // it's thinking through, not just the latest line). Polling only gets the
+  // latest string each tick; we append distinct ones to build the history.
+  const [progressLog, setProgressLog] = useState<string[]>([])
+  // Whether the progress trajectory is expanded. Open while a turn runs; collapses
+  // once it finishes so the finished log sits quietly between the request and reply.
+  const [progressOpen, setProgressOpen] = useState(false)
   const [copied, setCopied] = useState(false)
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null)
   const [listCollapsed, setListCollapsed] = useState(false)
@@ -85,12 +78,26 @@ export function CutplanPage({ onClose }: CutplanPageProps) {
   const [promptDefault, setPromptDefault] = useState('')
   const [promptIsDefault, setPromptIsDefault] = useState(true)
   const [promptSaved, setPromptSaved] = useState(false)
+  // Per-generation knobs, edited in the same "初剪设置" modal and persisted as
+  // machine-global prefs (PUT /settings rebuilds the director so they take effect).
+  const [directorMode, setDirectorMode] = useState<'agent' | 'staged'>('agent')
+  const [maxToolRounds, setMaxToolRounds] = useState(24)
+  const [criticEnabled, setCriticEnabled] = useState(false)
+  const [visionBudget, setVisionBudget] = useState(6)
+  const [leanTokenBudget, setLeanTokenBudget] = useState(50000)
+  const [stagedTokenBudget, setStagedTokenBudget] = useState(40000)
 
   const threadRef = useRef<HTMLDivElement>(null)
+  const progressRef = useRef<HTMLDivElement>(null)
   // Tracks the currently-open session so resume polling can bail if the user
   // switches away mid-poll. Set explicitly (not on render) so async guards see
   // the new value immediately.
   const activeRef = useRef<number | null>(null)
+
+  // Append a new step to the trajectory, skipping blanks and adjacent repeats.
+  const pushProgress = (p: string) =>
+    setProgressLog((prev) => (!p || prev[prev.length - 1] === p ? prev : [...prev, p]))
+  const lastProgress = progressLog[progressLog.length - 1] ?? ''
 
   const persistActive = (id: number | null) => {
     try {
@@ -111,27 +118,48 @@ export function CutplanPage({ onClose }: CutplanPageProps) {
     }
   }
 
-  // Poll a still-running session until it goes idle/error, then show the result.
+  // Poll a still-running session until it goes idle/error, live-updating the
+  // partial plan + the director's current step on every tick (so completed
+  // dates and "查看片段 #N" status show while the rest still generates).
   const resumePoll = async (id: number) => {
-    const deadline = Date.now() + 10 * 60_000
+    // Generous backstop: a multi-day 15–20 min vlog in agent mode can run a long
+    // time. The real exit is status going non-running; this only stops us polling
+    // a hung/dead backend forever.
+    const deadline = Date.now() + 60 * 60_000
     while (Date.now() < deadline) {
-      await new Promise((r) => setTimeout(r, 1500))
       if (activeRef.current !== id) return // user switched away
       try {
         const detail = await api.getCutSession(id)
+        if (activeRef.current !== id) return
+        if (detail.plan) setPlan(detail.plan)          // show completed dates early
+        pushProgress(detail.session.progress ?? '')     // live "正在查看…" trajectory
         if (detail.session.status !== 'running') {
-          if (activeRef.current === id) {
-            setMessages(detail.messages)
-            setPlan(detail.plan)
-            setBusy(false)
-          }
-          return
+          setMessages(detail.messages)                  // restore the assistant reply
+          setPlan(detail.plan)
+          setBusy(false)
+          setProgressOpen(false)                        // collapse the finished log
+          return                                        // keep progressLog for review
         }
       } catch {
         /* transient — keep polling */
       }
+      await new Promise((r) => setTimeout(r, 1500))
     }
-    if (activeRef.current === id) setBusy(false)
+    // Deadline reached: do one final sync so a turn that finished right at the
+    // boundary still shows its reply instead of silently vanishing.
+    if (activeRef.current === id) {
+      try {
+        const detail = await api.getCutSession(id)
+        if (activeRef.current === id) {
+          setMessages(detail.messages)
+          if (detail.plan) setPlan(detail.plan)
+        }
+      } catch {
+        /* ignore */
+      }
+      setBusy(false)
+      setProgressOpen(false)
+    }
   }
 
   // Open a session: load its messages + plan, and if its turn is still running
@@ -143,13 +171,16 @@ export function CutplanPage({ onClose }: CutplanPageProps) {
     setPlan(null)
     setMessages([])
     setBusy(false)
+    setProgressLog([])
     try {
       const detail = await api.getCutSession(id)
       if (activeRef.current !== id) return
       setMessages(detail.messages)
       setPlan(detail.plan)
       if (detail.session.status === 'running') {
+        pushProgress(detail.session.progress ?? '')
         setBusy(true)
+        setProgressOpen(true)
         void resumePoll(id)
       }
     } catch {
@@ -182,6 +213,14 @@ export function CutplanPage({ onClose }: CutplanPageProps) {
     if (threadRef.current) threadRef.current.scrollTop = threadRef.current.scrollHeight
   }, [messages, busy])
 
+  // Tail the progress log to its latest line while a turn runs; once it stops the
+  // user is free to scroll up through the full trajectory.
+  useEffect(() => {
+    if (busy && progressOpen && progressRef.current) {
+      progressRef.current.scrollTop = progressRef.current.scrollHeight
+    }
+  }, [progressLog, busy, progressOpen])
+
   const newSession = async () => {
     const s = await api.createCutSession('')
     await loadSessions()
@@ -206,17 +245,21 @@ export function CutplanPage({ onClose }: CutplanPageProps) {
     setMessages((prev) => [...prev, { role: 'user', content: text, created_at: null }])
     setInput('')
     setBusy(true)
+    setProgressLog([])
+    setProgressOpen(true)
     try {
-      const { job_id } = await api.sendCutMessage(sessionId, text)
-      await waitForJob(job_id)
-      const detail = await api.getCutSession(sessionId)
-      setMessages(detail.messages)
-      setPlan(detail.plan)
+      // The route marks the session 'running' synchronously, so we can poll the
+      // session directly — resumePoll live-updates the partial plan + progress
+      // and finalizes when it goes idle/error.
+      await api.sendCutMessage(sessionId, text)
+      await resumePoll(sessionId)
       await loadSessions() // refresh titles / updated_at ordering
     } catch (err) {
       console.error('Rough-cut turn failed:', err)
     } finally {
       setBusy(false)
+      // Keep progressLog so the finished run's trajectory stays visible; it's
+      // cleared when the next turn starts (above) or another session is opened.
     }
   }
 
@@ -247,6 +290,19 @@ export function CutplanPage({ onClose }: CutplanPageProps) {
     } catch (err) {
       console.error('Load director prompt failed:', err)
     }
+    // Generation options live in machine-global prefs; pull current values so
+    // the toggles reflect what's actually in effect.
+    try {
+      const data = await api.getSettings()
+      setDirectorMode(data.prefs.cut_director_mode ?? 'agent')
+      setMaxToolRounds(data.prefs.cut_max_tool_rounds ?? 24)
+      setCriticEnabled(data.prefs.cut_critic_enabled ?? false)
+      setVisionBudget(data.prefs.cut_vision_budget ?? 6)
+      setLeanTokenBudget(data.prefs.cut_lean_token_budget ?? 50000)
+      setStagedTokenBudget(data.prefs.cut_staged_token_budget ?? 40000)
+    } catch {
+      /* no library bound / unreachable — keep defaults */
+    }
   }
 
   const savePrompt = async () => {
@@ -254,10 +310,19 @@ export function CutplanPage({ onClose }: CutplanPageProps) {
       const r = await api.setCutPrompt(promptText)
       setPromptText(r.prompt)
       setPromptIsDefault(r.is_default)
+      // Persist the generation options too (a partial PUT — only these keys).
+      await api.putSettings({
+        cut_director_mode: directorMode,
+        cut_max_tool_rounds: maxToolRounds,
+        cut_critic_enabled: criticEnabled,
+        cut_vision_budget: visionBudget,
+        cut_lean_token_budget: leanTokenBudget,
+        cut_staged_token_budget: stagedTokenBudget,
+      })
       setPromptSaved(true)
       setTimeout(() => setPromptSaved(false), 1500)
     } catch (err) {
-      console.error('Save director prompt failed:', err)
+      console.error('Save rough-cut settings failed:', err)
     }
   }
 
@@ -281,6 +346,54 @@ export function CutplanPage({ onClose }: CutplanPageProps) {
       /* clipboard unavailable */
     }
   }
+
+  // The progress trajectory belongs to the latest turn: while it runs it trails
+  // the last (user) message; once the assistant reply lands it sits *between* the
+  // request and that reply (anchored just before the trailing assistant message),
+  // collapsed by default.
+  const showProgress = busy || progressLog.length > 0
+  const lastIsAssistant = messages.length > 0 && messages[messages.length - 1].role === 'assistant'
+  const progressAnchor = !busy && lastIsAssistant ? messages.length - 1 : messages.length
+  const progressNode = (
+    <div className="text-left">
+      <div className="inline-flex max-w-[90%] flex-col gap-1 rounded-lg bg-[--surface-2] px-3 py-2 text-sm text-[--text-secondary]">
+        {busy && progressLog.length === 0 ? (
+          <div className="inline-flex items-center gap-2">
+            <ThinkingDots />
+            <span>{t('roughcut.thinking')}</span>
+          </div>
+        ) : (
+          <>
+            <button
+              type="button"
+              onClick={() => setProgressOpen((v) => !v)}
+              className="inline-flex items-center gap-1.5 text-xs text-[--text-muted] hover:text-[--text-secondary]"
+            >
+              <span aria-hidden="true">{progressOpen ? '▾' : '▸'}</span>
+              <span>{t('roughcut.progressTitle', { n: progressLog.length })}</span>
+              {busy && <ThinkingDots />}
+            </button>
+            {progressOpen && (
+              <div ref={progressRef} className="mt-1 flex max-h-48 flex-col gap-1 overflow-y-auto pr-1">
+                {progressLog.map((p, i, arr) => {
+                  const isLast = i === arr.length - 1
+                  return (
+                    <div
+                      key={`${i}-${p}`}
+                      className={`inline-flex items-center gap-2 ${busy && isLast ? '' : 'text-xs text-[--text-muted]'}`}
+                    >
+                      {busy && isLast ? <ThinkingDots /> : <span aria-hidden="true">·</span>}
+                      <span>{p}</span>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  )
 
   return (
     <div className="flex h-screen w-full flex-col bg-[--bg-canvas] text-[--text-primary]">
@@ -364,30 +477,28 @@ export function CutplanPage({ onClose }: CutplanPageProps) {
         {/* Conversation column */}
         <section className="flex min-w-0 flex-1 flex-col border-r border-[--border]">
           <div ref={threadRef} className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
-            {messages.length === 0 && !busy ? (
+            {messages.length === 0 && !showProgress ? (
               <p className="text-sm text-[--text-muted]">{t('roughcut.emptyConvo')}</p>
             ) : (
-              messages.map((m, i) => (
-                <div key={i} className={m.role === 'user' ? 'text-right' : 'text-left'}>
-                  <div
-                    className={`inline-block max-w-[85%] whitespace-pre-wrap rounded-lg px-3 py-2 text-left text-sm ${
-                      m.role === 'user'
-                        ? 'bg-[--primary] text-white'
-                        : 'bg-[--surface-2] text-[--text-primary]'
-                    }`}
-                  >
-                    {m.content}
-                  </div>
-                </div>
-              ))
-            )}
-            {busy && (
-              <div className="text-left">
-                <div className="inline-flex items-center gap-2 rounded-lg bg-[--surface-2] px-3 py-2 text-sm text-[--text-secondary]">
-                  <ThinkingDots />
-                  <span>{t('roughcut.thinking')}</span>
-                </div>
-              </div>
+              <>
+                {messages.map((m, i) => (
+                  <Fragment key={i}>
+                    {showProgress && i === progressAnchor && progressNode}
+                    <div className={m.role === 'user' ? 'text-right' : 'text-left'}>
+                      <div
+                        className={`inline-block max-w-[85%] whitespace-pre-wrap rounded-lg px-3 py-2 text-left text-sm ${
+                          m.role === 'user'
+                            ? 'bg-[--primary] text-white'
+                            : 'bg-[--surface-2] text-[--text-primary]'
+                        }`}
+                      >
+                        {m.content}
+                      </div>
+                    </div>
+                  </Fragment>
+                ))}
+                {showProgress && progressAnchor >= messages.length && progressNode}
+              </>
             )}
           </div>
           <div className="shrink-0 border-t border-[--border] p-3">
@@ -457,7 +568,15 @@ export function CutplanPage({ onClose }: CutplanPageProps) {
             {!plan ? (
               <p className="text-sm text-[--text-muted]">{t('roughcut.noPlan')}</p>
             ) : (
-              <ShotList plan={plan} />
+              <>
+                {busy && (
+                  <div className="mb-3 flex items-center gap-2 rounded-md bg-[--surface-2] px-3 py-2 text-xs text-[--text-secondary]">
+                    <ThinkingDots />
+                    <span>{lastProgress || t('roughcut.partialGenerating')}</span>
+                  </div>
+                )}
+                <ShotList plan={plan} />
+              </>
             )}
           </div>
         </section>
@@ -496,17 +615,97 @@ export function CutplanPage({ onClose }: CutplanPageProps) {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="flex max-h-[85vh] w-full max-w-2xl flex-col rounded-lg border border-[--border] bg-[--surface-1] shadow-xl">
             <div className="flex items-center justify-between border-b border-[--border] px-5 py-3">
-              <span className="text-sm font-semibold">{t('roughcut.promptTitle')}</span>
+              <span className="text-sm font-semibold">{t('roughcut.settingsTitle')}</span>
               <span className={`text-xs ${promptIsDefault ? 'text-[--text-muted]' : 'text-[--primary]'}`}>
                 {promptIsDefault ? t('roughcut.promptDefault') : t('roughcut.promptCustom')}
               </span>
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto p-5">
+              {/* ── Generation options ─────────────────────── */}
+              <p className="mb-3 text-xs font-medium text-[--text-secondary]">{t('roughcut.genOptions')}</p>
+
+              <label className="block text-sm text-[--text-secondary]">{t('roughcut.directorMode')}</label>
+              <select
+                value={directorMode}
+                onChange={(e) => setDirectorMode(e.target.value as 'agent' | 'staged')}
+                aria-label={t('roughcut.directorMode')}
+                className="mt-1 w-full max-w-xs rounded-md border border-[--border] bg-[--surface-2] px-3 py-1.5 text-sm outline-none focus:border-[--primary]"
+              >
+                <option value="agent">{t('roughcut.modeAgent')}</option>
+                <option value="staged">{t('roughcut.modeStaged')}</option>
+              </select>
+              <p className="mt-1 text-xs text-[--text-muted]">{t('roughcut.directorModeDesc')}</p>
+
+              {directorMode === 'agent' && (
+                <>
+                  <label className="mt-3 block text-sm text-[--text-secondary]">{t('roughcut.maxRounds')}</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={200}
+                    step={1}
+                    value={maxToolRounds}
+                    onChange={(e) => setMaxToolRounds(parseInt(e.target.value, 10) || 1)}
+                    className="mt-1 w-28 rounded-md border border-[--border] bg-[--surface-2] px-3 py-1.5 text-sm outline-none focus:border-[--primary]"
+                  />
+                  <p className="mt-1 text-xs text-[--text-muted]">{t('roughcut.maxRoundsDesc')}</p>
+
+                  <label className="mt-3 block text-sm text-[--text-secondary]">{t('roughcut.leanBudget')}</label>
+                  <input
+                    type="number"
+                    min={1000}
+                    max={200000}
+                    step={1000}
+                    value={leanTokenBudget}
+                    onChange={(e) => setLeanTokenBudget(parseInt(e.target.value, 10) || 1000)}
+                    className="mt-1 w-32 rounded-md border border-[--border] bg-[--surface-2] px-3 py-1.5 text-sm outline-none focus:border-[--primary]"
+                  />
+                  <p className="mt-1 text-xs text-[--text-muted]">{t('roughcut.leanBudgetDesc')}</p>
+                </>
+              )}
+
+              <label className="mt-3 flex items-center gap-2 text-sm text-[--text-primary]">
+                <input
+                  type="checkbox"
+                  checked={criticEnabled}
+                  onChange={(e) => setCriticEnabled(e.target.checked)}
+                  className="h-4 w-4 rounded border-[--border] bg-[--surface-2]"
+                />
+                {t('roughcut.critic')}
+              </label>
+              <p className="mb-3 mt-1 text-xs text-[--text-muted]">{t('roughcut.criticDesc')}</p>
+
+              <label className="block text-sm text-[--text-secondary]">{t('roughcut.visionBudget')}</label>
+              <input
+                type="number"
+                min={0}
+                step={1}
+                value={visionBudget}
+                onChange={(e) => setVisionBudget(parseInt(e.target.value, 10) || 0)}
+                className="mt-1 w-28 rounded-md border border-[--border] bg-[--surface-2] px-3 py-1.5 text-sm outline-none focus:border-[--primary]"
+              />
+              <p className="mt-1 text-xs text-[--text-muted]">{t('roughcut.visionBudgetDesc')}</p>
+
+              <label className="mt-3 block text-sm text-[--text-secondary]">{t('roughcut.stagedBudget')}</label>
+              <input
+                type="number"
+                min={1000}
+                max={200000}
+                step={1000}
+                value={stagedTokenBudget}
+                onChange={(e) => setStagedTokenBudget(parseInt(e.target.value, 10) || 1000)}
+                className="mt-1 w-32 rounded-md border border-[--border] bg-[--surface-2] px-3 py-1.5 text-sm outline-none focus:border-[--primary]"
+              />
+              <p className="mt-1 text-xs text-[--text-muted]">{t('roughcut.stagedBudgetDesc')}</p>
+
+              {/* ── Director prompt ────────────────────────── */}
+              <hr className="my-5 border-[--border]" />
+              <p className="mb-2 text-xs font-medium text-[--text-secondary]">{t('roughcut.promptSection')}</p>
               <p className="mb-2 text-xs text-[--text-muted]">{t('roughcut.promptHelp')}</p>
               <textarea
                 value={promptText}
                 onChange={(e) => setPromptText(e.target.value)}
-                rows={16}
+                rows={12}
                 spellCheck={false}
                 className="w-full resize-y rounded-md border border-[--border] bg-[--surface-2] px-3 py-2 font-mono text-xs leading-relaxed outline-none focus:border-[--primary]"
               />
@@ -550,6 +749,7 @@ export function CutplanPage({ onClose }: CutplanPageProps) {
 }
 
 function ShotList({ plan }: { plan: CutPlan }) {
+  const { t } = useI18n()
   const chapters = plan.chapters.length ? plan.chapters : ['']
   let index = 0
   return (
@@ -592,6 +792,8 @@ function ShotList({ plan }: { plan: CutPlan }) {
         {`总时长：${fmtDuration(plan.total_s)}`}
         {plan.target_min_s != null && plan.target_max_s != null &&
           `（目标 ${fmtDuration(plan.target_min_s)}–${fmtDuration(plan.target_max_s)} ${plan.within_target ? '✓' : '⚠️'}）`}
+        {plan.target_min_s != null && plan.target_max_s != null && !plan.within_target &&
+          ` ${t('roughcut.durationFootageHint')}`}
       </div>
     </div>
   )

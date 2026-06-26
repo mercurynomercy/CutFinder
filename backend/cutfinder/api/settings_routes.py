@@ -41,7 +41,13 @@ def _build_router(
 
     @router.get("/settings", summary="Read current application settings")
     async def get_settings() -> dict[str, Any]:
-        """Return current configuration (env vars + user prefs)."""
+        """Return current configuration as one unified ``prefs`` view.
+
+        Per-library prefs and the machine-global keys (OMLX endpoint/key, model
+        names) are merged into a single object — there is no separate ``env``
+        grouping; both are stored in config.json (the env keys machine-globally,
+        the prefs per library). The OMLX secret is masked.
+        """
         library_path = get_library_fn()
         if not library_path:
             raise HTTPException(status_code=404, detail="No library configured")
@@ -51,15 +57,16 @@ def _build_router(
         except Exception as exc:  # noqa: BLE001 — return best-effort if config unreadable
             raise HTTPException(status_code=503, detail=f"Config error: {exc}") from exc
 
-        # Expose the OMLX endpoint + model names; mask the secret key.
-        env = {
+        # Merge machine-global keys into the prefs view; mask the secret key.
+        prefs = {
+            **config.prefs.model_dump(),
             "OMLX_BASE_URL": config.env.OMLX_BASE_URL,
             "OMLX_API_KEY": _MASKED if config.env.OMLX_API_KEY else "",
             "TEXT_MODEL": config.env.TEXT_MODEL,
             "VISION_MODEL": config.env.VISION_MODEL,
         }
 
-        return {"env": env, "prefs": config.prefs.model_dump()}
+        return {"prefs": prefs}
 
     @router.put("/settings", summary="Update user preferences")
     async def update_settings(

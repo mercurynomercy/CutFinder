@@ -87,12 +87,23 @@ def test_create_app_with_library_serves_settings(
         "keyframe_count",
         "keyframe_auto",
         "vocal_separation",
+        "cut_director_mode",
         "cut_max_tool_rounds",
         "cut_vision_budget",
         "cut_default_aspect_ratio",
+        "cut_critic_enabled",
+        "cut_lean_token_budget",
+        "cut_staged_token_budget",
+        # Machine-global keys are merged into the one prefs view (no "env" group).
+        "OMLX_BASE_URL",
+        "OMLX_API_KEY",
+        "TEXT_MODEL",
+        "VISION_MODEL",
     }
-    # The OMLX secret is masked, never returned in the clear.
-    assert resp.json()["env"]["OMLX_API_KEY"] == "***MASKED***"
+    # The OMLX secret is masked, never returned in the clear; there is no
+    # separate "env" grouping anymore.
+    assert "env" not in resp.json()
+    assert prefs["OMLX_API_KEY"] == "***MASKED***"
 
     # Off by default.
     assert prefs["vocal_separation"] is False

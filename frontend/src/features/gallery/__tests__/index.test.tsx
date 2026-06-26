@@ -182,8 +182,9 @@ describe('Gallery', () => {
   it('renders clips with their source path as title', () => {
     const onSelect = vi.fn()
     render(<Gallery clips={MOCK_CLIPS} selectedClipId={null} onSelect={onSelect} />)
-    const titleAttr = document.querySelector('[title]') as HTMLElement | null
-    expect(titleAttr?.getAttribute('title')).toBe('/media/vlog/2024-06/a-roll_01.mp4')
+    // The clip card carries its source path as a title (date-group headers also
+    // have titles, so query the clip specifically rather than the first [title]).
+    expect(screen.getByTitle('/media/vlog/2024-06/a-roll_01.mp4')).toBeInTheDocument()
   })
 
   it('renders film strip placeholder icon for clips without thumbnails', () => {

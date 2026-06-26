@@ -254,6 +254,10 @@ class CutSession(BaseModel):
     id: int | None = None
     title: str = ""
     status: str = "idle"             # "idle" | "running" | "error"
+    # Live, human-readable progress while a turn runs (e.g. "第 2/6 天 · 查看片段
+    # #123 台词"). Ephemeral — held in memory by the store, not persisted; the
+    # polling UI reads it to show what the director is doing right now.
+    progress: str = ""
     created_at: str | None = None
     updated_at: str | None = None
 

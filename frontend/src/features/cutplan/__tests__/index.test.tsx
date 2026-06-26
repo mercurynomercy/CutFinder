@@ -121,7 +121,9 @@ describe('CutplanPage', () => {
       ),
       http.get(`${API}/cut/sessions/7`, () => {
         calls += 1
-        const running = calls === 1
+        // Stay running for the first couple of polls so the thinking indicator
+        // has a real window before the turn resolves.
+        const running = calls <= 2
         return HttpResponse.json({
           session: { id: 7, title: 't', status: running ? 'running' : 'idle', created_at: null, updated_at: null },
           messages: running
@@ -139,6 +141,41 @@ describe('CutplanPage', () => {
     // After the resume poll: assistant reply + plan appear.
     expect(await screen.findByText('完成了', {}, { timeout: 4000 })).toBeInTheDocument()
     expect(screen.getByText('A-0001.mov')).toBeInTheDocument()
+  })
+
+  it('edits generation options in the 初剪设置 modal and saves them via PUT /settings', async () => {
+    let putBody: Record<string, unknown> | null = null
+    server.use(
+      http.get(`${API}/cut/sessions`, () => HttpResponse.json({ sessions: [] })),
+      http.get(`${API}/cut/prompt`, () =>
+        HttpResponse.json({ prompt: '你是导演…', default: '你是导演…', is_default: true }),
+      ),
+      http.put(`${API}/cut/prompt`, () =>
+        HttpResponse.json({ prompt: '你是导演…', default: '你是导演…', is_default: true }),
+      ),
+      http.put(`${API}/settings`, async ({ request }) => {
+        putBody = (await request.json()) as Record<string, unknown>
+        return HttpResponse.json({ status: 'ok' })
+      }),
+    )
+
+    render(<CutplanPage onClose={() => {}} />)
+
+    // Open the "Rough-cut settings" modal from the composer toolbar.
+    await userEvent.click(await screen.findByRole('button', { name: 'Rough-cut settings' }))
+
+    // The critic toggle reflects the loaded value (off) — flip it on.
+    const critic = await screen.findByRole('checkbox', { name: 'Critic review pass' })
+    expect((critic as HTMLInputElement).checked).toBe(false)
+    await userEvent.click(critic)
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => expect(putBody).not.toBeNull())
+    expect(putBody!.cut_critic_enabled).toBe(true)
+    expect(putBody!.cut_vision_budget).toBe(6)
+    // Director mode + max tool rounds round-trip through the same modal.
+    expect(putBody!.cut_director_mode).toBe('agent')
+    expect(putBody!.cut_max_tool_rounds).toBe(24)
   })
 
   it('deletes a conversation', async () => {

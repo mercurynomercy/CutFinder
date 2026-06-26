@@ -72,6 +72,33 @@ class OmlxAgentClient:
 
         raise RuntimeError("OMLX agent returned no result after retries")
 
+    def count_tokens(self, text: str) -> int | None:
+        """Exact token count of *text* via OMLX's ``/messages/count_tokens``.
+
+        OMLX has no OpenAI-style tokenize route but exposes the Anthropic-style
+        endpoint, which tokenizes *with the served model's own tokenizer* (so it
+        matches the real prompt). Best-effort: any failure returns ``None`` and
+        the director falls back to a character estimate.
+        """
+        import httpx
+
+        if not text:
+            return 0
+        url = f"{self._config.env.OMLX_BASE_URL.rstrip('/')}/messages/count_tokens"
+        try:
+            resp = httpx.post(
+                url,
+                headers={"Authorization": f"Bearer {self._config.env.OMLX_API_KEY}"},
+                json={"model": self._model, "messages": [{"role": "user", "content": text}]},
+                timeout=30.0,
+            )
+            if resp.status_code != 200:
+                return None
+            n = resp.json().get("input_tokens")
+            return int(n) if isinstance(n, (int, float)) else None
+        except (httpx.HTTPError, ValueError, KeyError):
+            return None
+
     def complete(self, messages: list[dict[str, Any]]) -> str:
         """Plain chat completion (no tools) → raw assistant text.
 

@@ -23,9 +23,10 @@ logger = logging.getLogger(__name__)
 class CutPlanService:
     """Handle a single user message in a rough-cut conversation."""
 
-    def __init__(self, store: CutSessionStore, director: CutDirector) -> None:
+    def __init__(self, store: CutSessionStore, director: CutDirector, *, ui_language: str = "zh") -> None:
         self._store = store
         self._director = director
+        self._ui_language = ui_language
 
     def handle(
         self,
@@ -50,7 +51,7 @@ class CutPlanService:
         # Auto-title an untitled conversation from its first user message, so the
         # sidebar shows something other than "未命名" after the opening turn.
         if not (session.title or "").strip():
-            self._store.set_session_title(session_id, _derive_title(user_text))
+            self._store.set_session_title(session_id, _derive_title(user_text, lang=self._ui_language))
 
         # Resolve the request. Precedence: an explicit request object (from a
         # future structured UI) wins; otherwise parse scoping (date range /
@@ -69,12 +70,28 @@ class CutPlanService:
         # History excludes the just-appended user message (passed separately).
         history = self._store.get_messages(session_id)[:-1]
 
+        # The latest plan is the merge base: a refine turn regenerates only the
+        # dates in its (possibly narrowed) range and merges them over this plan,
+        # so unrelated dates survive instead of being replaced (task 28 Part A).
+        prior_plan = self._store.get_latest_plan(session_id)
+
         try:
-            # Staged generation (deterministic retrieval + one structured call)
-            # is far more reliable on local models than the autonomous tool loop.
-            result = self._director.generate(req, history, user_text)
+            # Deterministic per-date generation: the director either runs a
+            # scoped tool loop per shooting date (agent mode) or one structured
+            # JSON call per date (staged mode), with a per-day fall back. Small
+            # per-day context keeps it reliable on local models (task 26).
+            # The callbacks surface live progress + completed dates to the polling
+            # UI: progress text into the (ephemeral) session field, and the
+            # cumulative plan saved after each day so finished shots show early.
+            result = self._director.generate(
+                req, history, user_text,
+                prior_plan=prior_plan,
+                on_progress=lambda text: self._store.set_session_progress(session_id, text),
+                on_partial=lambda plan: self._store.save_plan(session_id, plan),
+            )
         except Exception:
             self._store.set_session_status(session_id, "error")
+            self._store.clear_session_progress(session_id)
             raise
 
         self._store.append_message(
@@ -83,6 +100,7 @@ class CutPlanService:
         if result.plan is not None:
             self._store.save_plan(session_id, result.plan)
         self._store.set_session_status(session_id, "idle")
+        self._store.clear_session_progress(session_id)
         return result
 
     def _load_request(self, session_id: int) -> RoughCutRequest | None:
@@ -96,7 +114,7 @@ class CutPlanService:
             return None
 
 
-def _derive_title(user_text: str, max_len: int = 24) -> str:
+def _derive_title(user_text: str, max_len: int = 24, lang: str = "zh") -> str:
     """A short sidebar title from the first user message (first line, clipped)."""
     line = (user_text or "").strip().splitlines()[0].strip() if user_text.strip() else ""
-    return line[:max_len] or "未命名"
+    return line[:max_len] or ("Untitled" if lang == "en" else "未命名")

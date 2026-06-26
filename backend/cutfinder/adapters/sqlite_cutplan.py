@@ -52,6 +52,10 @@ class SqliteCutSessionStore:
 
     def __init__(self, conn: _Conn) -> None:
         self._conn = conn
+        # Ephemeral live-progress text per session (not persisted): the running
+        # turn writes it, the polling UI reads it via get_session. Lost on
+        # restart, which is fine — interrupted sessions are reset to idle anyway.
+        self._progress: dict[int, str] = {}
         self.execute_schema()
 
     def execute_schema(self) -> None:
@@ -95,7 +99,18 @@ class SqliteCutSessionStore:
         r = c.fetchone()
         if r is None:
             return None
-        return CutSession(id=r[0], title=r[1] or "", status=r[2], created_at=r[3], updated_at=r[4])
+        return CutSession(
+            id=r[0], title=r[1] or "", status=r[2], created_at=r[3], updated_at=r[4],
+            progress=self._progress.get(session_id, ""),
+        )
+
+    def set_session_progress(self, session_id: int, text: str) -> None:
+        """Set the live progress text for a running session (in-memory only)."""
+        self._progress[session_id] = text
+
+    def clear_session_progress(self, session_id: int) -> None:
+        """Drop a session's live progress text (turn finished or errored)."""
+        self._progress.pop(session_id, None)
 
     def delete_session(self, session_id: int) -> None:
         c = self._conn.cursor()
@@ -104,6 +119,7 @@ class SqliteCutSessionStore:
         c.execute("DELETE FROM cut_plans WHERE session_id = ?", (session_id,))
         c.execute("DELETE FROM cut_sessions WHERE id = ?", (session_id,))
         self._conn.commit()
+        self._progress.pop(session_id, None)
 
     def set_session_title(self, session_id: int, title: str) -> None:
         c = self._conn.cursor()

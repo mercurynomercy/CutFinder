@@ -42,6 +42,8 @@ _GLOBAL_PREF_KEYS = (
     "qwen_asr_model",
     "qwen_aligner_model",
     "qwen_max_chunk_s",
+    # UI language is per-device (not per-library) — one setting for the whole machine.
+    "ui_language",
 )
 
 # Repo root, anchored to this file (backend/cutfinder/config.py -> repo root).
@@ -244,6 +246,9 @@ class Prefs(BaseModel, frozen=True):
     vad_threshold: float = Field(default=0.35, gt=0, le=1)
     # Language for AI-generated summaries / visual descriptions ("zh" or "en").
     output_language: Literal["zh", "en"] = "zh"
+    # UI interface language — per-device (one value for the whole machine). Drives
+    # which default director prompt is shown and used, as well as progress messages.
+    ui_language: Literal["en", "zh"] = "en"
     # Keyframe recommendation: max ranked cut/frame suggestions per clip, and
     # whether to auto-queue a keyframes job after each scan completes.
     keyframe_count: int = Field(default=3, ge=1, le=10)
@@ -254,6 +259,11 @@ class Prefs(BaseModel, frozen=True):
     # default. Subtitle export always separates regardless of this flag.
     vocal_separation: bool = False
     # Rough-cut director agent (§3.15) guardrails.
+    # Generation mode: "agent" runs a scoped tool loop per shooting date (the
+    # model can get_clip_detail / inspect_broll then emit_plan — smarter, with a
+    # per-day fall back to staged JSON when it doesn't converge); "staged" is the
+    # original one-structured-JSON-call-per-date path. See task 26.
+    cut_director_mode: Literal["agent", "staged"] = "agent"
     # Max tool-calling rounds before the loop force-finalizes the current draft.
     cut_max_tool_rounds: int = Field(default=24, ge=1, le=200)
     # Max live inspect_broll (Qwen3-VL) calls per generation; 0 = unlimited.
@@ -262,6 +272,19 @@ class Prefs(BaseModel, frozen=True):
     cut_vision_budget: int = Field(default=6, ge=0)
     # Default aspect ratio when the user doesn't state one in chat.
     cut_default_aspect_ratio: str = "16:9"
+    # Off by default: after assembling the plan, run one extra critic LLM pass
+    # that judges subjective quality (rhythm/narrative/A-B balance) and re-does
+    # the dates it flags. Costs one more LLM call + the flagged days' redo, so
+    # the user opts in. See task 28 Part B.
+    cut_critic_enabled: bool = False
+    # Per-shooting-date catalog size caps (characters), fed to the day generator.
+    # The Qwen3.6 text model takes a 260k-token context, so these are generous on
+    # purpose — they exist to bound local OMLX prefill cost/RAM, not to truncate.
+    # Counted as real tokens (OMLX /messages/count_tokens), not characters.
+    # lean = agent mode (one short line per clip, transcripts fetched on demand);
+    # staged = fast mode (台词 inlined since it has no tools, so it fills faster).
+    cut_lean_token_budget: int = Field(default=50000, ge=1000, le=200000)
+    cut_staged_token_budget: int = Field(default=40000, ge=1000, le=200000)
 
     @field_validator(
         "text_model", "vision_model", "whisper_model",
