@@ -71,7 +71,10 @@ def test_prompt_get_put_reset(
     tmp_path: Any, monkeypatch: Any,
 ) -> None:
     import cutfinder.config as cfg
-    from cutfinder.cutplan.director import DEFAULT_CUT_DIRECTOR_PROMPT
+    # No UI-language pref set in this test → the prompt endpoint defaults to ZH.
+    from cutfinder.cutplan.prompts import (
+        DEFAULT_CUT_DIRECTOR_PROMPT_ZH as DEFAULT_CUT_DIRECTOR_PROMPT,
+    )
 
     # Isolate the machine-global config file so the real one isn't touched.
     monkeypatch.setattr(cfg, "_GLOBAL_CONFIG_FILE", tmp_path / ".cutfinder" / "config.json")

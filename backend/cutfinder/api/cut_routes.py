@@ -44,7 +44,7 @@ def _build_router(ctx: Any) -> Any:
     @router.get("/prompt")
     async def get_prompt() -> dict[str, Any]:
         from cutfinder.config import load_cut_director_prompt
-        from cutfinder.cutplan.director import (
+        from cutfinder.cutplan.prompts import (
             DEFAULT_CUT_DIRECTOR_PROMPT_EN,
             DEFAULT_CUT_DIRECTOR_PROMPT_ZH,
         )
@@ -67,7 +67,7 @@ def _build_router(ctx: Any) -> Any:
     @router.put("/prompt")
     async def set_prompt(request: Request) -> dict[str, Any]:
         from cutfinder.config import load_cut_director_prompt, save_cut_director_prompt
-        from cutfinder.cutplan.director import (
+        from cutfinder.cutplan.prompts import (
             DEFAULT_CUT_DIRECTOR_PROMPT_EN,
             DEFAULT_CUT_DIRECTOR_PROMPT_ZH,
         )
@@ -97,7 +97,7 @@ def _build_router(ctx: Any) -> Any:
     @router.delete("/prompt")
     async def reset_prompt() -> dict[str, Any]:
         from cutfinder.config import save_cut_director_prompt
-        from cutfinder.cutplan.director import (
+        from cutfinder.cutplan.prompts import (
             DEFAULT_CUT_DIRECTOR_PROMPT_EN,
             DEFAULT_CUT_DIRECTOR_PROMPT_ZH,
         )
