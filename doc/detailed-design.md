@@ -587,7 +587,7 @@ OMLX 端点与密钥通过全局配置（`~/.cutfinder/config.json`）或 OS env
 > 取代现有 shell 脚本启动器（`packaging/launcher.sh` + `scripts/build-app.sh`）。
 > 现状痛点：`Contents/MacOS/CutFinder` 是 bash 脚本，Dock 生命周期靠「脚本保持前台 + 转发 SIGTERM」勉强维持，没有标准应用菜单，点 Dock 图标不会重开 UI，且不利于代码签名/公证。
 > 目标：用**最小 Swift/AppKit 包装器**取而代之，得到标准菜单、稳定 Dock 生命周期、点 Dock 重开 UI、可签名/公证；并把「开启/关闭服务」与「首次自动安装所有依赖」做成原生体验。
-> **设计决策**（已确认）：① UI 用 **WKWebView 内嵌**现有 web 前端（无浏览器、无标签页）；② 服务**启动即自动开启**，可手动停止/重启；③ 首次启动**自动安装本地依赖**（uv / ffmpeg / Python env / whisper+demucs 模型），**OMLX 仅探测 + 引导**（独立菜单栏 App，无法静默安装）。UI 细节见 ui-design §「原生 App 外壳」。
+> **设计决策**（已确认）：① UI 用 **WKWebView 内嵌**现有 web 前端（无浏览器、无标签页）；② 服务**启动即自动开启**，可手动停止/重启；③ 首次启动**自动安装本地依赖**（uv / ffmpeg / Python env / demucs 模型；语音模型 whisper 或 Qwen3-ASR 改为首次转写时懒加载下载），**OMLX 仅探测 + 引导**（独立菜单栏 App，无法静默安装）。UI 细节见 ui-design §「原生 App 外壳」。
 
 ### 11.1 为什么不再用 shell 脚本
 
@@ -617,7 +617,9 @@ packaging/macapp/            # Swift 包装器源码（swiftc 直接编译，无
   PayloadManager.swift  SetupView.swift  ErrorView.swift
   CutFinder.entitlements     # Hardened Runtime entitlements
 packaging/Info.plist.template  # 复用，微调
-packaging/{download_whisper.py,download_demucs.py,check_omlx.py}  # Provisioner 复用
+# Provisioner 不再依赖外部下载脚本：demucs 经 venv python 内联预热，
+# OMLX 由 DependencyChecker 原生探测。dev 侧 `make models` 仍用
+# scripts/{download_whisper.py,download_demucs.py}。
 scripts/build-app.sh         # 升级：编译 Swift → 组 bundle → 签名 → dmg → 公证
 ```
 
@@ -659,11 +661,11 @@ WKWebView 配置：仅允许加载本地 `127.0.0.1` 源；外部链接（如 OM
 2. **uv**：缺失则 `curl -LsSf https://astral.sh/uv/install.sh | sh`（装到 `~/.local/bin`）。
 3. **ffmpeg/ffprobe**：缺失则 `brew install ffmpeg`；无 Homebrew 时不静默装 brew，转「引导」（给 brew.sh 链接 + 命令）。
 4. **Python env**：在运行目录 `backend/` 跑 `uv sync --frozen`（回落 `uv sync`），幂等。
-5. **模型**：复用 `download_whisper.py`（large-v3）/ `download_demucs.py`（htdemucs），缺则下载、已存在跳过；体量大，进度纳入安装视图。
+5. **模型**：只预热 **demucs**（`htdemucs`，~80MB 人声分离）——经 venv python 调 `DemucsSeparator._ensure_model_loaded()`，缺则下载、已存在跳过（`DependencyChecker.modelsPresent` 只查 `models/demucs/checkpoints`）。**语音模型（whisper / Qwen3-ASR）不在此预装**：按 `transcription_engine` 偏好,在首次转写 A-roll 片段时由适配器懒加载下载（只用 B-roll 的用户永不下载），扫描进度卡据 `job_started` 的 `speech_model_ready` 标志给出一次性下载提示。
 6. **OMLX 探测**：复用 `check_omlx.py` 逻辑探 `GET <OMLX_BASE_URL>/models` 并校验所需模型在列。**不可达/缺模型** → 不阻断启动，弹引导（说明 + 「打开 OMLX 下载页」「重试」「仍然继续」）。无 OMLX 时扫描仍能做 VAD/转写/缩略图，但 A-roll 简介与 B-roll 打标会失败——引导文案点明此点。
 7. 写**版本戳安装完成标记**；后续启动只做快速存在性检查 + `uv sync --frozen`（满足时近乎瞬时），不重复全量安装。
 
-幂等：payload 同步保 venv/catalog；uv sync、模型下载、探测均可重复安全执行。
+幂等：payload 同步保 venv/catalog；uv sync、demucs 预热、语音模型懒加载下载、探测均可重复安全执行。
 
 ### 11.7 沙盒 / 签名 / 公证
 

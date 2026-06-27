@@ -273,6 +273,22 @@ class QwenTranscriber(Transcriber):
             snapshot_download(repo, local_dir=str(local))
         return str(local)
 
+    @staticmethod
+    def _repo_ready(repo: str) -> bool:
+        """Whether *repo* is already on disk (local dir, or materialised)."""
+        candidate = Path(repo)
+        if candidate.is_dir():
+            return True
+        return (QWEN_MODELS_DIR / repo.split("/")[-1]).is_dir()
+
+    def is_model_ready(self) -> bool:
+        """Whether both Qwen models are on disk (no download needed).
+
+        Cheap directory check so callers can warn before the first
+        transcription triggers a multi-GB download of the ASR + aligner repos.
+        """
+        return self._repo_ready(self._asr_model) and self._repo_ready(self._aligner_model)
+
     def _load(self, repo: str) -> Any:
         """Load (and process-globally cache) an MLX STT model for *repo*."""
         path = self._resolve_model_path(repo)

@@ -21,27 +21,21 @@ enum DependencyChecker {
         Shell.which(tool) != nil
     }
 
-    /// Whether the whisper + demucs model weights are present.
+    /// Whether the demucs model weights are present.
     ///
-    /// CutFinder stores models under `<runtime>/models/` (see
-    /// `cutfinder.config.WHISPER_MODELS_DIR` / `DEMUCS_MODELS_DIR`), *not* the
-    /// global `~/.cache` Hugging Face / torch caches. We check both there:
-    /// whisper at `models/whisper/whisper-large-v3-mlx`, demucs at
-    /// `models/demucs/checkpoints` (torch-hub layout). Both must exist to call
-    /// models present, so the download step is skipped (and stays offline) only
-    /// once both are actually on disk.
+    /// Only demucs (~80 MB vocal separation) is provisioned at first launch.
+    /// The speech model (whisper *or* Qwen3-ASR, per the `transcription_engine`
+    /// pref) is intentionally *not* checked here: it downloads lazily on the
+    /// first A-roll transcription, so users who never transcribe never pay for
+    /// it. CutFinder stores demucs under `<runtime>/models/demucs/checkpoints`
+    /// (torch-hub layout), *not* the global torch cache. The download step is
+    /// skipped only once demucs is actually on disk.
     static func modelsPresent(paths: PayloadPaths) -> Bool {
         let fm = FileManager.default
-        let models = paths.modelsDir
-        let whisper = models
-            .appendingPathComponent("whisper", isDirectory: true)
-            .appendingPathComponent("whisper-large-v3-mlx", isDirectory: true)
-        let demucs = models
+        let demucs = paths.modelsDir
             .appendingPathComponent("demucs", isDirectory: true)
             .appendingPathComponent("checkpoints", isDirectory: true)
-        let whisperOK = fm.fileExists(atPath: whisper.path)
-        let demucsOK = fm.fileExists(atPath: demucs.path)
-        return whisperOK && demucsOK
+        return fm.fileExists(atPath: demucs.path)
     }
 
     /// Synchronously query OMLX `/models` and evaluate readiness.
