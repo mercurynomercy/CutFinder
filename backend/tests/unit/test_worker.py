@@ -1,6 +1,6 @@
 """Tests for :mod:`cutfinder.pipeline.worker`.
 
-Covers the three DoD categories from ``doc/tasks/12-worker-queue.md``:
+Covers the three DoD categories from ``docs/tasks/12-worker-queue.md``:
     1. Queue sequential processing order (inject fake orchestrator)
     2. Progress event sequence correctness (start/done/error)
     3. Job state persistence — total/done/failed counters update correctly

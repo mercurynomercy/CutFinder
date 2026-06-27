@@ -1,6 +1,6 @@
 """Tests for :mod:`cutfinder.pipeline.orchestrator`.
 
-Covers the five DoD categories from ``doc/tasks/11-orchestrator.md``:
+Covers the five DoD categories from ``docs/tasks/11-orchestrator.md``:
     1. A/B branch call assertions (transcribe+summarize vs extract+vision_tagger)
     2. Error injection → single clip status=error, batch continues processing other clips
     3. Idempotent skip (pre-existing fingerprint → no processing)

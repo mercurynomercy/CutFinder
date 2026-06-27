@@ -7,7 +7,7 @@
 - **日期**：2026-06-27
 - **平台**：macOS（Apple Silicon），配合 Final Cut Pro 工作流
 - **运行形态**：本地 Web App（浏览器打开 `localhost`），原生 macOS `.app` 外壳；全程离线，AI 全本地
-- **详细设计**：模块划分、接口、数据模型、测试与部署见 [`doc/detailed-design.md`](./detailed-design.md)
+- **详细设计**：模块划分、接口、数据模型、测试与部署见 [`docs/detailed-design.md`](./detailed-design.md)
 
 ---
 
@@ -241,4 +241,4 @@ Qwen3.6 生成「简介+标签」(OMLX)           │
 
 ---
 
-*本文档为需求与方案设计稿，配套详细设计见 [`doc/detailed-design.md`](./detailed-design.md)。*
+*本文档为需求与方案设计稿，配套详细设计见 [`docs/detailed-design.md`](./detailed-design.md)。*

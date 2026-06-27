@@ -1,6 +1,6 @@
 """Tests for :mod:`cutfinder.api.routes` and :mod:`cutfinder.api.settings_routes`.
 
-Covers all 8 route groups from ``doc/tasks/13-api.md``:
+Covers all 8 route groups from ``docs/tasks/13-api.md``:
     1. POST /scan — enqueue scan job
     2. GET /jobs/{id} — job status
     3. GET SSE events for jobs (GET /jobs/{id}/events)

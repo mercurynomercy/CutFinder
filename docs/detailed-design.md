@@ -1,6 +1,6 @@
 # CutFinder 详细设计文档（Detailed Design）
 
-> 配套需求文档：[`doc/proposal.md`](./proposal.md)。本文件把需求拆成可独立开发、独立测试的模块，给出每个模块的职责、接口、输入输出、依赖与测试方式。
+> 配套需求文档：[`docs/proposal.md`](./proposal.md)。本文件把需求拆成可独立开发、独立测试的模块，给出每个模块的职责、接口、输入输出、依赖与测试方式。
 > - **范围**：proposal v1（需求 0–7）。
 
 ---

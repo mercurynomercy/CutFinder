@@ -13,7 +13,7 @@ Covers:
 Run with:
     .venv/bin/python -m pytest tests/unit/test_scanner.py -v
 
-Tracker: doc/tasks/10-scanner.md — all DoD items covered.
+Tracker: docs/tasks/10-scanner.md — all DoD items covered.
 """
 
 from __future__ import annotations

@@ -7,11 +7,11 @@
 ## 截图
 
 <p align="center">
-  <img src="doc/images/example.png" alt="CutFinder UI — 按日期分组的缩略图墙、筛选面板与详情面板"/>
+  <img src="docs/images/example.png" alt="CutFinder UI — 按日期分组的缩略图墙、筛选面板与详情面板"/>
 </p>
 
 <p align="center">
-  <img src="doc/images/ai_rough_cut.png" alt="CutFinder 初剪导演（beta）—— 左侧对话、右侧按日期分章的分镜表（含时码与缩略图）"/>
+  <img src="docs/images/ai_rough_cut.png" alt="CutFinder 初剪导演（beta）—— 左侧对话、右侧按日期分章的分镜表（含时码与缩略图）"/>
   <br/>
   <em>初剪导演（beta）—— 对话描述需求，得到按日期分章的分镜表。</em>
 </p>
@@ -87,7 +87,7 @@ make app          # → dist/CutFinder.app（以及 dist/CutFinder.dmg）
 - **原生文件夹选择**：设置页选「素材文件夹 / 素材库」时弹出 macOS 原生选择框，返回真实绝对路径（浏览器选择器拿不到绝对路径）。
 - **设置页绑定素材库**：首次使用选/填一个绝对路径即可绑定库，**运行时热生效、无需重启**（也支持 `CUTFINDER_LIBRARY` 环境变量）。设置页每项选项均有中文说明文字。
 - **扫描后自动刷新**：Scan 完成后自动轮询任务状态并刷新缩略图墙，无需手动操作。
-- **深色专业界面**：近黑面板让缩略图突出，A-roll/B-roll 以颜色+图标区分，贴近 FCP 调性（见 [`doc/ui-design.md`](./doc/ui-design.md)）。
+- **深色专业界面**：近黑面板让缩略图突出，A-roll/B-roll 以颜色+图标区分，贴近 FCP 调性（见 [`docs/ui-design.md`](./docs/ui-design.md)）。
 
 ### 不破坏原素材（核心约束）
 
@@ -110,7 +110,7 @@ API 层 (FastAPI，薄)                       :5081
 适配器层 ── ffmpeg/ffprobe · Silero VAD · mlx-whisper / Qwen3-ASR+ForcedAligner · OMLX(文本+视觉) · Pillow(照片) · SQLite
 ```
 
-每个外部依赖都藏在接口后面，业务逻辑只依赖接口 → 模块可独立替换与测试。详见 [`doc/detailed-design.md`](./doc/detailed-design.md)。
+每个外部依赖都藏在接口后面，业务逻辑只依赖接口 → 模块可独立替换与测试。详见 [`docs/detailed-design.md`](./docs/detailed-design.md)。
 
 ### 模型服务
 
@@ -289,10 +289,10 @@ make e2e               # Playwright e2e
 
 ## 文档
 
-- [需求文档 `doc/proposal.md`](./doc/proposal.md) —— 目标、需求、范围、技术选型
-- [详细设计 `doc/detailed-design.md`](./doc/detailed-design.md) —— 模块、接口、数据模型、API、测试与部署
-- [UI 设计系统 `doc/ui-design.md`](./doc/ui-design.md) —— 配色/字体/间距 token、组件规范、页面布局（深色优先）
-- [任务清单 `doc/tasks/`](./doc/tasks/progress.md) —— 各模块最小任务与总体进度
+- [需求文档 `docs/proposal.md`](./docs/proposal.md) —— 目标、需求、范围、技术选型
+- [详细设计 `docs/detailed-design.md`](./docs/detailed-design.md) —— 模块、接口、数据模型、API、测试与部署
+- [UI 设计系统 `docs/ui-design.md`](./docs/ui-design.md) —— 配色/字体/间距 token、组件规范、页面布局（深色优先）
+- [任务清单 `docs/tasks/`](./docs/tasks/progress.md) —— 各模块最小任务与总体进度
 - [`CLAUDE.md`](./CLAUDE.md) —— 给 AI 协作者的项目约束与架构速览
 
 > 品牌图源在 `branding/`。

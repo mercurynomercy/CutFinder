@@ -93,9 +93,9 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 
 ## Project status
 
-CutFinder is **pre-implementation**. The only content so far is the design spec at `doc/proposal.md` (written in Chinese). There is no source code, build system, or test suite yet. When scaffolding the project, update this file with real build/lint/test commands (including how to run a single test) — do not invent them before they exist.
+CutFinder is **pre-implementation**. The only content so far is the design spec at `docs/proposal.md` (written in Chinese). There is no source code, build system, or test suite yet. When scaffolding the project, update this file with real build/lint/test commands (including how to run a single test) — do not invent them before they exist.
 
-Read `doc/proposal.md` first; it is the source of truth for scope, the model pipeline, and the hard constraints below. The original author communicates in Chinese, and A-roll narration is Chinese — user-facing text and AI prompts default to Chinese.
+Read `docs/proposal.md` first; it is the source of truth for scope, the model pipeline, and the hard constraints below. The original author communicates in Chinese, and A-roll narration is Chinese — user-facing text and AI prompts default to Chinese.
 
 ## What CutFinder does
 
