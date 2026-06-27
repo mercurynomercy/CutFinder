@@ -19,6 +19,9 @@ Before starting any feature or bugfix, invoke the relevant superpowers skills in
 
 **Check for relevant skills before every task.** These are mandatory workflows, not suggestions. For trivial one-line fixes (typos, obvious bugs), use judgment — but anything that touches logic, behavior, or structure goes through this pipeline.
 
+### Agent Concurrency Limit (Hard)
+**Maximum 1 subagent at any time.** The main agent + 1 subagent = max 2 concurrent processes. Never spawn multiple parallel agents — even if the plan or skill instructions suggest it, serialize them: dispatch one, wait for completion (DONE/DONE_WITH_CONCERNS/BLOCKED), then dispatch the next.
+
 ## 0. Code Work Goes Through codebase-memory-mcp (Hard Boundary)
 
 **Reading, planning, or editing code — ground in the code graph first, not memory.**
