@@ -87,6 +87,12 @@ function ScanProgress({ jobId, events }: ScanProgressProps) {
     }
   }
 
+  // job_started carries speech_model_ready=false when the transcription model
+  // isn't on disk yet — the first A-roll clip will trigger a one-off download.
+  const speechModelPending =
+    job?.kind === 'scan' &&
+    events.some((e) => e.type === 'job_started' && e.speech_model_ready === false)
+
   const total = job?.total ?? 0
   const done = job?.done ?? 0
   const pct = total > 0 ? Math.round((done / total) * 100) : null
@@ -129,6 +135,11 @@ function ScanProgress({ jobId, events }: ScanProgressProps) {
         {/* Current clip */}
         {currentPath && (
           <p className="mt-2 truncate text-xs text-[--text-muted]" title={currentPath}>{currentPath}</p>
+        )}
+
+        {/* One-off speech-model download heads-up (first scan only) */}
+        {speechModelPending && (
+          <p className="mt-2 text-xs text-[--text-secondary]">{t('jobs.speechModelDownloadHint')}</p>
         )}
       </div>
     </>

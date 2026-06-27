@@ -19,7 +19,7 @@ final class SetupView: NSView {
         .uv: "uv（Python 工具链）",
         .ffmpeg: "ffmpeg",
         .pythonEnv: "Python 运行环境",
-        .models: "AI 模型（whisper / demucs）",
+        .models: "音频分离模型（demucs）",
         .omlx: "OMLX 模型服务",
     ]
 

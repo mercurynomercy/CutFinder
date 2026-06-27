@@ -47,3 +47,12 @@ class Transcriber(Protocol):
         *progress* is an optional callback receiving overall progress as a
         0..1 fraction; when ``None`` no progress is reported.
         """
+
+    def is_model_ready(self) -> bool:
+        """Whether the speech model is already on disk (no download needed).
+
+        Cheap, side-effect-free check (no loading, no network). Lets callers
+        warn the UI before the first transcription triggers a lazy multi-GB
+        model download. Implementations that bundle their model may always
+        return ``True``.
+        """

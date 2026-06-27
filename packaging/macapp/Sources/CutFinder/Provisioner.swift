@@ -126,22 +126,17 @@ final class Provisioner {
         }
     }
 
-    /// Best-effort model download via the bundled scripts; never fatal here so a
-    /// flaky network doesn't block first run (re-runnable from the menu).
+    /// Best-effort warm of the demucs vocal-separation model (~80 MB); never
+    /// fatal here so a flaky network doesn't block first run (re-runnable from
+    /// the menu). The speech model (whisper / Qwen3-ASR) is *not* downloaded
+    /// here — it loads lazily on the first A-roll transcription so users who
+    /// never transcribe never pay for it.
     private func downloadModels(onLog: @escaping (String) -> Void) {
         let python = pythonInterpreter()
-        // Scripts ship next to the backend payload under packaging/.
-        let scriptsDir = paths.runtimeDir.appendingPathComponent("packaging", isDirectory: true)
-        for script in ["download_whisper.py", "download_demucs.py"] {
-            let scriptURL = scriptsDir.appendingPathComponent(script)
-            guard FileManager.default.fileExists(atPath: scriptURL.path) else {
-                onLog("跳过 \(script)（未找到脚本）")
-                continue
-            }
-            onLog("下载模型：\(script)…")
-            let result = Shell.bash("\(python) \(shellEscaped(scriptURL.path))", currentDirectory: paths.backendDir)
-            onLog(result.stdout + result.stderr)
-        }
+        onLog("下载模型：demucs（人声分离，约 80MB）…")
+        let warm = "from cutfinder.adapters.demucs_separator import DemucsSeparator; DemucsSeparator()._ensure_model_loaded()"
+        let result = Shell.bash("\(python) -c \(shellEscaped(warm))", currentDirectory: paths.backendDir)
+        onLog(result.stdout + result.stderr)
     }
 
     /// Resolve a python invocation: prefer the venv interpreter, else `uv run python`.

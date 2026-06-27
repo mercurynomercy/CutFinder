@@ -157,6 +157,19 @@ class MlxWhisperTranscriber(Transcriber):
         self._resolved_path = str(local)
         return self._resolved_path
 
+    def is_model_ready(self) -> bool:
+        """Whether the model is already on disk (no download needed).
+
+        Cheap directory check so callers can warn before the first
+        transcription triggers a multi-GB download. A custom local path is
+        ready iff it exists; a HF repo is ready once materialised under
+        ``models/whisper/<basename>``.
+        """
+        candidate = Path(self._model)
+        if candidate.is_dir():
+            return True
+        return (WHISPER_MODELS_DIR / self._model.split("/")[-1]).is_dir()
+
     @staticmethod
     def unload_cache() -> None:
         """Release the process-global mlx-whisper model from memory.

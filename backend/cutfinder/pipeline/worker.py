@@ -287,8 +287,15 @@ class WorkerQueue:
             self._next_job_counter += 1
             job_id = self._next_job_counter
 
-        # Emit progress events for batch start and per-clip processing
-        self._emit({"type": "job_started", "job_id": job_id, "total": len(candidates)})
+        # Emit progress events for batch start and per-clip processing. Flag
+        # when the speech model isn't on disk yet so the UI can warn that the
+        # first A-roll clip will trigger a lazy (multi-GB) download.
+        self._emit({
+            "type": "job_started",
+            "job_id": job_id,
+            "total": len(candidates),
+            "speech_model_ready": self._speech_model_ready(),
+        })
 
         # Handle empty candidate list: no items to enqueue → immediately mark done.
         if not candidates:
@@ -508,6 +515,23 @@ class WorkerQueue:
             self._stream.remove(sid)
 
     # ── Internal helpers ─────────────────────────────────────────
+
+    def _speech_model_ready(self) -> bool:
+        """Whether the speech model is already downloaded.
+
+        Defaults to ``True`` (suppress the download warning) when the
+        transcriber is absent or doesn't expose the cheap readiness check, so
+        an unknown state never nags the user.
+        """
+        transcriber = getattr(self._orchestrator, "transcriber", None)
+        check = getattr(transcriber, "is_model_ready", None)
+        if check is None:
+            return True
+        try:
+            return bool(check())
+        except Exception as exc:  # noqa: BLE001 — readiness probe must never block a scan
+            logger.warning("Speech model readiness check failed: %s", exc)
+            return True
 
     def _emit(self, event: Any) -> None:
         """Broadcast a progress/event dict to callback + SSE stream."""
