@@ -4,6 +4,21 @@ Behavioral guidelines to reduce common LLM coding mistakes. Merge with project-s
 
 **Tradeoff:** These guidelines bias toward caution over speed. For trivial tasks, use judgment.
 
+## Superpowers Plugin — Mandatory Workflow for All Features and Bugfixes
+
+**Any feature development or bug fix on this project MUST follow the superpowers plugin workflow. This is not optional.**
+
+Before starting any feature or bugfix, invoke the relevant superpowers skills in order:
+1. **brainstorming** — Explore requirements and design before writing code. Saves a design document for validation.
+2. **using-git-worktrees** — Creates an isolated workspace on a new branch, verifies clean test baseline.
+3. **writing-plans** — Breaks work into bite-sized tasks (2–5 min each) with exact file paths, complete code, and verification steps.
+4. **subagent-driven-development** or **executing-plans** — Dispatches fresh subagents per task with two-stage review (spec compliance + code quality), or executes in batches.
+5. **test-driven-development** — Enforces RED-GREEN-REFACTOR: write failing test → watch it fail → minimal code → watch it pass → commit. **Deletes any code written before tests.**
+6. **requesting-code-review** — Reviews against plan between tasks; critical issues block progress.
+7. **finishing-a-development-branch** — Verifies tests, presents merge/PR/keep/discard options, cleans up worktree.
+
+**Check for relevant skills before every task.** These are mandatory workflows, not suggestions. For trivial one-line fixes (typos, obvious bugs), use judgment — but anything that touches logic, behavior, or structure goes through this pipeline.
+
 ## 0. Code Work Goes Through codebase-memory-mcp (Hard Boundary)
 
 **Reading, planning, or editing code — ground in the code graph first, not memory.**
