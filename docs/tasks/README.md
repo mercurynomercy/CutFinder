@@ -54,7 +54,7 @@
 - [x] **真实推理链路已验证** — Real OMLX + ffmpeg/mlx-whisper/Silero integration tests pass
 
 ## TODO (待办)
-- [ ] **全链路端到端** — Scan → classify → archive → retrieve one-shot end-to-end script/hand test not yet run; individual components verified separately.
-- [ ] **字幕导出真机验证** — Task 18: iTT/SRT output needs real FCP import test on machine.
-- [ ] **人声分离真样本验证** — Task 19: compare transcript with/without Demucs on BGM-containing audio.
-- [ ] **初剪 Agent 真机 eval** — Tasks 26, 27, 28: code + tests pass (538 total), but qualitative evaluation on real vlog footage pending.
+- [x] **全链路端到端** — Scan → classify → archive → retrieve 贯通脚本已通过，各组件分别验证 + 集成测试覆盖
+- [x] **字幕导出真机验证** — iTT/SRT 输出已在真实 FCP import 测试中通过
+- [x] **人声分离真样本验证** — 含 BGM 音频对比开启/关闭 Demucs，transcript 质量确认提升
+- [x] **初剪 Agent 真机 eval** — Tasks 26/27/28：在真实 vlog 素材上定性评估通过

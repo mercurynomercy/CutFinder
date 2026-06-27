@@ -93,7 +93,13 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 
 ## Project status
 
-CutFinder is **pre-implementation**. The only content so far is the design spec at `docs/proposal.md` (written in Chinese). There is no source code, build system, or test suite yet. When scaffolding the project, update this file with real build/lint/test commands (including how to run a single test) — do not invent them before they exist.
+CutFinder is **implemented** (v1.3+). Source code lives in `backend/cutfinder/` and `frontend/src/`. Build/lint/test commands:
+- **Setup:** `make setup` (mise + Brewfile deps + uv sync + frontend npm install)
+- **Dev server:** `make dev` (starts backend via uvicorn + Vite frontend proxy)
+- **Unit tests:** `make test` → pytest (e.g. 546 total, ~545 passed)
+- **Integration tests:** `make test-integration` (real OMLX + ffmpeg/mlx-whisper/Silero)
+- **E2E:** `make e2e` (Playwright end-to-end against live server)
+- **Single test:** `pytest tests/unit/test_file.py::test_name -v`
 
 Read `docs/proposal.md` first; it is the source of truth for scope, the model pipeline, and the hard constraints below. The original author communicates in Chinese, and A-roll narration is Chinese — user-facing text and AI prompts default to Chinese.
 
@@ -110,9 +116,9 @@ These come directly from the user and override convenience:
 3. **Fully local / offline.** No footage leaves the machine. All inference runs on the user's Apple Silicon Mac.
 4. **Idempotent rescans.** Re-scanning only processes new files (dedup by file fingerprint); never re-copy or duplicate.
 
-## Architecture (planned)
+## Architecture (implemented)
 
-- **Backend:** Python + FastAPI. **DB:** SQLite, stored at `<library>/.cutfinder/catalog.sqlite` (thumbnails under `.cutfinder/thumbnails/`). **Frontend:** Vite + React (thumbnail wall + filter/search). **Video:** ffmpeg/ffprobe for metadata, thumbnails, and frame extraction.
+- **Backend:** Python + FastAPI (`backend/cutfinder/`). **DB:** SQLite, stored at `<library>/.cutfinder/catalog.sqlite` (thumbnails under `.cutfinder/thumbnails/`). **Frontend:** Vite + React + Tailwind (thumbnail wall + filter/search). **Video:** ffmpeg/ffprobe for metadata, thumbnails, and frame extraction.
 
 - **Library layout:** copies land at `<library>/YYYY-MM-DD/A-roll/` or `.../B-roll/`. Date-first, then type.
 
@@ -140,4 +146,4 @@ Then write metadata/type/summary/tags/transcript/thumbnail path to SQLite and co
 
 ## Scope boundaries
 
-In v1: requirements 0–7 (custom folders, time preservation, A/B detection, A-roll summary, date+type organization, tags, thumbnails, OMLX integration). **Deferred:** keyframe suggestions (req 8), Final Cut Pro deep integration (FCPXML/Keywords export), and packaging as a standalone `.app` (Tauri/PyInstaller). Don't pull deferred items into v1 work without asking.
+In v1: requirements 0–7 (custom folders, time preservation, A/B detection, A-roll summary, date+type organization, tags, thumbnails, OMLX integration). **Implemented:** keyframe suggestions (req 8), native macOS `.app` packaging, subtitle export (iTT/SRT + FCPXML caption track), rough-cut director agent with per-day mini-agents and critic review, vocal separation (Demucs) before transcription. **Deferred:** Final Cut Pro deep integration beyond subtitle export (FCPXML Keywords/clip-level keyword mapping).
