@@ -12,9 +12,10 @@ and (for subtitles) its segment timing drifts; the Qwen pair fixes both:
 Because the aligner's timestamp range caps at ~400 s, and to scale to arbitrarily
 long video, the audio is first split with **Silero VAD** into speech spans which
 are merged into ``max_chunk_s`` chunks. Each chunk is transcribed and aligned
-independently, then its timestamps are offset back onto the clip timeline and the
-aligned tokens are grouped into subtitle cues. No whisper, no character-diff
-alignment — so the cues stay accurate to the end of a long clip.
+independently, then its timestamps are offset back onto the clip timeline; the
+aligned tokens from *all* chunks are grouped into subtitle cues on one timeline,
+so a sentence split across a chunk boundary stays a single cue. No whisper, no
+character-diff alignment — so the cues stay accurate to the end of a long clip.
 
 Both models are MLX repos downloaded into ``<repo>/models/qwen/`` on first use and
 loaded offline thereafter (mirroring :class:`MlxWhisperTranscriber`). Loaded
@@ -196,6 +197,44 @@ def group_cues(
             cur, cs, ce = "", None, 0.0
     if cur.strip() and cs is not None:
         cues.append(Segment(start_s=cs + offset, end_s=ce + offset, text=cur.strip()))
+    return cues
+
+
+def assemble_cues(
+    chunk_results: list[list[tuple[str, float, float]] | Segment],
+    *,
+    max_chars: int,
+    max_dur: float,
+    gap_s: float,
+) -> list[Segment]:
+    """Group per-chunk aligned tokens into cues on one shared timeline.
+
+    Each entry is either a chunk's ``(token, start, end)`` triples — already
+    offset onto the absolute clip timeline — or a pre-built fallback ``Segment``
+    (a chunk the aligner couldn't time). Aligned tokens from adjacent chunks are
+    grouped *together*, so a sentence split across a VAD chunk boundary
+    (e.g. ``躺平`` | ``了``) stays one cue when no real silence separates them; a
+    genuine gap still breaks per :func:`group_cues`. Fallback segments flush the
+    pending tokens and stand alone, preserving order.
+    """
+    cues: list[Segment] = []
+    pending: list[tuple[str, float, float]] = []
+
+    def _flush() -> None:
+        if pending:
+            cues.extend(group_cues(
+                pending, offset=0.0,
+                max_chars=max_chars, max_dur=max_dur, gap_s=gap_s,
+            ))
+            pending.clear()
+
+    for r in chunk_results:
+        if isinstance(r, Segment):
+            _flush()
+            cues.append(r)
+        else:
+            pending.extend(r)
+    _flush()
     return cues
 
 
@@ -384,7 +423,7 @@ class QwenTranscriber(Transcriber):
         asr = self._load(self._asr_model)
         aligner = self._load(self._aligner_model)
 
-        all_cues: list[Segment] = []
+        results: list[list[tuple[str, float, float]] | Segment] = []
         full_parts: list[str] = []
         total = len(chunks)
         for ci, (a, b) in enumerate(chunks):
@@ -401,15 +440,19 @@ class QwenTranscriber(Transcriber):
                 items = list(aligner.generate(seg, text=text, language=lang))
                 if items:
                     timed = reattach_punctuation(text, items)
-                    all_cues.extend(group_cues(
-                        timed, offset=a,
-                        max_chars=self._cue_max_chars,
-                        max_dur=self._cue_max_dur,
-                        gap_s=self._cue_gap_s,
-                    ))
+                    # Offset onto the clip timeline and defer grouping: cues are
+                    # assembled across all chunks below, so a sentence straddling
+                    # this boundary isn't cut into a stray one-character cue.
+                    results.append([(t, s + a, e + a) for t, s, e in timed])
                 else:
                     # Alignment yielded nothing — fall back to a single chunk cue.
-                    all_cues.append(Segment(start_s=a, end_s=b, text=text))
+                    results.append(Segment(start_s=a, end_s=b, text=text))
             _safe(progress, w + (1 - w) * (ci + 1) / total)
 
+        all_cues = assemble_cues(
+            results,
+            max_chars=self._cue_max_chars,
+            max_dur=self._cue_max_dur,
+            gap_s=self._cue_gap_s,
+        )
         return Transcript(full_text="".join(full_parts), segments=clean_cues(all_cues))

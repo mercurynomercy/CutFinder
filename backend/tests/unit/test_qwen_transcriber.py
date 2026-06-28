@@ -10,6 +10,7 @@ from dataclasses import dataclass
 
 from cutfinder.adapters.qwen_transcriber import (
     _lang_name,
+    assemble_cues,
     clean_cues,
     group_cues,
     merge_speech_into_chunks,
@@ -114,6 +115,37 @@ def test_group_breaks_on_max_chars() -> None:
     timed = [(c, i * 0.1, i * 0.1 + 0.1) for i, c in enumerate("一二三四")]
     cues = group_cues(timed, offset=0.0, max_chars=2, max_dur=6.0, gap_s=0.7)
     assert [c.text for c in cues] == ["一二", "三四"]
+
+
+# ── cue assembly across chunks ────────────────────────────────────
+
+def test_assemble_merges_sentence_split_across_chunks() -> None:
+    # Chunk B starts exactly where A ends (a hard VAD cut, no real silence):
+    # the trailing 了 must NOT become its own one-character cue.
+    chunk_a = [("躺", 9.0, 9.2), ("平", 9.2, 9.4)]
+    chunk_b = [("了", 9.4, 9.6)]
+    cues = assemble_cues([chunk_a, chunk_b], max_chars=18, max_dur=6.0, gap_s=0.7)
+    assert [c.text for c in cues] == ["躺平了"]
+
+
+def test_assemble_still_splits_on_real_silence_between_chunks() -> None:
+    chunk_a = [("躺", 9.0, 9.2), ("平", 9.2, 9.4)]
+    chunk_b = [("了", 11.0, 11.2)]  # 1.6s gap > gap_s — a genuine pause
+    cues = assemble_cues([chunk_a, chunk_b], max_chars=18, max_dur=6.0, gap_s=0.7)
+    assert [c.text for c in cues] == ["躺平", "了"]
+
+
+def test_assemble_keeps_fallback_segments_standalone_and_ordered() -> None:
+    fallback = Segment(start_s=1.0, end_s=2.0, text="对齐失败的整段")
+    cues = assemble_cues(
+        [
+            [("你", 0.0, 0.2), ("好", 0.2, 0.4)],
+            fallback,
+            [("再", 3.0, 3.2), ("见", 3.2, 3.4)],
+        ],
+        max_chars=18, max_dur=6.0, gap_s=0.7,
+    )
+    assert [c.text for c in cues] == ["你好", "对齐失败的整段", "再见"]
 
 
 # ── cue cleanup ───────────────────────────────────────────────────
