@@ -441,8 +441,14 @@ export const api = {
     out_dir: string
     formats: string[]
     language?: string
+    min_cue_s?: number
   }): Promise<{ job_id: number }> {
     return _fetch('/api/subtitles/export', { method: 'POST', body: JSON.stringify(body) })
+  },
+
+  /** GET /api/subtitles/model-ready — whether the speech model is downloaded. */
+  getSubtitleModelReady(): Promise<{ ready: boolean }> {
+    return _fetch('/api/subtitles/model-ready')
   },
 
   /** GET /api/subtitles/{jobId} — subtitle export result (files populate once done). */

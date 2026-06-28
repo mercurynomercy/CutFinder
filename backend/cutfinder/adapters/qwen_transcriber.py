@@ -12,9 +12,10 @@ and (for subtitles) its segment timing drifts; the Qwen pair fixes both:
 Because the aligner's timestamp range caps at ~400 s, and to scale to arbitrarily
 long video, the audio is first split with **Silero VAD** into speech spans which
 are merged into ``max_chunk_s`` chunks. Each chunk is transcribed and aligned
-independently, then its timestamps are offset back onto the clip timeline and the
-aligned tokens are grouped into subtitle cues. No whisper, no character-diff
-alignment — so the cues stay accurate to the end of a long clip.
+independently, then its timestamps are offset back onto the clip timeline; the
+aligned tokens from *all* chunks are grouped into subtitle cues on one timeline,
+so a sentence split across a chunk boundary stays a single cue. No whisper, no
+character-diff alignment — so the cues stay accurate to the end of a long clip.
 
 Both models are MLX repos downloaded into ``<repo>/models/qwen/`` on first use and
 loaded offline thereafter (mirroring :class:`MlxWhisperTranscriber`). Loaded
@@ -27,6 +28,7 @@ from __future__ import annotations
 import logging
 import struct
 import subprocess
+import unicodedata
 from pathlib import Path
 from typing import Any, Callable
 
@@ -199,11 +201,110 @@ def group_cues(
     return cues
 
 
-def clean_cues(cues: list[Segment]) -> list[Segment]:
-    """Drop empty / near-zero-duration cues and collapse consecutive duplicates."""
+def assemble_cues(
+    chunk_results: list[list[tuple[str, float, float]] | Segment],
+    *,
+    max_chars: int,
+    max_dur: float,
+    gap_s: float,
+) -> list[Segment]:
+    """Group per-chunk aligned tokens into cues on one shared timeline.
+
+    Each entry is either a chunk's ``(token, start, end)`` triples — already
+    offset onto the absolute clip timeline — or a pre-built fallback ``Segment``
+    (a chunk the aligner couldn't time). Aligned tokens from adjacent chunks are
+    grouped *together*, so a sentence split across a VAD chunk boundary
+    (e.g. ``躺平`` | ``了``) stays one cue when no real silence separates them; a
+    genuine gap still breaks per :func:`group_cues`. Fallback segments flush the
+    pending tokens and stand alone, preserving order.
+    """
+    cues: list[Segment] = []
+    pending: list[tuple[str, float, float]] = []
+
+    def _flush() -> None:
+        if pending:
+            cues.extend(group_cues(
+                pending, offset=0.0,
+                max_chars=max_chars, max_dur=max_dur, gap_s=gap_s,
+            ))
+            pending.clear()
+
+    for r in chunk_results:
+        if isinstance(r, Segment):
+            _flush()
+            cues.append(r)
+        else:
+            pending.extend(r)
+    _flush()
+    return cues
+
+
+def _content_len(text: str) -> int:
+    """Number of visible characters in *text*, ignoring spaces and punctuation."""
+    return sum(
+        1 for ch in text
+        if not ch.isspace() and unicodedata.category(ch)[0] not in ("P", "S")
+    )
+
+
+def merge_short_cues(
+    cues: list[Segment],
+    *,
+    max_gap_s: float,
+    short_max_chars: int,
+    max_chars: int,
+    max_dur: float,
+) -> list[Segment]:
+    """Merge short cues into an adjacent cue when they abut in time.
+
+    The aligner over-splits continuous speech into tiny cues — a stranded
+    character (了 / 的 / 吧 …) or a 2-3 character filler that flashes by too fast
+    to read. A cue is "short" when its visible length (ignoring punctuation) is
+    at most *short_max_chars*. When a short cue sits within *max_gap_s* of its
+    previous cue, it is folded into it — provided the combined visible length
+    stays within *max_chars* (one readable line) and the combined cue within
+    *max_dur*. Runs of short cues collapse into readable lines this way; a
+    leading short cue folds forward into the next when that next cue arrives.
+    Cues separated by a real pause, or that would overflow a line, are untouched.
+    """
+    def _can_merge(a: Segment, b: Segment) -> bool:
+        la, lb = _content_len(a.text), _content_len(b.text)
+        return (
+            b.start_s - a.end_s <= max_gap_s
+            and (la <= short_max_chars or lb <= short_max_chars)
+            and la + lb <= max_chars
+            and b.end_s - a.start_s <= max_dur
+        )
+
     out: list[Segment] = []
     for c in cues:
-        if not c.text.strip() or c.end_s - c.start_s < 0.08:
+        if out and _can_merge(out[-1], c):
+            prev = out.pop()
+            c = Segment(start_s=prev.start_s, end_s=c.end_s, text=prev.text + c.text)
+        out.append(c)
+    return out
+
+
+def clean_cues(cues: list[Segment]) -> list[Segment]:
+    """Drop empty cues and collapse consecutive duplicates.
+
+    A near-zero-duration cue is a ForcedAligner timestamp artifact — typically a
+    trailing token like ``了。`` the aligner placed at a zero-width point, which a
+    preceding silence gap then orphaned into its own cue. Rather than discard it
+    (silently dropping characters from the subtitle), fold its text onto the
+    previous cue so the sentence stays whole; its unreliable timing is ignored.
+    A zero-duration cue with no predecessor is still dropped.
+    """
+    out: list[Segment] = []
+    for c in cues:
+        if not c.text.strip():
+            continue
+        if c.end_s - c.start_s < 0.08:
+            if out:
+                prev = out[-1]
+                out[-1] = Segment(
+                    start_s=prev.start_s, end_s=prev.end_s, text=prev.text + c.text,
+                )
             continue
         if out and out[-1].text == c.text:
             continue
@@ -241,6 +342,8 @@ class QwenTranscriber(Transcriber):
         cue_max_chars: int = 18,
         cue_max_dur: float = 6.0,
         cue_gap_s: float = 0.7,
+        cue_merge_gap_s: float = 1.5,
+        cue_merge_short_max: int = 3,
     ) -> None:
         self._asr_model = asr_model
         self._aligner_model = aligner_model
@@ -251,6 +354,8 @@ class QwenTranscriber(Transcriber):
         self._cue_max_chars = cue_max_chars
         self._cue_max_dur = cue_max_dur
         self._cue_gap_s = cue_gap_s
+        self._cue_merge_gap_s = cue_merge_gap_s
+        self._cue_merge_short_max = cue_merge_short_max
         self._vad: Any = None  # lazily-loaded Silero VAD model
 
     # ── model loading / unloading ────────────────────────────────
@@ -384,7 +489,7 @@ class QwenTranscriber(Transcriber):
         asr = self._load(self._asr_model)
         aligner = self._load(self._aligner_model)
 
-        all_cues: list[Segment] = []
+        results: list[list[tuple[str, float, float]] | Segment] = []
         full_parts: list[str] = []
         total = len(chunks)
         for ci, (a, b) in enumerate(chunks):
@@ -401,15 +506,26 @@ class QwenTranscriber(Transcriber):
                 items = list(aligner.generate(seg, text=text, language=lang))
                 if items:
                     timed = reattach_punctuation(text, items)
-                    all_cues.extend(group_cues(
-                        timed, offset=a,
-                        max_chars=self._cue_max_chars,
-                        max_dur=self._cue_max_dur,
-                        gap_s=self._cue_gap_s,
-                    ))
+                    # Offset onto the clip timeline and defer grouping: cues are
+                    # assembled across all chunks below, so a sentence straddling
+                    # this boundary isn't cut into a stray one-character cue.
+                    results.append([(t, s + a, e + a) for t, s, e in timed])
                 else:
                     # Alignment yielded nothing — fall back to a single chunk cue.
-                    all_cues.append(Segment(start_s=a, end_s=b, text=text))
+                    results.append(Segment(start_s=a, end_s=b, text=text))
             _safe(progress, w + (1 - w) * (ci + 1) / total)
 
-        return Transcript(full_text="".join(full_parts), segments=clean_cues(all_cues))
+        all_cues = assemble_cues(
+            results,
+            max_chars=self._cue_max_chars,
+            max_dur=self._cue_max_dur,
+            gap_s=self._cue_gap_s,
+        )
+        cues = merge_short_cues(
+            clean_cues(all_cues),
+            max_gap_s=self._cue_merge_gap_s,
+            short_max_chars=self._cue_merge_short_max,
+            max_chars=self._cue_max_chars,
+            max_dur=self._cue_max_dur,
+        )
+        return Transcript(full_text="".join(full_parts), segments=cues)

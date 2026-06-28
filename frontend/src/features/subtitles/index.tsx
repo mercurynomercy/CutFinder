@@ -63,11 +63,18 @@ export function SubtitlesPage({ onClose }: SubtitlesPageProps) {
   const [outDir, setOutDir] = useState<string | null>(null)
   const [itt, setItt] = useState(true)
   const [srt, setSrt] = useState(true)
+  // Minimum on-screen seconds per cue (0 = keep transcribed timing). Holds short
+  // cues long enough to read, without overlapping the next. Defaults to 2s.
+  const [minCueS, setMinCueS] = useState(2)
   const [phase, setPhase] = useState<Phase>('idle')
   const [files, setFiles] = useState<string[]>([])
   const [jobId, setJobId] = useState<number | null>(null)
   const [elapsed, setElapsed] = useState(0)
   const [progress, setProgress] = useState(0)
+  // True when the speech model wasn't on disk at export time: the first export
+  // blocks on a multi-GB download before transcription can start, so we surface
+  // a notice (the stall would otherwise look like a frozen progress bar).
+  const [modelDownloading, setModelDownloading] = useState(false)
 
   // Re-attach to a subtitle job still running in the backend after a page
   // refresh: the worker keeps transcribing even though the UI lost its job id,
@@ -130,14 +137,28 @@ export function SubtitlesPage({ onClose }: SubtitlesPageProps) {
     setPhase('running')
     setFiles([])
     setProgress(0)
+    // Check up front whether the speech model still needs downloading, so the
+    // notice is visible during the (silent, networked) first-use stall.
+    try {
+      const { ready } = await api.getSubtitleModelReady()
+      setModelDownloading(!ready)
+    } catch {
+      setModelDownloading(false)
+    }
     try {
       const { job_id } = await api.exportSubtitles({
         video_path: videoPath,
         out_dir: outDir,
         formats,
+        min_cue_s: minCueS,
       })
       setJobId(job_id)
-      const status = await waitForJob(job_id, setProgress)
+      const status = await waitForJob(job_id, (pct) => {
+        setProgress(pct)
+        // Once real transcription progress appears past the model-load stall,
+        // the download has finished — drop the notice.
+        if (pct > SEPARATION_WEIGHT_PCT) setModelDownloading(false)
+      })
       if (status !== 'done') {
         setPhase('error')
         return
@@ -237,6 +258,17 @@ export function SubtitlesPage({ onClose }: SubtitlesPageProps) {
               </label>
             </div>
             <p className="mt-3 text-xs text-[--text-muted]">{t('subtitles.languageNote')}</p>
+
+            {/* Minimum on-screen seconds per cue */}
+            <div className="mt-4">
+              <label className="block text-sm text-[--text-secondary]">{t('subtitles.minDuration')}</label>
+              <p className="mb-1 text-xs text-[--text-muted]">{t('subtitles.minDurationDesc')}</p>
+              <input
+                type="number" min={0} max={10} step={0.5} value={minCueS}
+                onChange={(e) => setMinCueS(parseFloat(e.target.value) || 0)}
+                className="w-32 rounded-md border border-[--border] bg-[--surface-2] px-3 py-1.5 text-sm outline-none focus:border-[--primary]"
+              />
+            </div>
           </fieldset>
 
           {/* ── Export ────────────────────────────── */}
@@ -252,7 +284,13 @@ export function SubtitlesPage({ onClose }: SubtitlesPageProps) {
               <div className="flex items-center justify-between gap-3">
                 <span className="flex items-center gap-2 text-sm font-medium text-[--text-primary]">
                   <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-[1.5px] border-[--primary] border-t-transparent" />
-                  {t(progress < SEPARATION_WEIGHT_PCT ? 'subtitles.phaseSeparating' : 'subtitles.phaseTranscribing')}
+                  {t(
+                    modelDownloading
+                      ? 'subtitles.phaseDownloadingModel'
+                      : progress < SEPARATION_WEIGHT_PCT
+                        ? 'subtitles.phaseSeparating'
+                        : 'subtitles.phaseTranscribing',
+                  )}
                 </span>
                 <span className="number-tabular text-xs text-[--text-muted]">
                   {t('subtitles.elapsed', { time: mmss(elapsed) })}
@@ -264,7 +302,9 @@ export function SubtitlesPage({ onClose }: SubtitlesPageProps) {
                 </div>
                 <span className="tabular-nums text-xs text-[--text-secondary]">{Math.round(progress)}%</span>
               </div>
-              <p className="mt-2 text-xs text-[--text-muted]">{t('subtitles.progressHint')}</p>
+              <p className="mt-2 text-xs text-[--text-muted]">
+                {t(modelDownloading ? 'subtitles.downloadingModelHint' : 'subtitles.progressHint')}
+              </p>
             </div>
           )}
 

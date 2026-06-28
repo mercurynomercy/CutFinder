@@ -70,3 +70,14 @@ def test_returned_paths_exist(tmp_path: Path) -> None:
     exporter, _ = _exporter()
     paths = exporter.export(tmp_path / "v.mp4", tmp_path, ["itt", "srt"], "zh")
     assert paths and all(p.is_file() for p in paths)
+
+
+def test_min_cue_duration_extends_short_cue(tmp_path: Path) -> None:
+    # A 0.3s cue with no following cue is held to the 3s minimum on export.
+    transcriber = FakeTranscriber(
+        full_text="好", segments=[Segment(start_s=1.0, end_s=1.3, text="好")],
+    )
+    exporter = SubtitleExporter(probe=FakeProbe(fps=25.0), transcriber=transcriber)
+    exporter.export(tmp_path / "v.mp4", tmp_path, ["srt"], "zh", min_cue_s=3.0)
+    srt = (tmp_path / "v.zh.srt").read_text(encoding="utf-8")
+    assert "00:00:01,000 --> 00:00:04,000" in srt

@@ -34,6 +34,7 @@ class _FakeExporter:
         formats: list[str],
         language: str,
         *,
+        min_cue_s: float = 0.0,
         on_progress: Any = None,
     ) -> list[Path]:
         self.calls.append((video_path, out_dir, formats, language))
@@ -43,6 +44,18 @@ class _FakeExporter:
         if self._should_fail:
             raise RuntimeError("export boom")
         return [Path(p) for p in self._paths]
+
+
+def test_subtitle_model_ready_delegates_to_exporter() -> None:
+    exporter = _FakeExporter()
+    exporter.model_ready = lambda: False  # type: ignore[attr-defined]
+    queue = WorkerQueue(subtitle_exporter=exporter)
+    assert queue.subtitle_model_ready() is False
+
+
+def test_subtitle_model_ready_true_without_exporter() -> None:
+    queue = WorkerQueue(subtitle_exporter=None)
+    assert queue.subtitle_model_ready() is True
 
 
 def _req() -> SubtitleRequest:

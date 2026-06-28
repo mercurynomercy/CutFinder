@@ -829,6 +829,7 @@ class WorkerQueue:
                         self._subtitle_exporter.export,
                         Path(req.video_path), Path(req.out_dir), req.formats,
                         req.language,
+                        min_cue_s=req.min_cue_s,
                         on_progress=on_progress,
                     )
                 )
@@ -847,6 +848,17 @@ class WorkerQueue:
     def get_subtitle_result(self, job_id: int) -> list[str] | None:
         """Return the exported subtitle file paths for *job_id*, if any."""
         return self._subtitle_results.get(job_id)
+
+    def subtitle_model_ready(self) -> bool:
+        """Whether the speech model for subtitle export is already on disk.
+
+        Lets the UI show a first-use download notice before an export stalls on
+        a multi-GB model download. True when no exporter is configured (nothing
+        to download).
+        """
+        if self._subtitle_exporter is None:
+            return True
+        return self._subtitle_exporter.model_ready()
 
     async def _process_cutplan(
         self, payload: Any, job_id: int,

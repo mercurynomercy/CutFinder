@@ -105,6 +105,8 @@ const en = {
   'subtitles.itt': 'iTT',
   'subtitles.srt': 'SRT',
   'subtitles.languageNote': 'Subtitle language follows the AI output language set in Settings.',
+  'subtitles.minDuration': 'Minimum duration per cue (s)',
+  'subtitles.minDurationDesc': 'Short cues are held on screen at least this long (without overlapping the next), so 2-3 character lines stay readable. 0 keeps the transcribed timing.',
   'subtitles.export': 'Export',
   'subtitles.exporting': 'Exporting…',
   'subtitles.done': 'Subtitles exported',
@@ -114,7 +116,9 @@ const en = {
   'subtitles.progressTitle': 'Transcribing audio…',
   'subtitles.phaseSeparating': 'Separating vocals…',
   'subtitles.phaseTranscribing': 'Transcribing…',
+  'subtitles.phaseDownloadingModel': 'Downloading speech model…',
   'subtitles.progressHint': 'This can take a few minutes for a long video — please keep this open.',
+  'subtitles.downloadingModelHint': 'First use downloads the speech model (several GB). This runs once; transcription starts automatically when it finishes.',
   'subtitles.elapsed': 'Elapsed {time}',
 
   // Backend logs modal
@@ -419,6 +423,8 @@ const zh: Record<Key, string> = {
   'subtitles.itt': 'iTT',
   'subtitles.srt': 'SRT',
   'subtitles.languageNote': '字幕语言跟随设置中的 AI 输出语言。',
+  'subtitles.minDuration': '每条字幕最短时长（秒）',
+  'subtitles.minDurationDesc': '过短的字幕会被延长到至少这么久（不与下一条重叠），让 2~3 个字的短句也能看清。设为 0 则保持原始转写时间轴。',
   'subtitles.export': '导出',
   'subtitles.exporting': '导出中…',
   'subtitles.done': '字幕已导出',
@@ -428,7 +434,9 @@ const zh: Record<Key, string> = {
   'subtitles.progressTitle': '正在转写音频…',
   'subtitles.phaseSeparating': '分离人声中…',
   'subtitles.phaseTranscribing': '转写中…',
+  'subtitles.phaseDownloadingModel': '正在下载语音模型…',
   'subtitles.progressHint': '视频较长时可能需要几分钟，请保持此页面打开。',
+  'subtitles.downloadingModelHint': '首次使用需下载语音模型（数 GB），仅需一次；下载完成后会自动开始转写。',
   'subtitles.elapsed': '已用时 {time}',
 
   'logs.title': '后端日志',

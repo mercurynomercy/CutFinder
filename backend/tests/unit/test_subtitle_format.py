@@ -3,7 +3,39 @@
 from __future__ import annotations
 
 from cutfinder.domain.models import Segment
-from cutfinder.subtitle.format import to_itt, to_srt
+from cutfinder.subtitle.format import enforce_min_duration, to_itt, to_srt
+
+
+# ── enforce_min_duration ─────────────────────────────────────────────
+
+
+def test_min_duration_extends_isolated_short_cue() -> None:
+    segs = [Segment(start_s=1.0, end_s=1.3, text="好")]
+    out = enforce_min_duration(segs, 3.0)
+    assert (out[0].start_s, out[0].end_s) == (1.0, 4.0)
+
+
+def test_min_duration_caps_at_next_cue_start() -> None:
+    segs = [
+        Segment(start_s=1.0, end_s=1.3, text="好"),
+        Segment(start_s=2.0, end_s=2.4, text="嗯"),
+    ]
+    out = enforce_min_duration(segs, 3.0)
+    # First extends only to the next cue's start (no overlap); second extends fully.
+    assert out[0].end_s == 2.0
+    assert out[1].end_s == 5.0
+
+
+def test_min_duration_leaves_long_cue_unchanged() -> None:
+    segs = [Segment(start_s=0.0, end_s=4.0, text="长句")]
+    out = enforce_min_duration(segs, 3.0)
+    assert out[0].end_s == 4.0
+
+
+def test_min_duration_zero_or_empty_is_noop() -> None:
+    segs = [Segment(start_s=1.0, end_s=1.3, text="好")]
+    assert enforce_min_duration(segs, 0.0) == segs
+    assert enforce_min_duration([], 3.0) == []
 
 
 # ── to_srt ───────────────────────────────────────────────────────────
