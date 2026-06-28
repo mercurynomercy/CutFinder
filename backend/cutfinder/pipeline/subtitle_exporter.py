@@ -17,7 +17,7 @@ from typing import Callable
 
 from ..ports.probe import MetadataProbe
 from ..ports.speech import Transcriber
-from ..subtitle.format import to_itt, to_srt
+from ..subtitle.format import enforce_min_duration, to_itt, to_srt
 
 # Subtitle file extension per format key.
 _EXTENSIONS = {"itt": "itt", "srt": "srt"}
@@ -57,6 +57,7 @@ class SubtitleExporter:
         formats: list[str],
         language: str,
         *,
+        min_cue_s: float = 0.0,
         on_progress: Callable[[float], None] | None = None,
     ) -> list[Path]:
         """Export subtitle files for *video_path* into *out_dir*.
@@ -65,8 +66,10 @@ class SubtitleExporter:
         skipped. Files are never overwritten — a numeric suffix is appended
         before the extension when a name already exists.
 
-        *on_progress* is forwarded to the transcriber as a 0..1 progress
-        callback (covering separation + transcription).
+        *min_cue_s* holds each cue on screen at least that many seconds (without
+        overlapping the next) so short lines stay readable; 0 keeps the
+        transcribed timing. *on_progress* is forwarded to the transcriber as a
+        0..1 progress callback (covering separation + transcription).
         """
         meta = self._probe.probe(video_path)
         fps = meta.fps or 25.0
@@ -74,7 +77,7 @@ class SubtitleExporter:
         transcript = self._transcriber.transcribe(
             video_path, language=language, progress=on_progress,
         )
-        segments = list(transcript.segments)
+        segments = enforce_min_duration(list(transcript.segments), min_cue_s)
 
         written: list[Path] = []
         for fmt in formats:

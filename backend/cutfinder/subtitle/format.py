@@ -44,6 +44,28 @@ def _itt_timecode(seconds: float) -> str:
     return f"{h:02d}:{m:02d}:{s:02d}.{ms:03d}"
 
 
+def enforce_min_duration(segments: list[Segment], min_s: float) -> list[Segment]:
+    """Hold each cue on screen for at least *min_s* seconds.
+
+    A cue's end is pushed out to ``start + min_s`` so short cues (e.g. a 2-3
+    character utterance) stay readable, but never past the next cue's start, so
+    no overlap is introduced — a cue with little trailing silence extends only
+    into the gap available. A cue already long enough is left unchanged, and
+    *min_s* <= 0 returns the segments unchanged.
+    """
+    if min_s <= 0 or not segments:
+        return list(segments)
+    out: list[Segment] = []
+    n = len(segments)
+    for i, seg in enumerate(segments):
+        new_end = seg.start_s + min_s
+        if i + 1 < n:
+            new_end = min(new_end, segments[i + 1].start_s)
+        new_end = max(new_end, seg.end_s)  # never shorten an existing cue
+        out.append(Segment(start_s=seg.start_s, end_s=new_end, text=seg.text))
+    return out
+
+
 def to_srt(segments: list[Segment]) -> str:
     """Render *segments* as a standard SRT document.
 

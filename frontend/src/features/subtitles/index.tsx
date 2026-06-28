@@ -63,6 +63,9 @@ export function SubtitlesPage({ onClose }: SubtitlesPageProps) {
   const [outDir, setOutDir] = useState<string | null>(null)
   const [itt, setItt] = useState(true)
   const [srt, setSrt] = useState(true)
+  // Minimum on-screen seconds per cue (0 = keep transcribed timing). Holds short
+  // cues long enough to read, without overlapping the next. Defaults to 3s.
+  const [minCueS, setMinCueS] = useState(3)
   const [phase, setPhase] = useState<Phase>('idle')
   const [files, setFiles] = useState<string[]>([])
   const [jobId, setJobId] = useState<number | null>(null)
@@ -147,6 +150,7 @@ export function SubtitlesPage({ onClose }: SubtitlesPageProps) {
         video_path: videoPath,
         out_dir: outDir,
         formats,
+        min_cue_s: minCueS,
       })
       setJobId(job_id)
       const status = await waitForJob(job_id, (pct) => {
@@ -254,6 +258,17 @@ export function SubtitlesPage({ onClose }: SubtitlesPageProps) {
               </label>
             </div>
             <p className="mt-3 text-xs text-[--text-muted]">{t('subtitles.languageNote')}</p>
+
+            {/* Minimum on-screen seconds per cue */}
+            <div className="mt-4">
+              <label className="block text-sm text-[--text-secondary]">{t('subtitles.minDuration')}</label>
+              <p className="mb-1 text-xs text-[--text-muted]">{t('subtitles.minDurationDesc')}</p>
+              <input
+                type="number" min={0} max={10} step={0.5} value={minCueS}
+                onChange={(e) => setMinCueS(parseFloat(e.target.value) || 0)}
+                className="w-32 rounded-md border border-[--border] bg-[--surface-2] px-3 py-1.5 text-sm outline-none focus:border-[--primary]"
+              />
+            </div>
           </fieldset>
 
           {/* ── Export ────────────────────────────── */}

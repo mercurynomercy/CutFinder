@@ -441,6 +441,7 @@ export const api = {
     out_dir: string
     formats: string[]
     language?: string
+    min_cue_s?: number
   }): Promise<{ job_id: number }> {
     return _fetch('/api/subtitles/export', { method: 'POST', body: JSON.stringify(body) })
   },

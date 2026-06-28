@@ -247,37 +247,38 @@ def _content_len(text: str) -> int:
     )
 
 
-def merge_orphan_cues(
+def merge_short_cues(
     cues: list[Segment],
     *,
     max_gap_s: float,
+    short_max_chars: int,
+    max_chars: int,
     max_dur: float,
 ) -> list[Segment]:
-    """Fold single-character cues into an adjacent cue when close in time.
+    """Merge short cues into an adjacent cue when they abut in time.
 
-    The ForcedAligner sometimes strands one character (了 / 的 / 吧 …) in its own
-    cue. Such a one-character cue is merged into whichever neighbour it abuts —
-    backward into the previous cue by preference, otherwise forward into the
-    next — provided the silence gap to that neighbour is at most *max_gap_s* and
-    the combined cue stays within *max_dur*. Cues separated by a real pause are
-    left alone, so a genuine standalone short (e.g. “对”) keeps its own timing.
+    The aligner over-splits continuous speech into tiny cues — a stranded
+    character (了 / 的 / 吧 …) or a 2-3 character filler that flashes by too fast
+    to read. A cue is "short" when its visible length (ignoring punctuation) is
+    at most *short_max_chars*. When a short cue sits within *max_gap_s* of its
+    previous cue, it is folded into it — provided the combined visible length
+    stays within *max_chars* (one readable line) and the combined cue within
+    *max_dur*. Runs of short cues collapse into readable lines this way; a
+    leading short cue folds forward into the next when that next cue arrives.
+    Cues separated by a real pause, or that would overflow a line, are untouched.
     """
+    def _can_merge(a: Segment, b: Segment) -> bool:
+        la, lb = _content_len(a.text), _content_len(b.text)
+        return (
+            b.start_s - a.end_s <= max_gap_s
+            and (la <= short_max_chars or lb <= short_max_chars)
+            and la + lb <= max_chars
+            and b.end_s - a.start_s <= max_dur
+        )
+
     out: list[Segment] = []
     for c in cues:
-        # Fold a deferred leading orphan (the previous cue) forward into c.
-        if (
-            out and _content_len(out[-1].text) == 1
-            and c.start_s - out[-1].end_s <= max_gap_s
-            and c.end_s - out[-1].start_s <= max_dur
-        ):
-            prev = out.pop()
-            c = Segment(start_s=prev.start_s, end_s=c.end_s, text=prev.text + c.text)
-        # Fold a trailing orphan (c) backward into the previous cue.
-        elif (
-            out and _content_len(c.text) == 1
-            and c.start_s - out[-1].end_s <= max_gap_s
-            and c.end_s - out[-1].start_s <= max_dur
-        ):
+        if out and _can_merge(out[-1], c):
             prev = out.pop()
             c = Segment(start_s=prev.start_s, end_s=c.end_s, text=prev.text + c.text)
         out.append(c)
@@ -341,7 +342,8 @@ class QwenTranscriber(Transcriber):
         cue_max_chars: int = 18,
         cue_max_dur: float = 6.0,
         cue_gap_s: float = 0.7,
-        cue_merge_gap_s: float = 1.2,
+        cue_merge_gap_s: float = 1.5,
+        cue_merge_short_max: int = 3,
     ) -> None:
         self._asr_model = asr_model
         self._aligner_model = aligner_model
@@ -353,6 +355,7 @@ class QwenTranscriber(Transcriber):
         self._cue_max_dur = cue_max_dur
         self._cue_gap_s = cue_gap_s
         self._cue_merge_gap_s = cue_merge_gap_s
+        self._cue_merge_short_max = cue_merge_short_max
         self._vad: Any = None  # lazily-loaded Silero VAD model
 
     # ── model loading / unloading ────────────────────────────────
@@ -518,9 +521,11 @@ class QwenTranscriber(Transcriber):
             max_dur=self._cue_max_dur,
             gap_s=self._cue_gap_s,
         )
-        cues = merge_orphan_cues(
+        cues = merge_short_cues(
             clean_cues(all_cues),
             max_gap_s=self._cue_merge_gap_s,
+            short_max_chars=self._cue_merge_short_max,
+            max_chars=self._cue_max_chars,
             max_dur=self._cue_max_dur,
         )
         return Transcript(full_text="".join(full_parts), segments=cues)

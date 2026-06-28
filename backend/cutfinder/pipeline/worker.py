@@ -829,6 +829,7 @@ class WorkerQueue:
                         self._subtitle_exporter.export,
                         Path(req.video_path), Path(req.out_dir), req.formats,
                         req.language,
+                        min_cue_s=req.min_cue_s,
                         on_progress=on_progress,
                     )
                 )

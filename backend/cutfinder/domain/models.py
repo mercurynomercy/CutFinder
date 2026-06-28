@@ -131,6 +131,8 @@ class SubtitleRequest(BaseModel, frozen=True):
     out_dir: str
     formats: list[str] = ["itt", "srt"]
     language: str = "zh"
+    # Minimum on-screen seconds per cue (0 = keep transcribed timing).
+    min_cue_s: float = 0.0
 
 
 # ── SummaryResult (A-roll AI output) ─────────────────────────────

@@ -34,6 +34,7 @@ class _FakeExporter:
         formats: list[str],
         language: str,
         *,
+        min_cue_s: float = 0.0,
         on_progress: Any = None,
     ) -> list[Path]:
         self.calls.append((video_path, out_dir, formats, language))

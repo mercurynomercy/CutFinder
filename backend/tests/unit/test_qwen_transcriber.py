@@ -13,7 +13,7 @@ from cutfinder.adapters.qwen_transcriber import (
     assemble_cues,
     clean_cues,
     group_cues,
-    merge_orphan_cues,
+    merge_short_cues,
     merge_speech_into_chunks,
     reattach_punctuation,
 )
@@ -149,49 +149,74 @@ def test_assemble_keeps_fallback_segments_standalone_and_ordered() -> None:
     assert [c.text for c in cues] == ["你好", "对齐失败的整段", "再见"]
 
 
-# ── orphan (single-character) cue merging ─────────────────────────
+# ── short cue merging ──────────────────────────────────────────────
 
 def _seg(start: float, end: float, text: str) -> Segment:
     return Segment(start_s=start, end_s=end, text=text)
 
 
-def test_orphan_merges_backward_into_previous() -> None:
+def _merge(cues: list[Segment]) -> list[Segment]:
+    return merge_short_cues(
+        cues, max_gap_s=1.0, short_max_chars=3, max_chars=18, max_dur=6.0,
+    )
+
+
+def test_short_cue_merges_backward_into_previous() -> None:
     cues = [_seg(0.0, 2.0, "马上我就能躺平"), _seg(2.1, 2.4, "了")]
-    out = merge_orphan_cues(cues, max_gap_s=1.2, max_dur=6.0)
+    out = _merge(cues)
     assert [c.text for c in out] == ["马上我就能躺平了"]
     assert out[0].start_s == 0.0 and out[0].end_s == 2.4
 
 
-def test_orphan_merges_forward_when_no_previous() -> None:
+def test_leading_short_cue_merges_forward() -> None:
     cues = [_seg(0.0, 0.3, "了"), _seg(0.4, 2.0, "又是先上菜")]
-    out = merge_orphan_cues(cues, max_gap_s=1.2, max_dur=6.0)
+    out = _merge(cues)
     assert [c.text for c in out] == ["了又是先上菜"]
     assert out[0].start_s == 0.0 and out[0].end_s == 2.0
 
 
-def test_orphan_kept_when_gap_exceeds_threshold() -> None:
+def test_run_of_short_cues_collapses_into_one() -> None:
+    # The 好/嗯/就是/因/对 cluster: 2-3 char cues <1s apart fold into one line.
+    cues = [
+        _seg(0.0, 0.4, "好。"), _seg(0.7, 1.1, "嗯。"), _seg(1.5, 2.1, "就是。"),
+        _seg(2.4, 2.7, "因。"), _seg(3.0, 3.3, "对。"),
+    ]
+    out = _merge(cues)
+    assert [c.text for c in out] == ["好。嗯。就是。因。对。"]
+
+
+def test_short_cue_kept_when_gap_exceeds_threshold() -> None:
     # A genuine standalone short after a real pause must survive untouched.
     cues = [_seg(0.0, 0.3, "嗯"), _seg(5.0, 5.3, "对")]
-    out = merge_orphan_cues(cues, max_gap_s=1.2, max_dur=6.0)
+    out = _merge(cues)
     assert [c.text for c in out] == ["嗯", "对"]
 
 
-def test_orphan_not_merged_when_it_would_exceed_max_dur() -> None:
+def test_short_cue_not_merged_when_it_would_exceed_max_dur() -> None:
     cues = [_seg(0.0, 5.8, "一二三四五六"), _seg(5.9, 6.2, "了")]
-    out = merge_orphan_cues(cues, max_gap_s=1.2, max_dur=6.0)
+    out = _merge(cues)
     assert [c.text for c in out] == ["一二三四五六", "了"]
 
 
-def test_orphan_ignores_trailing_punctuation_in_char_count() -> None:
-    cues = [_seg(0.0, 2.0, "躺平"), _seg(2.1, 2.1, "了。")]
-    out = merge_orphan_cues(cues, max_gap_s=1.2, max_dur=6.0)
+def test_short_cue_not_merged_when_combined_exceeds_max_chars() -> None:
+    # 17 + 1 = 18 fits; 18 + 1 = 19 overflows one line, so it stays split.
+    out = _merge([_seg(0.0, 2.0, "一二三四五六七八九十一二三四五六七"), _seg(2.1, 2.4, "了")])
+    assert [c.text for c in out] == ["一二三四五六七八九十一二三四五六七了"]
+    out2 = _merge([_seg(0.0, 2.0, "一二三四五六七八九十一二三四五六七八"), _seg(2.1, 2.4, "了")])
+    assert [c.text for c in out2] == ["一二三四五六七八九十一二三四五六七八", "了"]
+
+
+def test_two_long_cues_not_merged() -> None:
+    # Neither side short → left as separate cues even when they abut.
+    cues = [_seg(0.0, 2.0, "今天天气真的很好"), _seg(2.1, 4.0, "我们出去走走吧")]
+    out = _merge(cues)
+    assert [c.text for c in out] == ["今天天气真的很好", "我们出去走走吧"]
+
+
+def test_short_cue_ignores_trailing_punctuation_in_char_count() -> None:
+    cues = [_seg(0.0, 2.0, "躺平"), _seg(2.1, 2.3, "了。")]
+    out = _merge(cues)
     assert [c.text for c in out] == ["躺平了。"]
-
-
-def test_multi_char_cue_is_not_an_orphan() -> None:
-    cues = [_seg(0.0, 2.0, "你好"), _seg(2.1, 2.5, "对啊")]
-    out = merge_orphan_cues(cues, max_gap_s=1.2, max_dur=6.0)
-    assert [c.text for c in out] == ["你好", "对啊"]
 
 
 # ── cue cleanup ───────────────────────────────────────────────────
