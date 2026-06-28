@@ -45,6 +45,18 @@ class _FakeExporter:
         return [Path(p) for p in self._paths]
 
 
+def test_subtitle_model_ready_delegates_to_exporter() -> None:
+    exporter = _FakeExporter()
+    exporter.model_ready = lambda: False  # type: ignore[attr-defined]
+    queue = WorkerQueue(subtitle_exporter=exporter)
+    assert queue.subtitle_model_ready() is False
+
+
+def test_subtitle_model_ready_true_without_exporter() -> None:
+    queue = WorkerQueue(subtitle_exporter=None)
+    assert queue.subtitle_model_ready() is True
+
+
 def _req() -> SubtitleRequest:
     return SubtitleRequest(
         video_path="/tmp/v.mp4", out_dir="/out", formats=["itt", "srt"], language="zh",

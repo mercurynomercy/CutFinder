@@ -848,6 +848,17 @@ class WorkerQueue:
         """Return the exported subtitle file paths for *job_id*, if any."""
         return self._subtitle_results.get(job_id)
 
+    def subtitle_model_ready(self) -> bool:
+        """Whether the speech model for subtitle export is already on disk.
+
+        Lets the UI show a first-use download notice before an export stalls on
+        a multi-GB model download. True when no exporter is configured (nothing
+        to download).
+        """
+        if self._subtitle_exporter is None:
+            return True
+        return self._subtitle_exporter.model_ready()
+
     async def _process_cutplan(
         self, payload: Any, job_id: int,
     ) -> tuple[bool, str | None]:

@@ -834,6 +834,13 @@ def _build_router(ctx: Any) -> Any:
         job_id = await ctx.worker_queue.enqueue_subtitle(req)
         return {"job_id": job_id}
 
+    # ── Subtitle model readiness (GET /subtitles/model-ready) ─
+    @router.get("/subtitles/model-ready")
+    async def subtitle_model_ready() -> dict[str, bool]:
+        """Whether the speech model is on disk (no first-use download stall)."""
+        ready = ctx.worker_queue.subtitle_model_ready() if ctx.worker_queue else True
+        return {"ready": ready}
+
     # ── Subtitle result (GET /subtitles/{job_id}) ───────────
     @router.get("/subtitles/{job_id}")
     async def get_subtitle_result(job_id: int) -> dict[str, Any]:

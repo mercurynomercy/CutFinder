@@ -42,6 +42,14 @@ class SubtitleExporter:
         self._probe = probe
         self._transcriber = transcriber
 
+    def model_ready(self) -> bool:
+        """Whether the speech model is already on disk (no first-use download).
+
+        Cheap, side-effect-free — lets the UI warn that the first export will
+        block on a multi-GB model download before transcription can start.
+        """
+        return self._transcriber.is_model_ready()
+
     def export(
         self,
         video_path: Path,

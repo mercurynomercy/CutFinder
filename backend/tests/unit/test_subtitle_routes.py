@@ -16,9 +16,10 @@ from tests.fakes import FakeCatalogRepository
 class _FakeQueue:
     """Minimal worker-queue stand-in for the subtitle routes."""
 
-    def __init__(self, result: list[str] | None = None) -> None:
+    def __init__(self, result: list[str] | None = None, model_ready: bool = True) -> None:
         self.enqueued: list[Any] = []
         self._result = result
+        self._model_ready = model_ready
 
     async def enqueue_subtitle(self, req: Any, job_id: int | None = None) -> int:
         self.enqueued.append(req)
@@ -26,6 +27,9 @@ class _FakeQueue:
 
     def get_subtitle_result(self, job_id: int) -> list[str] | None:
         return self._result
+
+    def subtitle_model_ready(self) -> bool:
+        return self._model_ready
 
 
 def _client(
@@ -119,6 +123,30 @@ def test_export_filters_unknown_formats(tmp_path: Path) -> None:
     )
     assert resp.status_code == 200
     assert queue.enqueued[0].formats == ["srt"]
+
+
+# ── GET /subtitles/model-ready ───────────────────────────────────────
+
+
+def test_model_ready_true() -> None:
+    client = _client(worker_queue=_FakeQueue(model_ready=True))
+    resp = client.get("/api/subtitles/model-ready")
+    assert resp.status_code == 200
+    assert resp.json() == {"ready": True}
+
+
+def test_model_ready_false() -> None:
+    client = _client(worker_queue=_FakeQueue(model_ready=False))
+    resp = client.get("/api/subtitles/model-ready")
+    assert resp.status_code == 200
+    assert resp.json() == {"ready": False}
+
+
+def test_model_ready_true_without_worker() -> None:
+    client = _client(worker_queue=None)
+    resp = client.get("/api/subtitles/model-ready")
+    assert resp.status_code == 200
+    assert resp.json() == {"ready": True}
 
 
 # ── GET /subtitles/{job_id} ──────────────────────────────────────────
