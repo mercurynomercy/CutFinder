@@ -15,6 +15,7 @@ import { useState } from 'react'
 
 import type { ClipSummary } from '@/api/client'
 import { ThumbnailCard } from '@/components/ThumbnailCard'
+import { localDateKey } from '@/lib/date'
 import { useI18n } from '@/i18n'
 
 // ── Empty state component ───────────────────────────────────────
@@ -87,8 +88,7 @@ function groupFolder(items: ClipSummary[]): string | null {
 const UNKNOWN_DATE = '未知日期'
 
 function dateKey(clip: ClipSummary): string {
-  const iso = clip.capture_time || clip.created_at
-  return iso ? iso.slice(0, 10) : UNKNOWN_DATE
+  return localDateKey(clip.capture_time || clip.created_at) ?? UNKNOWN_DATE
 }
 
 function groupByDate(clips: ClipSummary[]): { key: string; label: string; items: ClipSummary[] }[] {

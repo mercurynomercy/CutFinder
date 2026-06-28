@@ -62,6 +62,20 @@ from cutfinder.ports.speech import SpeechDetector, Transcriber
 logger = logging.getLogger(__name__)
 
 
+def _library_date_str(capture_time: _dt.datetime | None) -> str:
+    """Return the ``YYYY-MM-DD`` folder name for a clip's capture time.
+
+    ``capture_time`` is stored as a UTC instant (see ``FfmpegProbe``), but the
+    folder must reflect the *local* calendar date the footage was shot — the
+    same date the UI shows via ``toLocaleDateString``. Formatting the raw UTC
+    value mis-files clips shot after local midnight into the previous day, so
+    convert to local time first. Returns ``"unknown"`` when absent.
+    """
+    if capture_time is None:
+        return "unknown"
+    return capture_time.astimezone().strftime("%Y-%m-%d")
+
+
 # ── Progress events ───────────────────────────────────────────────
 
 @dataclass(frozen=True)
@@ -306,7 +320,7 @@ class Orchestrator:
         # as the clip's library_path.  Best-effort: a copy failure must not
         # block cataloguing (the clip is still recorded, just without a copy).
         library_path: str | None = None
-        date_str = meta.capture_time.strftime("%Y-%m-%d") if meta.capture_time else "unknown"
+        date_str = _library_date_str(meta.capture_time)
         try:
             src_str = candidate.path  # str from ClipCandidate
             if self.library_writer is not None:
@@ -430,7 +444,7 @@ class Orchestrator:
 
         # ── 4. Copy original into <date>/photos/ (read-only source) ──
         library_path: str | None = None
-        date_str = meta.capture_time.strftime("%Y-%m-%d") if meta.capture_time else "unknown"
+        date_str = _library_date_str(meta.capture_time)
         try:
             if self.library_writer is not None:
                 library_path = self.library_writer.copy_into(

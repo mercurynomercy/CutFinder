@@ -8,6 +8,7 @@ import * as React from 'react'
 
 import { Badge } from '@/components/ChipBadge'
 import { cn } from '@/lib/cn'
+import { localDateKey } from '@/lib/date'
 import { useI18n } from '@/i18n'
 
 export interface ThumbnailCardProps extends React.HTMLAttributes<HTMLDivElement> {
@@ -59,7 +60,8 @@ const ThumbnailCard = React.forwardRef<HTMLDivElement, ThumbnailCardProps>(
     }
 
     const formatCaptureDate = (iso: string) => {
-      return iso.slice(0, 10).replace(/-/g, '/') // "2026-01-15" → "2026/01/15"
+      // Local shooting date, consistent with the gallery grouping and folders.
+      return (localDateKey(iso) ?? iso.slice(0, 10)).replace(/-/g, '/') // → "2026/01/15"
     }
 
     return (
