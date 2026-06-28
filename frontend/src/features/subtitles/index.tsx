@@ -64,8 +64,8 @@ export function SubtitlesPage({ onClose }: SubtitlesPageProps) {
   const [itt, setItt] = useState(true)
   const [srt, setSrt] = useState(true)
   // Minimum on-screen seconds per cue (0 = keep transcribed timing). Holds short
-  // cues long enough to read, without overlapping the next. Defaults to 3s.
-  const [minCueS, setMinCueS] = useState(3)
+  // cues long enough to read, without overlapping the next. Defaults to 2s.
+  const [minCueS, setMinCueS] = useState(2)
   const [phase, setPhase] = useState<Phase>('idle')
   const [files, setFiles] = useState<string[]>([])
   const [jobId, setJobId] = useState<number | null>(null)
