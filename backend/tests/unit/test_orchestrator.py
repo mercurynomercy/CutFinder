@@ -594,6 +594,42 @@ class TestDatabaseLibraryCorrectness:
         assert date_str == "2026-01-15"  # from VideoMetadata.capture_time
         assert roll_type == "a"
 
+    def test_library_date_uses_local_timezone(self, orch_with_library):
+        """A capture time after local midnight files under the LOCAL date.
+
+        Regression: capture_time is stored as a UTC instant. A clip shot at
+        2026-05-10 06:24 in UTC+8 is stored as 2026-05-09 22:24 UTC; the folder
+        must be 2026-05-10 (the local shooting date the UI shows), not 2026-05-09.
+        """
+        import os
+        import time
+
+        old_tz = os.environ.get("TZ")
+        os.environ["TZ"] = "Asia/Shanghai"  # UTC+8, no DST
+        time.tzset()
+        try:
+            orch, _ = orch_with_library
+            # 22:24 UTC on the 9th == 06:24 on the 10th in UTC+8
+            orch.probe.probe.return_value = VideoMetadata(  # type: ignore[union-attr]
+                duration_s=120.5, has_audio=True, width=1920, height=1080,
+                fps=30.0, codec="h264", source_path="/tmp/test.mp4",
+                capture_time=_dt.datetime(2026, 5, 9, 22, 24, 16, tzinfo=_dt.timezone.utc),
+                date_source="capture_time",
+            )
+
+            clip_id = orch.process_clip(_make_candidate())
+            assert clip_id is not None
+
+            fake_library = orch.library_writer  # type: ignore[union-attr]
+            _src, date_str, _roll = fake_library.calls[0]
+            assert date_str == "2026-05-10"  # local date, not the UTC "2026-05-09"
+        finally:
+            if old_tz is None:
+                os.environ.pop("TZ", None)
+            else:
+                os.environ["TZ"] = old_tz
+            time.tzset()
+
     def test_tags_set_correctly(self, orch_with_events):
         """Auto-tags from summarizer are set on the clip via repository.set_tags()."""
         orch, capture = orch_with_events

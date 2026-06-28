@@ -18,6 +18,7 @@ import { SubtitlesPage } from '@/features/subtitles'
 import { CutplanPage } from '@/features/cutplan'
 import { LogModal } from '@/features/logs'
 import { ConfirmDialog } from '@/components'
+import { localDateKey } from '@/lib/date'
 import { useI18n } from '@/i18n'
 import { applyTheme, getStoredTheme, type Theme } from '@/theme'
 
@@ -192,10 +193,7 @@ export default function App() {
     if (appliedFilters.roll_type && clip.roll_type !== appliedFilters.roll_type) return false
     if (appliedFilters.tag && !clip.tags?.some((t) => t.name === appliedFilters.tag)) return false
     if (appliedFilters.date) {
-      const raw = clip.capture_time || clip.created_at
-      if (!raw) return false
-      const d = new Date(raw)
-      const clipDate = isNaN(d.getTime()) ? '' : d.toISOString().slice(0, 10)
+      const clipDate = localDateKey(clip.capture_time || clip.created_at)
       if (clipDate !== appliedFilters.date) return false
     }
     return true

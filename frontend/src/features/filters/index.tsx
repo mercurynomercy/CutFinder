@@ -11,14 +11,12 @@ import { useEffect, useState } from 'react'
 
 import { api } from '@/api/client'
 import { Search } from '@/features/search'
+import { localDateKey } from '@/lib/date'
 import { useI18n } from '@/i18n'
 
-/** Extract the YYYY-MM-DD date for a clip (embedded capture time preferred). */
+/** Extract the local YYYY-MM-DD shooting date for a clip (embedded capture time preferred). */
 function clipDate(c: { capture_time?: string | null; created_at?: string }): string | null {
-  const raw = c.capture_time || c.created_at
-  if (!raw) return null
-  const d = new Date(raw)
-  return isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10)
+  return localDateKey(c.capture_time || c.created_at)
 }
 
 // ── Filter state interface (mirrors ClipFilter) ────────────────
