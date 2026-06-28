@@ -28,6 +28,7 @@ from __future__ import annotations
 import logging
 import struct
 import subprocess
+import unicodedata
 from pathlib import Path
 from typing import Any, Callable
 
@@ -238,11 +239,71 @@ def assemble_cues(
     return cues
 
 
-def clean_cues(cues: list[Segment]) -> list[Segment]:
-    """Drop empty / near-zero-duration cues and collapse consecutive duplicates."""
+def _content_len(text: str) -> int:
+    """Number of visible characters in *text*, ignoring spaces and punctuation."""
+    return sum(
+        1 for ch in text
+        if not ch.isspace() and unicodedata.category(ch)[0] not in ("P", "S")
+    )
+
+
+def merge_orphan_cues(
+    cues: list[Segment],
+    *,
+    max_gap_s: float,
+    max_dur: float,
+) -> list[Segment]:
+    """Fold single-character cues into an adjacent cue when close in time.
+
+    The ForcedAligner sometimes strands one character (了 / 的 / 吧 …) in its own
+    cue. Such a one-character cue is merged into whichever neighbour it abuts —
+    backward into the previous cue by preference, otherwise forward into the
+    next — provided the silence gap to that neighbour is at most *max_gap_s* and
+    the combined cue stays within *max_dur*. Cues separated by a real pause are
+    left alone, so a genuine standalone short (e.g. “对”) keeps its own timing.
+    """
     out: list[Segment] = []
     for c in cues:
-        if not c.text.strip() or c.end_s - c.start_s < 0.08:
+        # Fold a deferred leading orphan (the previous cue) forward into c.
+        if (
+            out and _content_len(out[-1].text) == 1
+            and c.start_s - out[-1].end_s <= max_gap_s
+            and c.end_s - out[-1].start_s <= max_dur
+        ):
+            prev = out.pop()
+            c = Segment(start_s=prev.start_s, end_s=c.end_s, text=prev.text + c.text)
+        # Fold a trailing orphan (c) backward into the previous cue.
+        elif (
+            out and _content_len(c.text) == 1
+            and c.start_s - out[-1].end_s <= max_gap_s
+            and c.end_s - out[-1].start_s <= max_dur
+        ):
+            prev = out.pop()
+            c = Segment(start_s=prev.start_s, end_s=c.end_s, text=prev.text + c.text)
+        out.append(c)
+    return out
+
+
+def clean_cues(cues: list[Segment]) -> list[Segment]:
+    """Drop empty cues and collapse consecutive duplicates.
+
+    A near-zero-duration cue is a ForcedAligner timestamp artifact — typically a
+    trailing token like ``了。`` the aligner placed at a zero-width point, which a
+    preceding silence gap then orphaned into its own cue. Rather than discard it
+    (silently dropping characters from the subtitle), fold its text onto the
+    previous cue so the sentence stays whole; its unreliable timing is ignored.
+    A zero-duration cue with no predecessor is still dropped.
+    """
+    out: list[Segment] = []
+    for c in cues:
+        if not c.text.strip():
+            continue
+        if c.end_s - c.start_s < 0.08:
+            if out:
+                prev = out[-1]
+                out[-1] = Segment(
+                    start_s=prev.start_s, end_s=prev.end_s, text=prev.text + c.text,
+                )
             continue
         if out and out[-1].text == c.text:
             continue
@@ -280,6 +341,7 @@ class QwenTranscriber(Transcriber):
         cue_max_chars: int = 18,
         cue_max_dur: float = 6.0,
         cue_gap_s: float = 0.7,
+        cue_merge_gap_s: float = 1.2,
     ) -> None:
         self._asr_model = asr_model
         self._aligner_model = aligner_model
@@ -290,6 +352,7 @@ class QwenTranscriber(Transcriber):
         self._cue_max_chars = cue_max_chars
         self._cue_max_dur = cue_max_dur
         self._cue_gap_s = cue_gap_s
+        self._cue_merge_gap_s = cue_merge_gap_s
         self._vad: Any = None  # lazily-loaded Silero VAD model
 
     # ── model loading / unloading ────────────────────────────────
@@ -455,4 +518,9 @@ class QwenTranscriber(Transcriber):
             max_dur=self._cue_max_dur,
             gap_s=self._cue_gap_s,
         )
-        return Transcript(full_text="".join(full_parts), segments=clean_cues(all_cues))
+        cues = merge_orphan_cues(
+            clean_cues(all_cues),
+            max_gap_s=self._cue_merge_gap_s,
+            max_dur=self._cue_max_dur,
+        )
+        return Transcript(full_text="".join(full_parts), segments=cues)

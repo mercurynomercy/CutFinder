@@ -13,6 +13,7 @@ from cutfinder.adapters.qwen_transcriber import (
     assemble_cues,
     clean_cues,
     group_cues,
+    merge_orphan_cues,
     merge_speech_into_chunks,
     reattach_punctuation,
 )
@@ -148,7 +149,69 @@ def test_assemble_keeps_fallback_segments_standalone_and_ordered() -> None:
     assert [c.text for c in cues] == ["你好", "对齐失败的整段", "再见"]
 
 
+# ── orphan (single-character) cue merging ─────────────────────────
+
+def _seg(start: float, end: float, text: str) -> Segment:
+    return Segment(start_s=start, end_s=end, text=text)
+
+
+def test_orphan_merges_backward_into_previous() -> None:
+    cues = [_seg(0.0, 2.0, "马上我就能躺平"), _seg(2.1, 2.4, "了")]
+    out = merge_orphan_cues(cues, max_gap_s=1.2, max_dur=6.0)
+    assert [c.text for c in out] == ["马上我就能躺平了"]
+    assert out[0].start_s == 0.0 and out[0].end_s == 2.4
+
+
+def test_orphan_merges_forward_when_no_previous() -> None:
+    cues = [_seg(0.0, 0.3, "了"), _seg(0.4, 2.0, "又是先上菜")]
+    out = merge_orphan_cues(cues, max_gap_s=1.2, max_dur=6.0)
+    assert [c.text for c in out] == ["了又是先上菜"]
+    assert out[0].start_s == 0.0 and out[0].end_s == 2.0
+
+
+def test_orphan_kept_when_gap_exceeds_threshold() -> None:
+    # A genuine standalone short after a real pause must survive untouched.
+    cues = [_seg(0.0, 0.3, "嗯"), _seg(5.0, 5.3, "对")]
+    out = merge_orphan_cues(cues, max_gap_s=1.2, max_dur=6.0)
+    assert [c.text for c in out] == ["嗯", "对"]
+
+
+def test_orphan_not_merged_when_it_would_exceed_max_dur() -> None:
+    cues = [_seg(0.0, 5.8, "一二三四五六"), _seg(5.9, 6.2, "了")]
+    out = merge_orphan_cues(cues, max_gap_s=1.2, max_dur=6.0)
+    assert [c.text for c in out] == ["一二三四五六", "了"]
+
+
+def test_orphan_ignores_trailing_punctuation_in_char_count() -> None:
+    cues = [_seg(0.0, 2.0, "躺平"), _seg(2.1, 2.1, "了。")]
+    out = merge_orphan_cues(cues, max_gap_s=1.2, max_dur=6.0)
+    assert [c.text for c in out] == ["躺平了。"]
+
+
+def test_multi_char_cue_is_not_an_orphan() -> None:
+    cues = [_seg(0.0, 2.0, "你好"), _seg(2.1, 2.5, "对啊")]
+    out = merge_orphan_cues(cues, max_gap_s=1.2, max_dur=6.0)
+    assert [c.text for c in out] == ["你好", "对啊"]
+
+
 # ── cue cleanup ───────────────────────────────────────────────────
+
+def test_clean_folds_zero_duration_trailing_token_into_prev() -> None:
+    # ForcedAligner artifact: the final 了。 gets a zero-width timestamp after a
+    # gap, so group_cues orphans it into its own zero-duration cue. Its text must
+    # fold onto the previous cue, not vanish (the "躺平了 不见了" regression).
+    cues = [
+        Segment(start_s=8.42, end_s=11.46, text="说，马上他能腾飞了，马上我就能躺平"),
+        Segment(start_s=12.26, end_s=12.26, text="了。"),
+        Segment(start_s=12.90, end_s=15.14, text="又是先上菜不上饭是吗？"),
+    ]
+    out = clean_cues(cues)
+    assert [c.text for c in out] == [
+        "说，马上他能腾飞了，马上我就能躺平了。",
+        "又是先上菜不上饭是吗？",
+    ]
+    assert out[0].end_s == 11.46  # keep the previous cue's reliable timing
+
 
 def test_clean_drops_zero_duration_and_dups() -> None:
     cues = [
