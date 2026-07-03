@@ -28,6 +28,7 @@ frontend/dist/
 .cutfinder/
 .superpowers/
 .claude/
+.omo/
 
 # dev server PID file (written by scripts/dev.sh on each run)
 .dev-pids
