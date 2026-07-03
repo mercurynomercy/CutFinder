@@ -771,7 +771,7 @@ function ShotList({ plan }: { plan: CutPlan }) {
                         {s.roll === 'a' ? 'A' : s.roll === 'b' ? 'B' : s.roll === 'photo' ? t('card.photo') : s.roll}
                       </span>
                     </div>
-                    <button type="button" onClick={() => s.clip_path && api.openPath(s.clip_path)} className={`flex flex-col items-center gap-0.5 ${s.clip_path ? 'cursor-pointer' : ''}`}>
+                    <button type="button" onClick={() => { if (s.clip_path) api.openPath(s.clip_path).catch((err) => console.error('Failed to open path:', err)) }} className={`flex flex-col items-center gap-0.5 ${s.clip_path ? 'cursor-pointer' : ''}`}>
                       {s.thumb_ref ? (
                         <img src={s.thumb_ref} alt="" className="h-16 w-24 shrink-0 rounded object-cover" />
                       ) : (
