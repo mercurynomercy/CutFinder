@@ -527,13 +527,8 @@ class Orchestrator:
             emit(ProgressEvent(step="reanalyze", ok=False, detail=str(exc)))
             return False
 
-        # Extract auto tags from AI result (same logic as process_clip)
-        if analysis.summary_result is not None:
-            list(analysis.summary_result.tags)
-        elif analysis.vision_result is not None:
-            list(analysis.vision_result.tags)
-
-        # Update analysis on repository (preserves manual tags + roll)
+        # Update analysis on repository (preserves manual tags + refreshes auto
+        # tags — see SqliteRepository.update_analysis)
         if self.repository:
             self.repository.update_analysis(clip_id, analysis)  # analysis IS AnalysisResult
             # Store transcript if A-roll and present

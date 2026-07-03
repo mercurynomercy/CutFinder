@@ -310,12 +310,13 @@ class SqliteRepository:
 
     def delete_clip(self, clip_id: int) -> None:
         c = self._conn.cursor()
-        # Also remove from FTS index.
-        c.execute("DELETE FROM clips_fts WHERE summary LIKE ? OR description LIKE ? OR transcript LIKE ?",
-                  (f"%clip_id:{clip_id}%", f"%clip_id:{clip_id}%", f"%clip_id:{clip_id}%"))
         # Foreign-key cascade may be off (PRAGMA), so clear keyframes explicitly.
         c.execute("DELETE FROM keyframes WHERE clip_id = ?", (clip_id,))
         c.execute("DELETE FROM clips WHERE id = ?", (clip_id,))
+        # Remove from FTS index (keyed by rowid = clips.id) *after* deleting the
+        # clip: the clips_fts_delete trigger re-inserts an empty row on DELETE,
+        # so this must run last to fully drop it.
+        c.execute("DELETE FROM clips_fts WHERE rowid = ?", (clip_id,))
         self._conn.commit()
 
     # ── Query / Filter / Search (FTS5) ─────────────────────
@@ -391,7 +392,6 @@ class SqliteRepository:
                 [(clip_id, t.name, t.source) for t in tags],
             )
 
-        self._sync_fts_tags(clip_id, tags)
         self._conn.commit()
 
     def add_tag(self, clip_id: int, tag_name: str) -> None:
@@ -404,29 +404,12 @@ class SqliteRepository:
         except IntegrityError:
             pass  # already exists — idempotent.
 
-        tags = self.get_tags(clip_id)
-        self._sync_fts_tags(clip_id, tags)
         self._conn.commit()
 
     def remove_tag(self, clip_id: int, tag_name: str) -> None:
         c = self._conn.cursor()
         c.execute("DELETE FROM tags WHERE clip_id = ? AND name = ?", (clip_id, tag_name))
         self._conn.commit()
-
-    def _sync_fts_tags(self, clip_id: int, tags: list[Tag]) -> None:
-        """Rebuild the tag portion of FTS for a single clip.
-
-        Tags themselves aren't in clips_fts; we embed them as text into
-        summary/description so FTS search can still find clips by tag.
-        """
-        if not tags:
-            return
-
-        # Build a simple text representation of the clip's FTS row for tag matching.
-        self._conn.cursor()
-        # We don't directly update FTS via tags alone, but we do need to make sure
-        # that when search() runs the INSERT OR REPLACE into clips_fts, it captures tag data.
-        # For now tags are searched via the tags table JOIN in query_clips(tag=...).
 
     # ── Roll correction ───────────────────────────────────────
 
@@ -497,10 +480,6 @@ class SqliteRepository:
             auto_tags = []
 
         if auto_tags:
-            # Fetch existing manual tags.
-            c.execute("SELECT name FROM tags WHERE clip_id = ? AND source = 'manual'", (clip_id,))
-            {r[0] for r in c.fetchall()}
-
             # Merge: keep manual, add/replace auto.
             existing = self.get_tags(clip_id)
             merged: list[Tag] = [t for t in existing if t.source == "manual"]
