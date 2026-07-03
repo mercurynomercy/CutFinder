@@ -768,7 +768,7 @@ function ShotList({ plan }: { plan: CutPlan }) {
                     <div className="flex flex-col items-center justify-start gap-0.5 pt-1">
                       <span className="text-xs font-mono text-[--text-muted]">{index}</span>
                       <span className={`rounded px-1 text-[9px] font-bold ${s.roll === 'a' ? 'bg-[--roll-a-soft] text-[--roll-a]' : s.roll === 'b' ? 'bg-[--roll-b-soft] text-[--roll-b]' : s.roll === 'photo' ? 'bg-[--roll-photo-soft] text-[--roll-photo]' : 'bg-gray-400/20 text-[--text-secondary]'}`}>
-                        {s.roll === 'a' ? 'A' : s.roll === 'b' ? 'B' : s.roll}
+                        {s.roll === 'a' ? 'A' : s.roll === 'b' ? 'B' : s.roll === 'photo' ? t('card.photo') : s.roll}
                       </span>
                     </div>
                     <button type="button" onClick={() => s.clip_path && api.openPath(s.clip_path)} className={`flex flex-col items-center gap-0.5 ${s.clip_path ? 'cursor-pointer' : ''}`}>

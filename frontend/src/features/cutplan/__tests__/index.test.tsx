@@ -225,4 +225,34 @@ describe('CutplanPage', () => {
     expect(openSpy).toHaveBeenCalledWith('/lib/A-0001.mov')
     openSpy.mockRestore()
   })
+
+  it('renders a photo shot with the photo badge, not B-roll', async () => {
+    const photoPlan = {
+      ...PLAN,
+      shots: [{
+        clip_id: 8, roll: 'photo', in_s: 0, out_s: 4, content: '[Photo] 情侣自拍',
+        rationale: '视觉总结', chapter: '开场', clip_label: 'photo-0008.JPG',
+        clip_path: '/lib/photo-0008.JPG', thumb_ref: '/api/clips/8/thumbnail',
+      }],
+    }
+    server.use(
+      http.get(`${API}/cut/sessions`, () =>
+        HttpResponse.json({ sessions: [{ id: 1, title: 't', status: 'idle', created_at: null, updated_at: null }] }),
+      ),
+      http.get(`${API}/cut/sessions/1`, () =>
+        HttpResponse.json({
+          session: { id: 1, title: 't', status: 'idle', created_at: null, updated_at: null },
+          messages: [{ role: 'assistant', content: '已生成', created_at: null }],
+          plan: photoPlan,
+        }),
+      ),
+    )
+
+    render(<CutplanPage onClose={() => {}} />)
+
+    await screen.findByText('photo-0008.JPG')
+    // The default test locale is English → 'Photo'; assert we never render the raw 'photo'.
+    expect(screen.getByText('Photo')).toBeInTheDocument()
+    expect(screen.queryByText('photo')).not.toBeInTheDocument()
+  })
 })
