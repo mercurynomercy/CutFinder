@@ -98,6 +98,23 @@ def test_aroll_spine_plus_broll_finalizes() -> None:
     assert retr.searches[0]["roll"] == "a"
 
 
+def test_shot_roll_taken_from_clip_not_model() -> None:
+    # Model mislabels a photo clip as "b"; the plan must trust the DB roll.
+    llm = FakeLLM([
+        AgentStep(content="ok", tool_calls=[_tc("emit_plan", {"shots": [
+            {"clip_id": 5, "roll": "b", "in_s": 0, "out_s": 4, "content": "情侣自拍"},
+        ]})]),
+    ])
+    details = {5: ClipDetail(clip_id=5, roll="photo", duration_s=4.0, library_path="/lib/photo-0008.JPG")}
+    retr = FakeRetriever([ClipBrief(clip_id=5, roll="photo")], details)
+    director = CutDirector(llm, retr, FakeInspector(), ui_language="zh")
+
+    result = director.run(RoughCutRequest(), [], "剪一条")
+
+    assert result.plan is not None
+    assert result.plan.shots[0].roll == "photo"
+
+
 def test_in_out_clamped_to_clip_duration() -> None:
     llm = FakeLLM([
         AgentStep(tool_calls=[_tc("emit_plan", {"shots": [

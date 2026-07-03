@@ -887,7 +887,7 @@ class CutDirector:
                 chapters.append(chapter)
             shots.append(Shot(
                 clip_id=cid,
-                roll=str(item.get("roll") or (detail.roll if detail else "a")),
+                roll=str(detail.roll if detail else (item.get("roll") or "a")),
                 in_s=in_s,
                 out_s=out_s,
                 content=str(item.get("content") or ""),
