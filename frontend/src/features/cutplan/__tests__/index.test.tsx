@@ -6,6 +6,7 @@ import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
 
 import { server } from '@/test/mocks/server'
+import { api } from '@/api/client'
 import { CutplanPage } from '../index'
 
 const API = 'http://localhost:5080/api'
@@ -15,7 +16,7 @@ const PLAN = {
     {
       clip_id: 1, roll: 'a', in_s: 0, out_s: 12, content: '开场白',
       rationale: '叙事开场', chapter: '开场', clip_label: 'A-0001.mov',
-      thumb_ref: '/api/clips/1/thumbnail',
+      clip_path: '/lib/A-0001.mov', thumb_ref: '/api/clips/1/thumbnail',
     },
   ],
   chapters: ['开场'],
@@ -199,5 +200,29 @@ describe('CutplanPage', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'OK' }))
 
     await waitFor(() => expect(del).toHaveBeenCalled())
+  })
+
+  it('clicking a shot thumbnail opens the local file', async () => {
+    const openSpy = vi.spyOn(api, 'openPath').mockResolvedValue({ status: 'ok', path: '/lib/A-0001.mov' })
+    server.use(
+      http.get(`${API}/cut/sessions`, () =>
+        HttpResponse.json({ sessions: [{ id: 1, title: 't', status: 'idle', created_at: null, updated_at: null }] }),
+      ),
+      http.get(`${API}/cut/sessions/1`, () =>
+        HttpResponse.json({
+          session: { id: 1, title: 't', status: 'idle', created_at: null, updated_at: null },
+          messages: [{ role: 'assistant', content: '已生成', created_at: null }],
+          plan: PLAN,
+        }),
+      ),
+    )
+
+    render(<CutplanPage onClose={() => {}} />)
+
+    const label = await screen.findByText('A-0001.mov')
+    await userEvent.click(label.closest('button')!)
+
+    expect(openSpy).toHaveBeenCalledWith('/lib/A-0001.mov')
+    openSpy.mockRestore()
   })
 })
