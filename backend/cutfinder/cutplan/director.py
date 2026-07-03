@@ -887,7 +887,7 @@ class CutDirector:
                 chapters.append(chapter)
             shots.append(Shot(
                 clip_id=cid,
-                roll=str(item.get("roll") or (detail.roll if detail else "a")),
+                roll=str(detail.roll if detail else (item.get("roll") or "a")),
                 in_s=in_s,
                 out_s=out_s,
                 content=str(item.get("content") or ""),
@@ -896,6 +896,7 @@ class CutDirector:
                 clip_label=_clip_label(detail),
                 clip_date=(detail.capture_time or "")[:10] if detail else "",
                 thumb_ref=f"/api/clips/{cid}/thumbnail",
+                clip_path=(detail.library_path or detail.source_path) if detail else None,
             ))
             total += max(0.0, out_s - in_s)
 

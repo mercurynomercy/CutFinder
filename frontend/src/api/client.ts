@@ -222,6 +222,7 @@ export interface CutShot {
   chapter: string
   clip_label: string
   clip_date: string
+  clip_path: string | null
   thumb_ref: string | null
 }
 

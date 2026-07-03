@@ -52,11 +52,9 @@ function ThinkingDots() {
 
 export interface CutplanPageProps {
   onClose: () => void
-  /** When provided, clicking a thumbnail closes cutplan and opens the clip detail. */
-  onOpenClip?: (clipId: number) => void
 }
 
-export function CutplanPage({ onClose, onOpenClip }: CutplanPageProps) {
+export function CutplanPage({ onClose }: CutplanPageProps) {
   const { t } = useI18n()
   const [sessions, setSessions] = useState<CutSession[]>([])
   const [activeId, setActiveId] = useState<number | null>(null)
@@ -577,7 +575,7 @@ export function CutplanPage({ onClose, onOpenClip }: CutplanPageProps) {
                     <span>{lastProgress || t('roughcut.partialGenerating')}</span>
                   </div>
                 )}
-                <ShotList plan={plan} onOpenClip={onOpenClip ? (id: number) => { onClose(); onOpenClip(id); } : undefined} />
+                <ShotList plan={plan} />
               </>
             )}
           </div>
@@ -607,7 +605,7 @@ export function CutplanPage({ onClose, onOpenClip }: CutplanPageProps) {
             </div>
           </div>
           <div className="mx-auto min-h-0 w-full max-w-5xl flex-1 overflow-y-auto p-6">
-            {plan ? <ShotList plan={plan} onOpenClip={onOpenClip ? (id: number) => { onClose(); onOpenClip(id); } : undefined} /> : <p className="text-sm text-[--text-muted]">{t('roughcut.noPlan')}</p>}
+            {plan ? <ShotList plan={plan} /> : <p className="text-sm text-[--text-muted]">{t('roughcut.noPlan')}</p>}
           </div>
         </div>
       )}
@@ -750,7 +748,7 @@ export function CutplanPage({ onClose, onOpenClip }: CutplanPageProps) {
   )
 }
 
-function ShotList({ plan, onOpenClip }: { plan: CutPlan; onOpenClip?: (clipId: number) => void }) {
+function ShotList({ plan }: { plan: CutPlan }) {
   const { t } = useI18n()
   const chapters = plan.chapters.length ? plan.chapters : ['']
   let index = 0
@@ -770,10 +768,10 @@ function ShotList({ plan, onOpenClip }: { plan: CutPlan; onOpenClip?: (clipId: n
                     <div className="flex flex-col items-center justify-start gap-0.5 pt-1">
                       <span className="text-xs font-mono text-[--text-muted]">{index}</span>
                       <span className={`rounded px-1 text-[9px] font-bold ${s.roll === 'a' ? 'bg-[--roll-a-soft] text-[--roll-a]' : s.roll === 'b' ? 'bg-[--roll-b-soft] text-[--roll-b]' : s.roll === 'photo' ? 'bg-[--roll-photo-soft] text-[--roll-photo]' : 'bg-gray-400/20 text-[--text-secondary]'}`}>
-                        {s.roll === 'a' ? 'A' : s.roll === 'b' ? 'B' : s.roll}
+                        {s.roll === 'a' ? 'A' : s.roll === 'b' ? 'B' : s.roll === 'photo' ? t('card.photo') : s.roll}
                       </span>
                     </div>
-                    <button type="button" onClick={() => s.clip_id && onOpenClip?.(s.clip_id)} className={`flex flex-col items-center gap-0.5 ${s.clip_id ? 'cursor-pointer' : ''}`}>
+                    <button type="button" onClick={() => { if (s.clip_path) api.openPath(s.clip_path).catch((err) => console.error('Failed to open path:', err)) }} className={`flex flex-col items-center gap-0.5 ${s.clip_path ? 'cursor-pointer' : ''}`}>
                       {s.thumb_ref ? (
                         <img src={s.thumb_ref} alt="" className="h-16 w-24 shrink-0 rounded object-cover" />
                       ) : (
