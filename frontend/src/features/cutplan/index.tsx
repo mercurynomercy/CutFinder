@@ -764,8 +764,8 @@ function ShotList({ plan }: { plan: CutPlan }) {
               {shots.map((s) => {
                 index += 1
                 return (
-                  <div key={index} className="flex gap-2 rounded-md border border-[--border] bg-[--surface-2] p-2">
-                    <div className="flex flex-col items-center justify-start gap-0.5 pt-1">
+                  <div key={index} className="flex gap-3 rounded-md border border-[--border] bg-[--surface-2] p-3">
+                    <div className="flex flex-col items-center justify-start gap-0.5">
                       <span className="text-xs font-mono text-[--text-muted]">{index}</span>
                       <span className={`rounded px-1 text-[9px] font-bold ${s.roll === 'a' ? 'bg-[--roll-a-soft] text-[--roll-a]' : s.roll === 'b' ? 'bg-[--roll-b-soft] text-[--roll-b]' : s.roll === 'photo' ? 'bg-[--roll-photo-soft] text-[--roll-photo]' : 'bg-gray-400/20 text-[--text-secondary]'}`}>
                         {s.roll === 'a' ? 'A' : s.roll === 'b' ? 'B' : s.roll === 'photo' ? t('card.photo') : s.roll}
@@ -780,10 +780,10 @@ function ShotList({ plan }: { plan: CutPlan }) {
                       <span className="text-[10px] text-[--text-muted]">{s.clip_date}</span>
                       <span className="max-w-20 truncate text-[10px] text-[--text-muted]">{s.clip_label}</span>
                     </button>
-                    <div className="min-w-0 flex-1 text-xs">
-                      <span className="font-mono text-[--text-secondary]">{fmtTimecode(s.in_s)}–{fmtTimecode(s.out_s)}</span>
-                      {s.content && <p className="mt-0.5 text-[--text-primary]">{s.content}</p>}
-                      {s.rationale && <p className="mt-0.5 text-[--text-muted]">{s.rationale}</p>}
+                    <div className="min-w-0 flex-1 space-y-1.5">
+                      <span className="block font-mono text-[11px] leading-none tracking-tight text-[--text-secondary]">{fmtTimecode(s.in_s)}–{fmtTimecode(s.out_s)}</span>
+                      {s.content && <p className="text-[13px] leading-relaxed text-[--text-primary]">{s.content}</p>}
+                      {s.rationale && <p className="text-xs leading-relaxed text-[--text-muted]">{s.rationale}</p>}
                     </div>
                   </div>
                 )
