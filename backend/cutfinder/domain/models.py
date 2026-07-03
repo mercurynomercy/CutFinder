@@ -227,6 +227,7 @@ class Shot(BaseModel, frozen=True):
     clip_label: str = ""             # library/source file name (filled by director)
     clip_date: str = ""              # ISO shooting date YYYY-MM-DD (filled by director)
     thumb_ref: str | None = None     # thumbnail URL (filled by the director)
+    clip_path: str | None = None     # library/source path for "open file" (filled by director)
 
 
 class CutPlan(BaseModel, frozen=True):
