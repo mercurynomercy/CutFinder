@@ -19,6 +19,7 @@ __pycache__/
 # Node / 前端
 node_modules/
 frontend/dist/
+superpowers
 *.local
 
 # 打包产物（CutFinder.app / .dmg）
