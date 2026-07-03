@@ -363,7 +363,7 @@ export default function App() {
 
   // Rough-cut director view (full-screen, replaces main layout)
   if (showCutplan) {
-    return <CutplanPage onClose={() => setShowCutplan(false)} />
+    return <CutplanPage onClose={() => setShowCutplan(false)} onOpenClip={(id) => { setShowCutplan(false); setSelectedClipId(id); }} />
   }
 
   return (

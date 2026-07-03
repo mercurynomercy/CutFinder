@@ -52,9 +52,11 @@ function ThinkingDots() {
 
 export interface CutplanPageProps {
   onClose: () => void
+  /** When provided, clicking a thumbnail closes cutplan and opens the clip detail. */
+  onOpenClip?: (clipId: number) => void
 }
 
-export function CutplanPage({ onClose }: CutplanPageProps) {
+export function CutplanPage({ onClose, onOpenClip }: CutplanPageProps) {
   const { t } = useI18n()
   const [sessions, setSessions] = useState<CutSession[]>([])
   const [activeId, setActiveId] = useState<number | null>(null)
@@ -411,7 +413,7 @@ export function CutplanPage({ onClose }: CutplanPageProps) {
       <div className="flex min-h-0 flex-1">
         {/* Sessions sidebar (collapsible) */}
         {listCollapsed ? (
-          <aside className="flex w-10 shrink-0 flex-col items-center border-r border-[--border] bg-[--surface-1] py-2">
+          <aside className="flex w-10 shrink-0 flex-col items-center bg-[--surface-1] py-2">
             <button
               onClick={() => setListCollapsed(false)}
               aria-label={t('roughcut.expandList')}
@@ -424,7 +426,7 @@ export function CutplanPage({ onClose }: CutplanPageProps) {
             </button>
           </aside>
         ) : (
-          <aside className="flex w-56 shrink-0 flex-col border-r border-[--border] bg-[--surface-1]">
+          <aside className="flex w-56 shrink-0 flex-col bg-[--surface-1]">
             <div className="flex items-center gap-1 p-2">
               <button
                 onClick={newSession}
@@ -475,7 +477,7 @@ export function CutplanPage({ onClose }: CutplanPageProps) {
         )}
 
         {/* Conversation column */}
-        <section className="flex min-w-0 flex-1 flex-col border-r border-[--border]">
+        <section className="flex min-w-0 flex-[2] flex-col border-r border-[--border/60] bg-[--surface-1]/50">
           <div ref={threadRef} className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
             {messages.length === 0 && !showProgress ? (
               <p className="text-sm text-[--text-muted]">{t('roughcut.emptyConvo')}</p>
@@ -540,7 +542,7 @@ export function CutplanPage({ onClose }: CutplanPageProps) {
         </section>
 
         {/* Shot list preview */}
-        <section className="flex w-[46%] min-w-0 shrink-0 flex-col bg-[--surface-1]">
+        <section className="flex w-[46%] min-w-0 shrink-0 flex-col border-l border-[--border/60] bg-[--surface-1]">
           <div className="flex h-11 shrink-0 items-center justify-between border-b border-[--border] px-4">
             <span className="text-xs font-medium text-[--text-secondary]">{t('roughcut.planTitle')}</span>
             <div className="flex items-center gap-2">
@@ -575,7 +577,7 @@ export function CutplanPage({ onClose }: CutplanPageProps) {
                     <span>{lastProgress || t('roughcut.partialGenerating')}</span>
                   </div>
                 )}
-                <ShotList plan={plan} />
+                <ShotList plan={plan} onOpenClip={onOpenClip ? (id: number) => { onClose(); onOpenClip(id); } : undefined} />
               </>
             )}
           </div>
@@ -605,7 +607,7 @@ export function CutplanPage({ onClose }: CutplanPageProps) {
             </div>
           </div>
           <div className="mx-auto min-h-0 w-full max-w-5xl flex-1 overflow-y-auto p-6">
-            {plan ? <ShotList plan={plan} /> : <p className="text-sm text-[--text-muted]">{t('roughcut.noPlan')}</p>}
+            {plan ? <ShotList plan={plan} onOpenClip={onOpenClip ? (id: number) => { onClose(); onOpenClip(id); } : undefined} /> : <p className="text-sm text-[--text-muted]">{t('roughcut.noPlan')}</p>}
           </div>
         </div>
       )}
@@ -748,7 +750,7 @@ export function CutplanPage({ onClose }: CutplanPageProps) {
   )
 }
 
-function ShotList({ plan }: { plan: CutPlan }) {
+function ShotList({ plan, onOpenClip }: { plan: CutPlan; onOpenClip?: (clipId: number) => void }) {
   const { t } = useI18n()
   const chapters = plan.chapters.length ? plan.chapters : ['']
   let index = 0
@@ -765,21 +767,25 @@ function ShotList({ plan }: { plan: CutPlan }) {
                 index += 1
                 return (
                   <div key={index} className="flex gap-2 rounded-md border border-[--border] bg-[--surface-2] p-2">
-                    <span className="w-5 shrink-0 text-right text-xs text-[--text-muted]">{index}</span>
-                    {s.thumb_ref ? (
-                      <img src={s.thumb_ref} alt="" className="h-12 w-20 shrink-0 rounded object-cover" />
-                    ) : (
-                      <div className="h-12 w-20 shrink-0 rounded bg-[--surface-3]" />
-                    )}
+                    <div className="flex flex-col items-center justify-start gap-0.5 pt-1">
+                      <span className="text-xs font-mono text-[--text-muted]">{index}</span>
+                      <span className={`rounded px-1 text-[9px] font-bold ${s.roll === 'a' ? 'bg-[--roll-a-soft] text-[--roll-a]' : s.roll === 'b' ? 'bg-[--roll-b-soft] text-[--roll-b]' : s.roll === 'photo' ? 'bg-[--roll-photo-soft] text-[--roll-photo]' : 'bg-gray-400/20 text-[--text-secondary]'}`}>
+                        {s.roll === 'a' ? 'A' : s.roll === 'b' ? 'B' : s.roll}
+                      </span>
+                    </div>
+                    <button type="button" onClick={() => s.clip_id && onOpenClip?.(s.clip_id)} className={`flex flex-col items-center gap-0.5 ${s.clip_id ? 'cursor-pointer' : ''}`}>
+                      {s.thumb_ref ? (
+                        <img src={s.thumb_ref} alt="" className="h-16 w-24 shrink-0 rounded object-cover" />
+                      ) : (
+                        <div className="h-16 w-24 shrink-0 rounded bg-[--surface-3]" />
+                      )}
+                      <span className="text-[10px] text-[--text-muted]">{s.clip_date}</span>
+                      <span className="max-w-20 truncate text-[10px] text-[--text-muted]">{s.clip_label}</span>
+                    </button>
                     <div className="min-w-0 flex-1 text-xs">
-                      <div className="flex items-center gap-2 text-[--text-secondary]">
-                        <span className="font-mono">{fmtTimecode(s.in_s)}–{fmtTimecode(s.out_s)}</span>
-                        <span className="rounded bg-[--surface-3] px-1">{s.roll === 'a' ? 'A' : 'B'}</span>
-                        {s.clip_date && <span className="font-mono text-[--text-muted]">{s.clip_date}</span>}
-                        <span className="truncate text-[--text-muted]">{s.clip_label}</span>
-                      </div>
-                      {s.content && <p className="mt-0.5 truncate text-[--text-primary]">{s.content}</p>}
-                      {s.rationale && <p className="text-[--text-muted]">{s.rationale}</p>}
+                      <span className="font-mono text-[--text-secondary]">{fmtTimecode(s.in_s)}–{fmtTimecode(s.out_s)}</span>
+                      {s.content && <p className="mt-0.5 text-[--text-primary]">{s.content}</p>}
+                      {s.rationale && <p className="mt-0.5 text-[--text-muted]">{s.rationale}</p>}
                     </div>
                   </div>
                 )
