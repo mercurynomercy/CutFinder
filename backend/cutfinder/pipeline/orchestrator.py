@@ -618,7 +618,12 @@ class Orchestrator:
         base = self.keyframe_dir if self.keyframe_dir is not None else Path(tempfile.gettempdir()) / "cutfinder_keyframes"
         out = base / str(clip_id)
         import shutil
-        shutil.rmtree(out, ignore_errors=True)
+        # Safety: only ever rmtree a clip-id subdir strictly under base, never
+        # base itself or anything outside it (guards against a misconfigured
+        # keyframe_dir turning regen into unintended deletion).
+        resolved_base, resolved_out = base.resolve(), out.resolve()
+        if resolved_out != resolved_base and resolved_base in resolved_out.parents:
+            shutil.rmtree(out, ignore_errors=True)
         out.mkdir(parents=True, exist_ok=True)
         return out
 

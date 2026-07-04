@@ -131,6 +131,7 @@ class TestIdleHook:
         calls: list[int] = []
         queue = WorkerQueue(
             orchestrator=orch, repository=repo, on_idle=lambda: calls.append(1),
+            idle_cooldown_s=0.02,
         )
         await queue.start()
 
@@ -142,11 +143,36 @@ class TestIdleHook:
             await asyncio.sleep(0.02)
             job = repo.get_job(1)
 
-        # on_idle runs via asyncio.to_thread after the drain — let it land.
-        await asyncio.sleep(0.05)
+        # on_idle runs via asyncio.to_thread after the cooldown — let it land.
+        await asyncio.sleep(0.1)
         await queue.stop()
 
         assert len(calls) >= 1
+
+    @pytest.mark.asyncio
+    async def test_on_idle_debounced_by_cooldown(self) -> None:
+        """on_idle does NOT fire while within the cooldown window after a drain."""
+        orch = _make_fake_orchestrator()
+        repo = FakeCatalogRepository()
+        calls: list[int] = []
+        queue = WorkerQueue(
+            orchestrator=orch, repository=repo, on_idle=lambda: calls.append(1),
+            idle_cooldown_s=5.0,  # long enough that it must not fire in this test
+        )
+        await queue.start()
+
+        await queue.enqueue_scan([_make_candidate("/tmp/a.mp4")])
+        job = repo.get_job(1)
+        while job is None or job.done < 1:
+            await asyncio.sleep(0.02)
+            job = repo.get_job(1)
+
+        # Queue drained, but the cooldown hasn't elapsed → no unload yet.
+        await asyncio.sleep(0.1)
+        assert calls == []
+
+        await queue.stop()  # cancels the pending idle-release cleanly
+        assert calls == []
 
     @pytest.mark.asyncio
     async def test_no_idle_hook_is_safe(self) -> None:

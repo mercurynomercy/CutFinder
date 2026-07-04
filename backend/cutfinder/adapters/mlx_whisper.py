@@ -269,15 +269,19 @@ class MlxWhisperTranscriber(Transcriber):
                 condition_on_previous_text=False,  # break repetition/hallucination chains
             )
 
-        if progress is not None:
-            # `mlx_whisper.transcribe` resolves to the FUNCTION (re-exported in
-            # __init__), so reach the actual submodule that holds the tqdm
-            # attribute via sys.modules and intercept it. Transcription maps to
-            # the [W, 1] tail of overall progress.
-            tmod = sys.modules["mlx_whisper.transcribe"]
+        # `mlx_whisper.transcribe` resolves to the FUNCTION (re-exported in
+        # __init__), so reach the actual submodule that holds the tqdm attribute
+        # via sys.modules and intercept it. Transcription maps to the [W, 1] tail
+        # of overall progress. If mlx-whisper's internals change (module gone, no
+        # tqdm attr), degrade to running without progress rather than failing the
+        # whole transcription/subtitle task.
+        tmod = sys.modules.get("mlx_whisper.transcribe") if progress is not None else None
+        if tmod is not None and hasattr(tmod, "tqdm"):
             with patch_tqdm(tmod, lambda f: _safe(progress, w + f * (1 - w))):
                 result = _run()
         else:
+            if progress is not None:
+                logger.warning("mlx-whisper tqdm progress hook unavailable; running without progress")
             result = _run()
 
         # Map result dict → Transcript domain model

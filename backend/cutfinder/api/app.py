@@ -143,6 +143,10 @@ def _build_into(ctx: LibraryContext, library_path: Union[str, Path]) -> None:
 
     db_path = cutfinder_dir / "catalog.sqlite"
     conn = sqlite3.connect(str(db_path), check_same_thread=False)
+    # WAL lets readers and the single writer proceed without blocking each other;
+    # busy_timeout waits briefly for a momentary lock instead of raising.
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA busy_timeout=5000")
     repository = SqliteRepository(conn)
 
     # The worker queue is in-memory: any job left running/queued when the app

@@ -121,7 +121,8 @@ END"""
 _CREATE_FTS_TRIGGER_UPD = """
 CREATE TRIGGER IF NOT EXISTS clips_fts_update AFTER UPDATE OF summary, description ON clips BEGIN
     REPLACE INTO clips_fts (rowid, summary, description, transcript)
-        VALUES (NEW.id, NEW.summary, NEW.description, '');
+        VALUES (NEW.id, NEW.summary, NEW.description,
+                COALESCE((SELECT full_text FROM transcripts WHERE clip_id = NEW.id), ''));
 END"""
 
 _CREATE_FTS_TRIGGER_DEL = """
@@ -188,10 +189,24 @@ class SqliteRepository:
 
         c.execute(_CREATE_FTS)
 
-        # FTS5 triggers — IF NOT EXISTS so they're idempotent.
+        # FTS5 triggers — IF NOT EXISTS so they're idempotent. The update trigger
+        # is dropped first so on-disk DBs pick up the fixed definition (an older
+        # version wiped the transcript column on any summary/description update).
         c.execute(_CREATE_FTS_TRIGGER_INS)
+        c.execute("DROP TRIGGER IF EXISTS clips_fts_update")
         c.execute(_CREATE_FTS_TRIGGER_UPD)
         c.execute(_CREATE_FTS_TRIGGER_DEL)
+
+        # Self-heal FTS rows whose transcript was wiped by the old trigger:
+        # re-index the transcript text for clips that still have one. Idempotent —
+        # after the first run this matches nothing.
+        c.execute("""
+            INSERT OR REPLACE INTO clips_fts (rowid, summary, description, transcript)
+            SELECT c.id, COALESCE(c.summary, ''), COALESCE(c.description, ''), t.full_text
+            FROM clips c JOIN transcripts t ON t.clip_id = c.id
+            WHERE t.full_text <> ''
+              AND COALESCE((SELECT transcript FROM clips_fts f WHERE f.rowid = c.id), '') = ''
+        """)
 
         self._conn.commit()
 

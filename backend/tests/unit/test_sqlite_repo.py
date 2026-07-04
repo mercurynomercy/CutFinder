@@ -281,6 +281,48 @@ class TestSearch:
         results = repo.search("天气")
         assert len(results) >= 1
 
+    def test_transcript_stays_searchable_after_summary_update(self, repo):
+        """Updating summary/description must not wipe transcript from the FTS index.
+
+        Reproduces the pipeline order (save_transcript → update_analysis): the
+        clips_fts_update trigger used to REPLACE the FTS row with an empty
+        transcript, making A-roll clips unsearchable by their narration.
+        """
+        c = _make_clip("fp_tw", roll_type="a")
+        cid = repo.upsert_clip(c)
+        repo.save_transcript(cid, _make_transcript("今天天气很好我们去公园散步"))
+
+        # Sanity: searchable via FTS before the summary update. Use a 3+ char
+        # query (trigram FTS path) that appears ONLY in the transcript, not the
+        # summary set below, so the match can only come from the FTS transcript.
+        assert len(repo.search("我们去")) == 1
+
+        # Now set the summary — this fires the clips_fts_update trigger.
+        repo.update_analysis(cid, AnalysisResult(
+            roll_type="a", summary_result=SummaryResult(summary="公园散步的记录", tags=[]),
+        ))
+
+        # Transcript must still be searchable.
+        assert len(repo.search("我们去")) == 1
+
+    def test_schema_reinit_heals_wiped_transcript_fts(self, repo):
+        """execute_schema() re-indexes transcripts wiped by the old trigger."""
+        c = _make_clip("fp_heal", roll_type="a")
+        cid = repo.upsert_clip(c)
+        repo.save_transcript(cid, _make_transcript("湖边的清晨薄雾缭绕"))
+
+        # Simulate the old-DB state: transcript wiped from the FTS row.
+        cur = repo._conn.cursor()
+        cur.execute(
+            "INSERT OR REPLACE INTO clips_fts (rowid, summary, description, transcript)"
+            " VALUES (?, '', '', '')", (cid,),
+        )
+        repo._conn.commit()
+        assert len(repo.search("薄雾缭绕")) == 0  # broken before migration
+
+        repo.execute_schema()  # idempotent re-init runs the self-heal
+        assert len(repo.search("薄雾缭绕")) == 1
+
     def test_search_no_match(self, repo):
         c = _make_clip("fp_sn", summary="english text only")
         repo.upsert_clip(c)

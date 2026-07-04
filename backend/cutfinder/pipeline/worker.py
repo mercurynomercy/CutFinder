@@ -134,6 +134,7 @@ class WorkerQueue:
         subtitle_exporter: Any | None = None,
         cutplan_service: Any | None = None,
         on_idle: Callable[[], None] | None = None,
+        idle_cooldown_s: float = 30.0,
     ) -> None:
         self._queue: asyncio.Queue[Any] = asyncio.Queue()
         self._worker_task: asyncio.Task[None] | None = None
@@ -151,8 +152,11 @@ class WorkerQueue:
         self._orchestrator = orchestrator
 
         # Called once the queue drains (no items left) — used to unload
-        # idle models (whisper/demucs) so they stop occupying RAM.
+        # idle models (whisper/demucs) so they stop occupying RAM. Debounced by
+        # a cooldown so back-to-back clips don't thrash model load/unload.
         self._on_idle = on_idle
+        self._idle_cooldown_s = idle_cooldown_s
+        self._idle_task: asyncio.Task[None] | None = None
 
         # Standalone subtitle export (decoupled from the catalog) + its results.
         self._subtitle_exporter = subtitle_exporter
@@ -200,6 +204,7 @@ class WorkerQueue:
         """
         # Ensure the worker isn't blocked on a pause gate so it can drain + exit.
         self._resume.set()
+        self._cancel_idle_release()
         self._queue.put_nowait(_STOP_SENTINEL)
         if self._worker_task and not self._worker_task.done():
             await self._worker_task
@@ -567,6 +572,10 @@ class WorkerQueue:
 
                 item = await self._queue.get()
 
+                # We have work — cancel any pending idle-release so models stay
+                # loaded across a burst of items instead of unloading between them.
+                self._cancel_idle_release()
+
                 # Stop sentinel — drain remaining then exit
                 if isinstance(item, type(_STOP_SENTINEL)):
                     self._queue.task_done()
@@ -611,22 +620,43 @@ class WorkerQueue:
                     await self._maybe_autoqueue_keyframes(job_id)
                 self._queue.task_done()
 
-                # Nothing left to process → release idle model memory.
+                # Nothing left to process → start the idle-release cooldown. If
+                # new work arrives before it elapses, the next get() cancels it.
                 if self._queue.empty():
-                    await self._run_idle_hook()
+                    self._schedule_idle_release()
 
         except asyncio.CancelledError:
             # Normal shutdown — drain remaining items if possible
             pass
 
-    async def _run_idle_hook(self) -> None:
-        """Invoke the idle callback (e.g. unload models) when the queue drains.
+    def _cancel_idle_release(self) -> None:
+        """Cancel a pending idle-release (new work arrived within the cooldown)."""
+        if self._idle_task is not None and not self._idle_task.done():
+            self._idle_task.cancel()
+        self._idle_task = None
+
+    def _schedule_idle_release(self) -> None:
+        """Start (or restart) the debounced idle-release cooldown."""
+        if self._on_idle is None:
+            return
+        self._cancel_idle_release()
+        self._idle_task = asyncio.create_task(self._idle_release_after_cooldown())
+
+    async def _idle_release_after_cooldown(self) -> None:
+        """Invoke the idle callback (e.g. unload models) once the queue has
+        stayed empty for the cooldown window.
 
         Runs off the event loop since unloading can touch GC / GPU caches.
         Errors are logged and swallowed — cleanup must never break the worker.
         """
         if self._on_idle is None:
             return
+        try:
+            await asyncio.sleep(self._idle_cooldown_s)
+        except asyncio.CancelledError:
+            return  # new work arrived during the cooldown — stay loaded
+        if not self._queue.empty():
+            return  # work queued during the cooldown
         try:
             await asyncio.to_thread(self._on_idle)
         except Exception as exc:  # noqa: BLE001 — cleanup must not break the worker

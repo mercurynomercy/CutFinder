@@ -25,6 +25,12 @@ from ..config import AppConfig
 from ..domain.models import CutSuggestion, Segment, SummaryResult
 from ..ports.ai import Summarizer
 
+# Bound OMLX HTTP calls so a hung model server can't block the worker forever.
+# Generous read window — local MLX generation of the capped token budgets here
+# takes seconds, not minutes; a truly stuck request times out, is retried, then
+# surfaces as a task error rather than an indefinite hang.
+_OMLX_TIMEOUT_S = 120.0
+
 # ── prompt template ────────────────────────────────────────────────
 
 _SUMMARIZE_PROMPT_ZH = """\
@@ -158,6 +164,7 @@ class OmlxSummarizer(Summarizer):
         client = OpenAI(
             base_url=self._config.env.OMLX_BASE_URL,
             api_key=self._config.env.OMLX_API_KEY,
+            timeout=_OMLX_TIMEOUT_S,
         )
 
         prompt_template = _SUMMARIZE_PROMPTS.get(
@@ -250,6 +257,7 @@ class OmlxSummarizer(Summarizer):
         client = OpenAI(
             base_url=self._config.env.OMLX_BASE_URL,
             api_key=self._config.env.OMLX_API_KEY,
+            timeout=_OMLX_TIMEOUT_S,
         )
         max_retries = 2
         for attempt in range(1 + max_retries):

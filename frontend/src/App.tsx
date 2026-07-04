@@ -60,6 +60,10 @@ export default function App() {
   // Confirmation dialog for pause→resume scan (WKWebView has no window.confirm).
   const [confirmPause, setConfirmPause] = useState(false)
 
+  // True while a scan is in flight — disables the Scan button so it can't be
+  // clicked again and enqueue a second concurrent scan job.
+  const [scanning, setScanning] = useState(false)
+
   // Library cleanup (remove catalog entries whose copy was deleted) — driven
   // straight from the header menu, no need to open Settings.
   const [confirmCleanup, setConfirmCleanup] = useState(false)
@@ -133,6 +137,10 @@ export default function App() {
 
   const clipsRef = useRef(clips)
   clipsRef.current = clips
+
+  // Synchronous re-entry guard for scans — covers a rapid double-click landing
+  // before React re-renders the disabled button.
+  const scanningRef = useRef(false)
 
   // Fetch clips on mount
   useEffect(() => {
@@ -224,6 +232,9 @@ export default function App() {
 
   // Core scan logic: trigger /api/scan, poll until done. Does NOT check pause state.
   const doScan = async () => {
+    if (scanningRef.current) return  // a scan is already in flight — ignore
+    scanningRef.current = true
+    setScanning(true)
     console.log('[App] Scan button clicked')
     try {
       // Trigger scan — SSE will stream progress events; poll for job id
@@ -267,6 +278,9 @@ export default function App() {
       }
     } catch (err) {
       console.error('Scan failed:', err)
+    } finally {
+      scanningRef.current = false
+      setScanning(false)
     }
   }
 
@@ -381,7 +395,8 @@ export default function App() {
         <div className="flex items-center gap-3">
           <button
             onClick={handleScan}
-            className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-md bg-[--primary] px-4 py-1.5 text-sm font-medium text-white shadow hover:bg-[--primary]/90 transition-colors"
+            disabled={scanning}
+            className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-md bg-[--primary] px-4 py-1.5 text-sm font-medium text-white shadow hover:bg-[--primary]/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-[--primary]"
           >
             <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" aria-hidden="true">
               <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M3.75 7.5V6A2.25 2.25 0 016 3.75h1.5m9 0H18A2.25 2.25 0 0120.25 6v1.5m0 9V18A2.25 2.25 0 0118 20.25h-1.5m-9 0H6A2.25 2.25 0 013.75 18v-1.5M3 12h18" />
