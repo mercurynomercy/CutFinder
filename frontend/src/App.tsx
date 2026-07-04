@@ -135,9 +135,6 @@ export default function App() {
     }
   }, [showMenu])
 
-  const clipsRef = useRef(clips)
-  clipsRef.current = clips
-
   // Synchronous re-entry guard for scans — covers a rapid double-click landing
   // before React re-renders the disabled button.
   const scanningRef = useRef(false)
