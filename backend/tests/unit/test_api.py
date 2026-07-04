@@ -476,6 +476,84 @@ class TestJobQueueManagement:
         assert client.get("/api/jobs").json()["paused"] is False
 
 
+class TestResumeJobPreservesProgress:
+    """POST /jobs/{id}/resume keeps done/failed and recomputes total = done + remaining."""
+
+    def test_resume_scan_preserves_progress(self, monkeypatch: Any) -> None:
+        from types import SimpleNamespace
+
+        from cutfinder.api.routes import _build_router as main_router
+
+        # A paused scan job that was 60/100 before the interruption.
+        repo = FakeCatalogRepository()
+        job = repo.create_job(total=100, kind="scan")
+        repo.update_job(job.id, status="paused", done=60, failed=0)
+
+        # 40 not-yet-processed candidates remain (files unchanged since scan).
+        class _FakeScanner:
+            def __init__(self, repository: Any = None) -> None:  # noqa: D107
+                pass
+
+            def scan(self, folders: Any, extensions: Any) -> list[Any]:
+                return [object()] * 40
+
+        monkeypatch.setattr("cutfinder.pipeline.scanner.Scanner", _FakeScanner)
+        monkeypatch.setattr(
+            "cutfinder.config.load_config",
+            lambda _p: SimpleNamespace(
+                prefs=SimpleNamespace(source_folders=[], extensions=[], photo_extensions=[])
+            ),
+        )
+
+        class FakeQueue:
+            async def enqueue_scan(self, candidates: Any, job_id: Any = None) -> None:
+                self.count, self.job_id = len(candidates), job_id
+
+        ctx = SimpleNamespace(
+            repository=repo, orchestrator=None, worker_queue=FakeQueue(),
+            thumbnail_root=None, library_path="/lib",
+        )
+        app = FastAPI()
+        app.include_router(main_router(ctx))
+        client = TestClient(app, raise_server_exceptions=False)  # type: ignore[arg-type]
+
+        resp = client.post(f"/api/jobs/{job.id}/resume")
+
+        assert resp.status_code == 200
+        updated = repo.get_job(job.id)
+        assert updated.done == 60, "done must be preserved, not reset to 0"
+        assert updated.failed == 0
+        assert updated.total == 100, "total = done(60) + remaining(40)"
+        assert updated.status == "queued"
+
+    def test_resume_keyframes_preserves_done_and_failed(self) -> None:
+        from cutfinder.api.routes import _build_router as main_router
+
+        repo = FakeCatalogRepository()
+        # Two processed clips still lacking keyframes → remaining = 2.
+        repo.upsert_clip(_make_clip(id=1, source_path="/a.mp4", status="done"))
+        repo.upsert_clip(_make_clip(id=2, source_path="/b.mp4", status="done"))
+        job = repo.create_job(total=5, kind="keyframes")
+        repo.update_job(job.id, status="paused", done=3, failed=1)
+
+        class FakeQueue:
+            async def enqueue_keyframes(self, clip_ids: Any, job_id: Any = None) -> None:
+                self.ids, self.job_id = clip_ids, job_id
+
+        app = FastAPI()
+        app.include_router(main_router(_ctx(repository=repo, worker_queue=FakeQueue())))
+        client = TestClient(app, raise_server_exceptions=False)  # type: ignore[arg-type]
+
+        resp = client.post(f"/api/jobs/{job.id}/resume")
+
+        assert resp.status_code == 200
+        updated = repo.get_job(job.id)
+        assert updated.done == 3, "done must be preserved, not reset to 0"
+        assert updated.failed == 1, "failed must be preserved, not reset to 0"
+        assert updated.total == 5, "total = done(3) + remaining(2)"
+        assert updated.status == "queued"
+
+
 # ── 4. Clip list/detail/edit/correct (DoD: CRUD + corrections) ─
 
 class TestClipListEndpoint:

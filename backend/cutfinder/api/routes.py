@@ -187,12 +187,15 @@ def _build_router(ctx: Any) -> Any:
 
             scanner = Scanner(repository=ctx.repository)
             candidates_obj = await _asyncio.to_thread(scanner.scan, source_folders, extensions)
-            ctx.repository.update_job(job_id, status="queued", total=len(candidates_obj), done=0, failed=0)
+            # Preserve progress: scan returns only the remaining (unseen) items, so
+            # total = already-processed + remaining keeps the bar continuous (a 60/100
+            # job resumes at 60/100, not 0/40) and stays correct if source files changed.
+            ctx.repository.update_job(job_id, status="queued", total=job.done + len(candidates_obj))
             await ctx.worker_queue.enqueue_scan(candidates_obj, job_id=job_id)
             logger.info("Resumed scan job %d with %d remaining candidate(s)", job_id, len(candidates_obj))
         elif kind == "keyframes":
             clip_ids = ctx.repository.clip_ids_without_keyframes()
-            ctx.repository.update_job(job_id, status="queued", total=len(clip_ids), done=0, failed=0)
+            ctx.repository.update_job(job_id, status="queued", total=job.done + len(clip_ids))
             await ctx.worker_queue.enqueue_keyframes(clip_ids, job_id=job_id)
             logger.info("Resumed keyframes job %d with %d remaining clip(s)", job_id, len(clip_ids))
         else:
