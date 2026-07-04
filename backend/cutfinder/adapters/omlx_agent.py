@@ -13,6 +13,11 @@ from typing import Any
 from ..config import AppConfig
 from ..ports.cutplan import AgentStep, ToolCall
 
+# Bound OMLX HTTP calls so a hung model server can't stall a cut-plan turn
+# forever. Larger window than the per-clip pipeline: the director generates up
+# to ~2048 tokens per round. A stuck request times out, is retried, then errors.
+_OMLX_TIMEOUT_S = 180.0
+
 
 class OmlxAgentClient:
     """Tool-calling client for the rough-cut director (text model)."""
@@ -29,6 +34,7 @@ class OmlxAgentClient:
         client = OpenAI(
             base_url=self._config.env.OMLX_BASE_URL,
             api_key=self._config.env.OMLX_API_KEY,
+            timeout=_OMLX_TIMEOUT_S,
         )
 
         max_retries = 2
@@ -110,6 +116,7 @@ class OmlxAgentClient:
         client = OpenAI(
             base_url=self._config.env.OMLX_BASE_URL,
             api_key=self._config.env.OMLX_API_KEY,
+            timeout=_OMLX_TIMEOUT_S,
         )
 
         max_retries = 2

@@ -27,6 +27,12 @@ from ..config import AppConfig
 from ..domain.models import CutSuggestion, VisionResult
 from ..ports.ai import VisionTagger
 
+# Bound OMLX HTTP calls so a hung model server can't block the worker forever.
+# Generous read window — local MLX generation of the capped token budgets here
+# takes seconds, not minutes; a truly stuck request times out, is retried, then
+# surfaces as a task error rather than an indefinite hang.
+_OMLX_TIMEOUT_S = 120.0
+
 # ── prompt template ────────────────────────────────────────────────
 
 _VISION_PROMPT_ZH = """\
@@ -171,6 +177,7 @@ class OmlxVisionTagger(VisionTagger):
                 client = OpenAI(
                     base_url=self._config.env.OMLX_BASE_URL,
                     api_key=self._config.env.OMLX_API_KEY,
+                    timeout=_OMLX_TIMEOUT_S,
                 )
 
                 # NOTE: no strict json_schema response_format — grammar-constrained
@@ -265,6 +272,7 @@ class OmlxVisionTagger(VisionTagger):
         client = OpenAI(
             base_url=self._config.env.OMLX_BASE_URL,
             api_key=self._config.env.OMLX_API_KEY,
+            timeout=_OMLX_TIMEOUT_S,
         )
         max_retries = 2
         for attempt in range(1 + max_retries):
