@@ -58,10 +58,9 @@ def enforce_min_duration(segments: list[Segment], min_s: float) -> list[Segment]
     out: list[Segment] = []
     n = len(segments)
     for i, seg in enumerate(segments):
-        new_end = seg.start_s + min_s
+        new_end = max(seg.start_s + min_s, seg.end_s)  # extend only if needed
         if i + 1 < n:
             new_end = min(new_end, segments[i + 1].start_s)
-        new_end = max(new_end, seg.end_s)  # never shorten an existing cue
         out.append(Segment(start_s=seg.start_s, end_s=new_end, text=seg.text))
     return out
 

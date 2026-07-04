@@ -89,7 +89,7 @@ describe('SubtitlesPage', () => {
 
     expect(await screen.findByText('a.zh.itt')).toBeInTheDocument()
     expect(screen.getByText('a.zh.srt')).toBeInTheDocument()
-    expect(body).toEqual({ video_path: '/Movies/a.mov', out_dir: '/Movies/Subs', formats: ['itt', 'srt'] })
+    expect(body).toEqual({ video_path: '/Movies/a.mov', out_dir: '/Movies/Subs', formats: ['itt', 'srt'], min_cue_s: 2 })
 
     await user.click(screen.getByRole('button', { name: 'Reveal in Finder' }))
     await waitFor(() => expect(reveal).toHaveBeenCalledWith(7))
@@ -108,6 +108,7 @@ describe('SubtitlesPage', () => {
       http.post(`${API}/pick-file`, () => HttpResponse.json({ path: '/Movies/a.mov' })),
       http.post(`${API}/pick-folder`, () => HttpResponse.json({ path: '/Movies/Subs' })),
       http.post(`${API}/subtitles/export`, () => HttpResponse.json({ job_id: 9 })),
+      http.get(`${API}/subtitles/model-ready`, () => HttpResponse.json({ ready: true })),
       http.get(`${API}/jobs/:id`, () => {
         const done = doneSeq[Math.min(poll++, doneSeq.length - 1)]
         return HttpResponse.json({

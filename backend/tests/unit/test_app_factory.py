@@ -92,6 +92,7 @@ def test_create_app_with_library_serves_settings(
         "cut_vision_budget",
         "cut_default_aspect_ratio",
         "cut_critic_enabled",
+        "ui_language",
         "cut_lean_token_budget",
         "cut_staged_token_budget",
         # Machine-global keys are merged into the one prefs view (no "env" group).
