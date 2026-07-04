@@ -427,6 +427,28 @@ class TestTranscriberSeparator:
         assert all(0.4 - 1e-9 <= v <= 1.0 + 1e-9 for v in trans)
         assert trans[-1] == pytest.approx(1.0)
 
+    def test_missing_tqdm_module_degrades_without_failing(self, monkeypatch):
+        """If mlx_whisper.transcribe (the tqdm-bearing submodule) is absent, a
+        progress request degrades to no-progress instead of raising KeyError."""
+        import sys
+
+        mod = MagicMock(transcribe=MagicMock(return_value=SAMPLE_RESULT_DICT))
+        monkeypatch.setitem(sys.modules, "mlx_whisper", mod)
+        # The submodule patch_tqdm targets is NOT registered.
+        monkeypatch.delitem(sys.modules, "mlx_whisper.transcribe", raising=False)
+
+        transcriber = _make_transcriber(mod)
+
+        from cutfinder.domain.models import Transcript
+
+        seen: list[float] = []
+        with patch.object(Path, "is_file", return_value=True):
+            transcript = transcriber.transcribe(Path("/fake/v.mp4"), progress=seen.append)
+
+        assert isinstance(transcript, Transcript)
+        assert transcript.full_text == "这是一段中文测试。"
+        mod.transcribe.assert_called_once()  # ran exactly once, no double-run
+
     def test_condition_on_previous_text_passed_to_whisper(self, monkeypatch):
         """transcribe must pass condition_on_previous_text=False to whisper."""
         transcriber = _mocked_transcriber(SAMPLE_RESULT_DICT, monkeypatch)
