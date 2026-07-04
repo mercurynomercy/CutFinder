@@ -729,6 +729,24 @@ class TestKeyframes:
         summarizer.recommend_cuts.assert_not_called()
         assert repo.get_keyframes(1) == []
 
+    def test_keyframe_out_dir_clears_only_clip_subdir(self, tmp_path):
+        """_keyframe_out_dir clears the clip's own subdir, never base or siblings."""
+        repo = FakeCatalogRepository()
+        orch = Orchestrator(repository=repo, keyframe_dir=tmp_path)
+
+        # A sibling file directly under base and a stale frame in the clip dir.
+        sibling = tmp_path / "keep.txt"; sibling.write_bytes(b"keep")
+        stale = tmp_path / "7" / "old.jpg"
+        stale.parent.mkdir(parents=True)
+        stale.write_bytes(b"old")
+
+        out = orch._keyframe_out_dir(7)
+
+        assert out == tmp_path / "7"
+        assert out.is_dir()
+        assert not stale.exists()      # clip subdir was cleared
+        assert sibling.read_bytes() == b"keep"  # base contents untouched
+
     def test_b_roll_uses_vision(self, tmp_path):
         f0 = tmp_path / "f0.jpg"; f0.write_bytes(b"x")
         repo = FakeCatalogRepository()
