@@ -120,6 +120,19 @@ class TestClipCrud:
     def test_get_nonexistent_clip_returns_none(self, repo):
         assert repo.get_clip(999_999) is None
 
+    def test_find_by_fingerprint_returns_clip(self, repo):
+        """find_by_fingerprint locates a stored clip by its fingerprint."""
+        clip_id = repo.upsert_clip(_make_clip("fp-find", roll_type="a", summary="hi"))
+
+        found = repo.find_by_fingerprint("fp-find")
+        assert found is not None
+        assert found.id == clip_id
+        assert found.fingerprint == "fp-find"
+        assert found.summary == "hi"
+
+    def test_find_by_fingerprint_missing_returns_none(self, repo):
+        assert repo.find_by_fingerprint("fp-nope") is None
+
     def test_delete_clip(self, repo):
         c = _make_clip("fp-del")
         clip_id = repo.upsert_clip(c)

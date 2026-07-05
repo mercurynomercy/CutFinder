@@ -135,6 +135,11 @@ class FakeCatalogRepository:
         """Return the clip with *clip_id*, or ``None``."""
         return self._clips.get(clip_id)
 
+    def find_by_fingerprint(self, fp: str) -> Clip | None:
+        """Return the clip with fingerprint *fp*, or ``None``."""
+        cid = self._clip_by_fp.get(fp)
+        return self._clips.get(cid) if cid is not None else None
+
     def delete_clip(self, clip_id: int) -> None:
         """Remove a clip. (Protocol returns None; we track for assertions.)"""
         old = self._clips.pop(clip_id, None)

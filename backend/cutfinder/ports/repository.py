@@ -38,6 +38,9 @@ class CatalogRepository(Protocol):
     def get_clip(self, clip_id: int) -> Clip | None:
         """Fetch a single clip by id (with tags + transcript joined)."""
 
+    def find_by_fingerprint(self, fp: str) -> Clip | None:
+        """Fetch a single clip by fingerprint, or None if absent."""
+
     def delete_clip(self, clip_id: int) -> None:
         """Delete a clip and all related tags/transcripts."""
 

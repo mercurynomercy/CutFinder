@@ -318,6 +318,14 @@ class SqliteRepository:
         self._conn.commit()  # close any open cursors on this connection.
         return clip
 
+    def find_by_fingerprint(self, fp: str) -> Clip | None:
+        c = self._conn.cursor()
+        c.execute("SELECT id FROM clips WHERE fingerprint = ?", (fp,))
+        row = c.fetchone()
+        if row is None:
+            return None
+        return self.get_clip(row[0])
+
     def set_library_path(self, clip_id: int, library_path: str) -> None:
         c = self._conn.cursor()
         c.execute("UPDATE clips SET library_path = ? WHERE id = ?", (library_path, clip_id))

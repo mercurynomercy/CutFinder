@@ -799,14 +799,8 @@ class Orchestrator:
         )
 
     def _find_clip_by_fp(self, fp: str) -> Clip | None:
-        """Find a clip by fingerprint. Default uses repo if available."""
-        # ``_clips`` is an internal of the fake repository (used in tests); the
-        # real repository doesn't expose it, so fall back to an empty mapping.
-        clips: dict[int, Clip] = getattr(self.repository, "_clips", {})
-        for clip in clips.values():
-            if clip.fingerprint == fp:
-                return clip
-        return None
+        """Find a clip by fingerprint via the repository."""
+        return self.repository.find_by_fingerprint(fp)
 
     def _mark_error(self, candidate: ClipCandidate, step: str, error_msg: str) -> None:
         """Mark a clip as errored in the repository."""
@@ -849,6 +843,9 @@ class _NoOpRepository(CatalogRepository):
         return 0  # no ID assigned
 
     def get_clip(self, clip_id: int) -> Clip | None:
+        return None
+
+    def find_by_fingerprint(self, fp: str) -> Clip | None:
         return None
 
     def delete_clip(self, clip_id: int) -> None:
