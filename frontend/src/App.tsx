@@ -4,7 +4,7 @@ detail drawer, and top progress bar for active jobs.
 Usage: <App /> — no props needed; state is managed internally.
 */
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 
 import type { ClipSummary } from '@/api/client'
 import { api } from '@/api/client'
@@ -182,35 +182,38 @@ export default function App() {
     return () => window.removeEventListener('cutfinder:navigate', handler)
   }, [])
 
-  // Filter clips client-side (search query + date, roll_type, tag)
-  const query = searchQuery.trim().toLowerCase()
-  const matchesQuery = (clip: ClipSummary) => {
-    if (!query) return true
-    const name = (clip.library_path || clip.source_path || '').split('/').pop()?.toLowerCase() || ''
-    if (name.includes(query)) return true
-    if (clip.summary?.toLowerCase().includes(query)) return true
-    if (clip.description?.toLowerCase().includes(query)) return true
-    return Boolean(clip.tags?.some((t) => t.name.toLowerCase().includes(query)))
-  }
-
-  const filteredClips = clips.filter((clip) => {
-    if (!matchesQuery(clip)) return false
-    if (appliedFilters.roll_type && clip.roll_type !== appliedFilters.roll_type) return false
-    if (appliedFilters.tag && !clip.tags?.some((t) => t.name === appliedFilters.tag)) return false
-    if (appliedFilters.date) {
-      const clipDate = localDateKey(clip.capture_time || clip.created_at)
-      if (clipDate !== appliedFilters.date) return false
+  // Filter clips client-side (search query + date, roll_type, tag), then sort.
+  // Memoised so it only recomputes when the inputs change, not on every render.
+  const sortedClips = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase()
+    const matchesQuery = (clip: ClipSummary) => {
+      if (!query) return true
+      const name = (clip.library_path || clip.source_path || '').split('/').pop()?.toLowerCase() || ''
+      if (name.includes(query)) return true
+      if (clip.summary?.toLowerCase().includes(query)) return true
+      if (clip.description?.toLowerCase().includes(query)) return true
+      return Boolean(clip.tags?.some((t) => t.name.toLowerCase().includes(query)))
     }
-    return true
-  })
 
-  // Sort the filtered clips (default: by shooting date, newest first).
-  const sortedClips = [...filteredClips].sort((a, b) => {
-    // 'date' — embedded capture time preferred
-    const da = a.capture_time || a.created_at || ''
-    const db = b.capture_time || b.created_at || ''
-    return sortBy === 'date-newest' ? db.localeCompare(da) : da.localeCompare(db)
-  })
+    const filteredClips = clips.filter((clip) => {
+      if (!matchesQuery(clip)) return false
+      if (appliedFilters.roll_type && clip.roll_type !== appliedFilters.roll_type) return false
+      if (appliedFilters.tag && !clip.tags?.some((t) => t.name === appliedFilters.tag)) return false
+      if (appliedFilters.date) {
+        const clipDate = localDateKey(clip.capture_time || clip.created_at)
+        if (clipDate !== appliedFilters.date) return false
+      }
+      return true
+    })
+
+    // Sort the filtered clips (default: by shooting date, newest first).
+    return [...filteredClips].sort((a, b) => {
+      // 'date' — embedded capture time preferred
+      const da = a.capture_time || a.created_at || ''
+      const db = b.capture_time || b.created_at || ''
+      return sortBy === 'date-newest' ? db.localeCompare(da) : da.localeCompare(db)
+    })
+  }, [clips, appliedFilters, searchQuery, sortBy])
 
   // Whether every date group is currently collapsed — drives the toggle-all label.
   const dateGroupKeys = groupKeys(sortedClips)
