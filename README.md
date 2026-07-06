@@ -88,7 +88,7 @@ Drag `dist/CutFinder.app` to `/Applications` and double-click:
 - **Native folder picker** — choosing the footage folder / library in Settings opens the macOS native picker and returns a real absolute path (browser pickers can't).
 - **Bind your library in Settings** — pick or type one absolute path on first use; it takes effect **at runtime with no restart** (a `CUTFINDER_LIBRARY` env var also works).
 - **Auto-refresh after scan** — when a scan finishes, the app polls job status and refreshes the thumbnail wall automatically.
-- **Dark professional UI** — near-black panels make thumbnails pop; A-roll/B-roll are distinguished by color + icon, close to FCP's feel (see [`docs/ui-design.md`](./docs/ui-design.md)).
+- **Dark professional UI** — near-black panels make thumbnails pop; A-roll/B-roll are distinguished by color + icon, close to FCP's feel (see [`docs/detailed-design.md`](./docs/detailed-design.md) §UI Design System).
 
 ### Never touch the originals (core constraints)
 
@@ -295,8 +295,8 @@ make e2e               # Playwright e2e
 
 - [Proposal `docs/proposal.md`](./docs/proposal.md) — goals, requirements, scope, tech choices
 - [Detailed design `docs/detailed-design.md`](./docs/detailed-design.md) — modules, interfaces, data model, API, testing & deployment
-- [UI design system `docs/ui-design.md`](./docs/ui-design.md) — color/font/spacing tokens, component specs, page layouts (dark-first)
-- [Task list `docs/tasks/`](./docs/tasks/progress.md) — per-module tasks and overall progress
+- [UI design system `docs/detailed-design.md`](./docs/detailed-design.md) (§ UI Design System section) — color/font/spacing tokens, component specs, page layouts (dark-first)
+- [Task list `docs/tasks/README.md`](./docs/tasks/README.md) — per-module tasks and overall progress
 - [`CLAUDE.md`](./CLAUDE.md) — project constraints and architecture cheat-sheet for AI collaborators
 
 > Brand art sources are in `branding/`.

@@ -1,7 +1,7 @@
 # CutFinder 详细设计文档（Detailed Design）
 
 > 配套需求文档：[`docs/proposal.md`](./proposal.md)。本文件把需求拆成可独立开发、独立测试的模块，给出每个模块的职责、接口、输入输出、依赖与测试方式。
-> - **范围**：proposal v1（需求 0–7）。
+> - **范围**：proposal v1 完整（含增强功能）。
 
 ---
 
@@ -22,30 +22,41 @@
 ┌─────────────────────────────────────────────────────────┐
 │  前端 (Vite + React + Tailwind + shadcn/ui)              │
 │  缩略图墙 / 筛选 / 搜索 / 详情编辑 / 设置 / 进度条(SSE)   │
+│  UI features: gallery, filters, search, detail, settings, │
+│    jobs/jobs-queue, subtitles, cutplan, logs              │
 └───────────────────────────┬─────────────────────────────┘
                             │ HTTP (REST + SSE)
 ┌───────────────────────────▼─────────────────────────────┐
 │  API 层 (FastAPI)  ── 薄，只做路由/校验/序列化            │
+│  routes: footage, jobs, cutplan, subtitles, settings     │
 └───────────────────────────┬─────────────────────────────┘
                             │ 调用
 ┌───────────────────────────▼─────────────────────────────┐
-│  编排层  Pipeline Orchestrator + Job Queue/Worker         │
-│  （把各领域模块串成 per-clip 流水线，发 SSE 进度事件）    │
+│  编排层                                                   │
+│  Pipeline Orchestrator — per-clip 流水线(纯逻辑，注入接口) │
+│  Worker + Job Queue — asyncio.Queue + SSE 进度事件        │
+│  CutPlanService — 初剪导演服务(注入 cutplan port)          │
+│  SubtitleExporter — 字幕导出独立工具                       │
 └───────────────────────────┬─────────────────────────────┘
               ┌─────────────┼──────────────┐
               ▼             ▼              ▼
 ┌───────────────┐ ┌─────────────────┐ ┌────────────────────┐
-│ 领域模块       │ │ Catalog 仓储     │ │ 适配器层(外部依赖)  │
-│ Scanner       │ │ (SQLite 数据访问)│ │ MetadataProbe      │
-│ Classifier    │ └─────────────────┘ │ ThumbnailMaker     │
-│ LibraryWriter │                     │ FrameExtractor     │
-│ (纯逻辑)      │                     │ SpeechDetector     │
-└───────────────┘                     │ Transcriber        │
-                                      │ Summarizer (OMLX)  │
-                                      │ VisionTagger(OMLX) │
-                                      └────────────────────┘
-                                            │ 真实实现
-                          ffmpeg/ffprobe · Silero · mlx-whisper/Qwen3-ASR+ForcedAligner · OMLX
+│ 领域模块       │ │ Catalog/CutPlan  │ │ 适配器层(外部依赖)  │
+│ Scanner       │ │ 仓储             │ │ MetadataProbe      │
+│ Classifier    │ │ (SQLite CRUD+FTS5│ │ ThumbnailMaker     │
+│ LibraryWriter │ │  + CutPlan CRUD) │ │ FrameExtractor     │
+│ (纯逻辑)      │ └─────────────────┘ │ SpeechDetector       │
+└───────────────┘                     │ Transcriber          │
+                                    │ Summarizer (OMLX)    │
+                                    │ VisionTagger(OMLX)   │
+                                    │ VocalSeparator(Demucs) │
+                                    │ BrollInspector(OMLX/   │
+                                    │    Qwen3-VL)           │
+                                    │ CutPlanDirector(OMLX/   │
+                                    │    Qwen3.6)            │
+                                    └────────────────────┘
+                                          │ 真实实现
+                      ffmpeg/ffprobe · Silero · mlx-whisper/Qwen3-ASR+ForcedAligner · OMLX
 ```
 
 **关键点**：编排层、领域模块、仓储都只依赖「适配器接口」，不依赖具体实现。测试时用假适配器替换，因此整条流水线可在毫秒级、无外部依赖下跑通。
@@ -60,56 +71,90 @@ cutfinder/
 ├── backend/
 │   ├── pyproject.toml + uv.lock # uv 管理依赖
 │   ├── cutfinder/
-│   │   ├── config.py            # 配置模型与读写
+│   │   ├── config.py            # 配置模型与读写(pydantic-settings)
+│   │   ├── logbuffer.py         # 日志缓冲(异步收集，批量写入)
 │   │   ├── domain/              # 纯领域模型(dataclass/pydantic)，无 IO
 │   │   │   ├── models.py        # Clip, VideoMetadata, Transcript, Tag, Job...
 │   │   │   └── enums.py         # RollType, Source, JobStatus...
 │   │   ├── ports/               # 接口(Protocol)定义 —— 隔离的核心
-│   │   │   ├── probe.py         # MetadataProbe
-│   │   │   ├── media.py         # ThumbnailMaker, FrameExtractor
-│   │   │   ├── speech.py        # SpeechDetector, Transcriber
-│   │   │   ├── ai.py            # Summarizer, VisionTagger
-│   │   │   ├── library.py       # LibraryWriter
-│   │   │   └── repository.py    # CatalogRepository
+│   │   │   ├── probe.py         # MetadataProbe: ffprobe parsing
+│   │   │   ├── media.py         # ThumbnailMaker, FrameExtractor: ffmpeg/Pillow
+│   │   │   ├── speech.py        # SpeechDetector, Transcriber: Silero VAD + mlx-whisper/Qwen3-ASR
+│   │   │   ├── ai.py            # Summarizer, VisionTagger: OMLX OpenAI client
+│   │   │   ├── library.py       # LibraryWriter: shutil.copy2, date/type directory
+│   │   │   ├── repository.py    # CatalogRepository: SQLite CRUD + FTS5
+│   │   │   └── cutplan.py       # CutPlanDirector: 初剪导演工具接口
 │   │   ├── adapters/            # 接口的真实实现(碰外部依赖)
-│   │   │   ├── ffmpeg_probe.py
-│   │   │   ├── ffmpeg_media.py
-│   │   │   ├── silero_vad.py
-│   │   │   ├── mlx_whisper.py
-│   │   │   ├── qwen_transcriber.py  # Qwen3-ASR + ForcedAligner
-│   │   │   ├── demucs_separator.py  # VocalSeparator (Demucs)
-│   │   │   ├── omlx_text.py     # OpenAI 客户端 → OMLX 文本模型
-│   │   │   ├── omlx_vision.py   # OpenAI 客户端 → OMLX 视觉模型
-│   │   │   ├── fs_library.py
-│   │   │   └── sqlite_repo.py
-│   │   ├── pipeline/
-│   │   │   ├── orchestrator.py  # per-clip 流水线(纯逻辑，注入接口)
-│   │   │   ├── scanner.py       # 扫描+去重(纯逻辑，注入 probe/repo)
-│   │   │   ├── worker.py        # 后台队列+SSE 事件
-│   │   │   └── subtitle_exporter.py # 独立工具(§3.13)
-│   │   ├── cutplan/             # 初剪导演 Agent(§3.15)
-│   │   │   ├── director.py      # 导演逻辑(注入接口，纯编排)
-│   │   │   ├── prompts.py       # 双语文案 + tool schema(§3.15)
-│   │   │   ├── format.py        # 分镜表格式化(纯逻辑，无 IO)
+│   │   │   ├── ffmpeg_probe.py  # MetadataProbe → ffprobe JSON parsing
+│   │   │   ├── ffmpeg_media.py  # ThumbnailMaker, FrameExtractor → ffmpeg CLI
+│   │   │   ├── silero_vad.py    # SpeechDetector → Silero VAD model
+│   │   │   ├── mlx_whisper.py   # Transcriber → mlx-whisper large-v3
+│   │   │   ├── qwen_transcriber.py  # Transcriber → Qwen3-ASR + ForcedAligner
+│   │   │   ├── demucs_separator.py  # VocalSeparator → Demucs htdemucs (torch/MPS)
+│   │   │   ├── omlx_text.py     # OpenAI client → OMLX text model (Qwen3.6)
+│   │   │   ├── omlx_vision.py   # OpenAI client → OMLX vision model (Qwen3-VL)
+│   │   │   ├── omlx_agent.py    # OMLX agent: 模型管理/健康检查
+│   │   │   ├── omlx_check.py    # OMLX 就绪时检查(make check-omlx)
+│   │   │   ├── broll_inspector.py # B-roll 视觉勘察(初剪用，复用 vision)
+│   │   │   ├── fs_library.py    # LibraryWriter → shutil.copy2, rename
+│   │   │   ├── sqlite_repo.py   # CatalogRepository → SQLite + FTS5
+│   │   │   ├── sqlite_footage.py  # Footage CRUD (照片专用)
+│   │   │   ├── sqlite_cutplan.py  # CutPlan CRUD (初剪导演用)
+│   │   │   ├── pillow_image.py  # Photo probe: HEIC/JPG/PNG Pillow processing
+│   │   │   ├── _jsonparse.py    # 通用 JSON/strict-mode fallback
+│   │   │   └── _progress.py     # tqdm interception for real progress bars
+│   │   ├── pipeline/            # 编排层(纯逻辑，注入接口)
+│   │   │   ├── orchestrator.py  # per-clip 流水线: A/B branching, error isolation
+│   │   │   ├── scanner.py       # 扫描+去重: sha256 fingerprint + extension filter
+│   │   │   ├── worker.py        # 后台队列+SSE: asyncio.Queue, progress events
+│   │   │   ├── subtitle_exporter.py # 字幕导出: iTT/SRT/FCPXML
+│   │   │   └── cutplan_service.py # 初剪导演服务: 对话→分镜表生成
+│   │   ├── cutplan/             # 初剪导演 Agent(§CutPlan Director)
+│   │   │   ├── director.py      # 导演逻辑: scoped tool loop + fallback
+│   │   │   ├── prompts.py       # 双语文案 + tool schema (EN/ZH)
+│   │   │   ├── format.py        # 分镜表格式化(纯逻辑，Markdown/JSON)
 │   │   │   └── request_parse.py # 自然语言参数解析(正则)
-│   │   ├── api/
-│   │   │   ├── app.py           # FastAPI 应用装配(依赖注入真实适配器)
-│   │   │   ├── routes_*.py
-│   │   │   └── sse.py
-│   │   └── services/            # 服务层(组装模块)
-│   │       └── *
-│   └── tests/
-│       ├── unit/                # 全 mock，无外部依赖
-│       ├── integration/         # @pytest.mark.integration，碰真实依赖
-│       └── fakes/               # 各 port 的假实现 + 样本素材
-└── frontend/
-    ├── src/
-    │   ├── api/                 # API 客户端(唯一与后端通信处)
-    │   ├── styles/tokens.css     # CSS 变量设计系统(§12)
-    │   ├── features/{gallery,filters,search,detail,settings,jobs,subtitles,cutplan}/
-    │   └── components/
-    └── tests/                   # Vitest + RTL；e2e/ 放 Playwright
+│   │   ├── subtitle/            # 字幕导出模块
+│   │   └── api/                 # FastAPI 路由层
+│   │       ├── app.py           # create_app: 依赖注入真实适配器
+│   │       ├── routes_footage.py # footage CRUD + scan trigger
+│   │       ├── routes_jobs.py    # job status, pause/resume/retry
+│   │       ├── routes_cutplan.py # cut plan CRUD + generation
+│   │       ├── routes_subtitles.py # subtitle export endpoints
+│   │       ├── routes_settings.py  # settings CRUD + config validation
+│   │       └── sse.py           # SSE event broadcasting
+│   ├── tests/
+│   │   ├── unit/                # 全 mock，无外部依赖 (538+)
+│   │   ├── integration/         # @pytest.mark.integration，碰真实依赖
+│   │   └── fakes/               # 各 port 的假实现 + 样本素材
+├── docs/                        # proposal, detailed-design, tasks/, superpowers/specs/
+│   └── images/example.png       # UI screenshots (README 引用)
+├── frontend/                    # Vite + React + Tailwind CSS
+│   ├── src/
+│   │   ├── App.tsx              # 主路由 + Layout (sidebar, main area)
+│   │   ├── api/                 # API 客户端(唯一与后端通信处, fetch wrapper)
+│   │   ├── features/            # 按功能分区的组件集
+│   │   │   ├── gallery/         # ThumbnailWall, date-grouped grid layout
+│   │   │   ├── filters/         # Date filter, type filter, tag filter (frequency-sorted)
+│   │   │   ├── search/          # Search bar, live filter by filename/tags/description
+│   │   │   ├── detail/          # Detail panel drawer, A/B toggle, tag editing
+│   │   │   ├── settings/        # Settings page: OMLX config, library binding, speech engine
+│   │   │   ├── jobs/            # Job progress display (scan/keyframe/subtitle)
+│   │   │   ├── jobs-queue/      # Task Queue page: list, delete, retry-failed
+│   │   │   ├── subtitles/       # Subtitle export UI: format selection, progress bar
+│   │   │   ├── cutplan/         # Rough-cut director: chat, shot list table
+│   │   │   └── logs/            # Log viewer (tail launch.log)
+│   │   ├── components/          # 通用 UI 组件: ThumbnailCard, ChipBadge, ConfirmDialog
+│   │   ├── i18n/                # 国际化: EN/ZH translations (驱动 UI language setting)
+│   │   ├── lib/                 # 工具函数: date formatting, helpers
+│   │   └── styles/              # Tailwind config + global CSS (dark theme tokens)
+│   └── tests/                   # Vitest + RTL; e2e 放 Playwright
+├── packaging/                   # macOS .app: Swift/AppKit wrapper, WKWebView host
+│   └── CutFinder/             # Xcode project + Info.plist + entitlements
+├── branding/                    # Logo, icons (full-logo.png used in README)
+└── scripts/                     # Helper scripts (e.g. model download, CI helpers)
 ```
+
 
 ---
 
@@ -192,7 +237,7 @@ cutfinder/
       def describe(self, frame_paths: list[Path]) -> VisionResult: ...
   ```
   `VisionResult`：`description: str`（中文画面描述）、`tags: list[str]`。
-- **真实实现**：把抽帧读成 **base64**，按 OpenAI 视觉消息格式（`image_url` data URI）发给 OMLX（同样用全局配置 / OS env 的 `OMLX_BASE_URL`/`OMLX_API_KEY`，`model=vision_model` 默认 `Qwen3-VL-8B-Instruct`），一次请求带多帧；结构化输出 `{description, tags}`。
+- **真实实现**：把抽帧读成 **base64**，按 OpenAI 视觉消息格式（`image_url` data URI）发给 OMLX（同样用全局配置 / OS env 的 `OMLX_BASE_URL`/`OMLX_API_KEY`，`model=vision_model` 默认 `Qwen3-VL-8B`），一次请求带多帧；结构化输出 `{description, tags}`。
 - **独立测**：fake 返回固定结果；适配器集成测试需本机 OMLX。
 
 ### 3.8 LibraryWriter（库文件组织，适配器）
@@ -536,7 +581,7 @@ CREATE TABLE cut_plans (
 | `OMLX_BASE_URL` | OS env / 全局配置 | `http://localhost:8000/v1` | OMLX API 端点（必填）|
 | `OMLX_API_KEY` | OS env / 全局配置 | （无） | OMLX API 密钥（必填，不进 git）|
 | `text_model` | JSON | `Qwen3.6-35B-A3B` | A-roll 简介/标签用文本模型名（OMLX）|
-| `vision_model` | JSON | `Qwen3-VL-8B-Instruct` | B-roll 画面识别用视觉模型名（OMLX）|
+| `vision_model` | JSON | `Qwen3-VL-8B` | B-roll 画面识别用视觉模型名（OMLX）|
 | `whisper_model` | JSON | `large-v3` | mlx-whisper 模型名（仅 whisper 引擎时生效）|
 | `transcription_engine` | JSON | `whisper` | 语音转写引擎：`whisper`(mlx-whisper) / `qwen`(Qwen3-ASR+ForcedAligner)|
 | `broll_frame_count` | JSON | `3` | B-roll 均匀抽帧数（默认每段 3 张）|
@@ -869,7 +914,7 @@ packaging/macapp/            # Swift 包装器（swiftc 直接编译，无 .xcod
   OMLX 接口   [http://localhost:8000/v1]    ● 已连接
 模型
   文本模型     [Qwen3.6-35B-A3B    ▾]
-  视觉模型     [Qwen3-VL-8B-Instruct▾]
+  视觉模型     [Qwen3-VL-8B▾]
 文件夹
   源文件夹     [/Users/…/Footage] [＋添加]
   素材库       [/Users/…/Library]

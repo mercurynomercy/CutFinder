@@ -69,7 +69,7 @@
 | A-roll 简介 + 标签（文本总结） | **Qwen3.6-35B-A3B**（文本 MoE） | OMLX `/chat/completions`，结构化输出 `{summary, tags}` |
 | B-roll 画面识别 + 标签 | **Qwen3-VL-8B**（视觉） | OMLX 同一接口换 `model` 名，base64 发帧；结构化输出 `{description, tags}` |
 
-> **模型分工**：`Qwen3.6-35B-A3B` 是文本模型，只看文字；`Qwen3-VL-8B-Instruct` 是视觉模型，专门「看」画面。两者由 OMLX 同时托管，通过同一 OpenAI 兼容接口、用不同 `model` 名调用。OMLX 负责模型的加载/卸载与内存管理（LRU 淘汰、pin、按模型 TTL）。
+> **模型分工**：`Qwen3.6-35B-A3B` 是文本模型，只看文字；`Qwen3-VL-8B` 是视觉模型，专门「看」画面。两者由 OMLX 同时托管，通过同一 OpenAI 兼容接口、用不同 `model` 名调用。OMLX 负责模型的加载/卸载与内存管理（LRU 淘汰、pin、按模型 TTL）。
 
 ---
 
