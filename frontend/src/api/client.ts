@@ -288,8 +288,11 @@ export class ApiError extends Error {
 // ── Helpers ──────────────────────────────────────────────────────
 
 async function _fetch<T>(url: string, init?: RequestInit): Promise<T> {
+  // Only declare a JSON body's content type; GETs and body-less requests
+  // shouldn't advertise one.
+  const headers = init?.body ? { 'Content-Type': 'application/json' } : undefined
   const response = await fetch(`${BASE}${url}`, {
-    headers: { 'Content-Type': 'application/json' },
+    ...(headers ? { headers } : {}),
     ...init,
   })
 

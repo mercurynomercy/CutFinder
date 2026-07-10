@@ -11,6 +11,7 @@ Covers the five DoD categories from ``docs/tasks/11-orchestrator.md``:
 from __future__ import annotations
 
 import datetime as _dt
+import logging
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock
@@ -369,6 +370,44 @@ class TestErrorInjectionContinuation:
         events: list[ProgressEvent] = []
         orch.progress_callback(lambda e: events.append(e))  # type: ignore[union-attr]
         orch.process_clip(candidate)
+
+    def test_fatal_failure_logs_traceback(self, fake_thumbnail, fake_speech_a,
+                                          fake_transcriber, fake_summarizer, fake_repo,
+                                          caplog):
+        """A fatal step failure logs the full traceback (exc_info), not just the
+        message — so an unexpected exception type is debuggable from the log."""
+        bad_probe = MagicMock()
+        bad_probe.probe.side_effect = RuntimeError("ffprobe failed")
+
+        orch = Orchestrator(
+            probe=bad_probe, thumbnail_maker=fake_thumbnail, speech_detector=fake_speech_a,
+            transcriber=fake_transcriber, summarizer=fake_summarizer, repository=fake_repo,
+        )
+
+        with caplog.at_level(logging.ERROR):
+            orch.process_clip(_make_candidate())
+
+        assert any(r.exc_info for r in caplog.records), "expected traceback in log"
+
+    def test_analysis_failure_logs_traceback(
+        self, fake_probe, fake_thumbnail, fake_frame_extractor,
+        fake_speech_b, fake_repo, fake_library, caplog,
+    ):
+        """The non-fatal analysis-failure warning carries the traceback too."""
+        failing_vision = MagicMock()
+        failing_vision.describe.side_effect = RuntimeError("vision boom")
+
+        orch = Orchestrator(
+            probe=fake_probe, thumbnail_maker=fake_thumbnail,
+            frame_extractor=fake_frame_extractor, speech_detector=fake_speech_b,
+            transcriber=None, summarizer=None, vision_tagger=failing_vision,
+            repository=fake_repo, library_writer=fake_library,
+        )
+
+        with caplog.at_level(logging.WARNING):
+            orch.process_clip(_make_candidate())
+
+        assert any(r.exc_info for r in caplog.records), "expected traceback in log"
 
     def test_analysis_failure_still_copies_and_marks_partial(
         self, fake_probe, fake_thumbnail, fake_frame_extractor,

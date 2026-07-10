@@ -114,11 +114,28 @@ def _read_global_file() -> dict[str, Any]:
     return data if isinstance(data, dict) else {}
 
 
+def _atomic_write_text(path: Path, text: str) -> None:
+    """Write *text* to *path* atomically (creating the parent dir).
+
+    Writes to a sibling temp file then ``os.replace``s it into place. Because
+    ``os.replace`` is atomic on POSIX, a crash mid-write can never leave a
+    truncated/corrupt file — the old content survives until the swap completes.
+    The temp file is cleaned up if the swap fails.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.parent / (path.name + ".tmp")
+    tmp.write_text(text, encoding="utf-8")
+    try:
+        os.replace(tmp, path)
+    except OSError:
+        tmp.unlink(missing_ok=True)
+        raise
+
+
 def _write_global_file(data: dict[str, Any]) -> None:
     """Write *data* to ``~/.cutfinder/config.json`` (creating the dir)."""
-    _GLOBAL_CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
-    _GLOBAL_CONFIG_FILE.write_text(
-        json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8"
+    _atomic_write_text(
+        _GLOBAL_CONFIG_FILE, json.dumps(data, indent=2, ensure_ascii=False)
     )
 
 
@@ -405,8 +422,6 @@ def save_prefs(prefs: Prefs, library_path: str | Path) -> None:
     library_dir = Path(library_path).resolve()
     json_file = _config_path(library_dir)
 
-    # Ensure the directory exists before writing.
-    json_file.parent.mkdir(parents=True, exist_ok=True)
-
-    with open(json_file, "w", encoding="utf-8") as f:
-        json.dump(prefs.model_dump(), f, indent=2, ensure_ascii=False)
+    _atomic_write_text(
+        json_file, json.dumps(prefs.model_dump(), indent=2, ensure_ascii=False)
+    )

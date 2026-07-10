@@ -310,6 +310,7 @@ class Orchestrator:
         except Exception as exc:  # noqa: BLE001
             logger.warning(
                 "Analysis failed for %s (organizing anyway): %s", candidate.path, exc,
+                exc_info=True,
             )
             analysis_error = str(exc)
             analysis = AnalysisResult(roll_type=roll_type)
@@ -335,7 +336,10 @@ class Orchestrator:
                 record_copy(src_str, date_str, roll_type)
 
         except Exception as exc:  # noqa: BLE001
-            logger.warning("Library copy failed for clip %s, continuing: %s", candidate.path, exc)
+            logger.warning(
+                "Library copy failed for clip %s, continuing: %s", candidate.path, exc,
+                exc_info=True,
+            )
             emit(ProgressEvent(step="copy", ok=False, detail=str(exc)))
 
         # ── 6. Upsert clip to repository ───────────────────────
@@ -804,7 +808,10 @@ class Orchestrator:
 
     def _mark_error(self, candidate: ClipCandidate, step: str, error_msg: str) -> None:
         """Mark a clip as errored in the repository."""
-        logger.error("Step '%s' failed for %s: %s", step, candidate.path, error_msg)
+        logger.error(
+            "Step '%s' failed for %s: %s", step, candidate.path, error_msg,
+            exc_info=True,
+        )
         try:
             clip_id = self.repository.upsert_clip(self._build_clip(
                 candidate=candidate, meta=VideoMetadata(duration_s=0.0),

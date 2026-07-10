@@ -127,6 +127,25 @@ class TestGlobalSettings:
         assert loaded["OMLX_BASE_URL"] == "http://y/v1"
         assert loaded["OMLX_API_KEY"] == "k"
 
+    def test_save_atomic_preserves_old_on_failure(
+        self, global_file: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A crash during the write must not truncate the existing global file."""
+        from cutfinder.config import save_global_settings
+
+        save_global_settings({"OMLX_BASE_URL": "http://v1/v1", "OMLX_API_KEY": "k"})
+        before = global_file.read_text(encoding="utf-8")
+
+        def boom(*_a: object, **_k: object) -> None:
+            raise OSError("simulated crash")
+
+        monkeypatch.setattr("cutfinder.config.os.replace", boom)
+        with pytest.raises(OSError):
+            save_global_settings({"OMLX_BASE_URL": "http://v2/v2"})
+
+        assert global_file.read_text(encoding="utf-8") == before
+        assert not list(global_file.parent.glob("*.tmp"))
+
     def test_load_missing_file_returns_empty(self, global_file: Path) -> None:
         """No file yet → empty dict, not an error."""
         from cutfinder.config import load_global_settings
@@ -482,3 +501,26 @@ class TestSavePrefs:
 
         with pytest.raises(ValueError, match="'library_path' is empty"):
             save_prefs(prefs, "/tmp/lib")
+
+    def test_save_prefs_atomic_preserves_old_on_failure(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_library: Path
+    ) -> None:
+        """A crash during the write must not truncate the existing config.
+
+        save_prefs writes to a temp file then os.replace()s it into place; if
+        the replace fails mid-write, the prior config file stays intact.
+        """
+        save_prefs(Prefs(library_path="/tmp/v1-lib"), tmp_library.parent)
+        json_file = tmp_library / "config.json"
+        before = json_file.read_text(encoding="utf-8")
+
+        def boom(*_a: object, **_k: object) -> None:
+            raise OSError("simulated crash")
+
+        monkeypatch.setattr("cutfinder.config.os.replace", boom)
+        with pytest.raises(OSError):
+            save_prefs(Prefs(library_path="/tmp/v2-lib"), tmp_library.parent)
+
+        assert json_file.read_text(encoding="utf-8") == before
+        # No stray temp file left behind on failure.
+        assert not list(tmp_library.glob("*.tmp"))
