@@ -117,7 +117,7 @@ describe('JobsQueuePage', () => {
     installQueue([
       job({
         id: 5,
-        kind: 'reanalyze',
+        kind: 'cutplan',
         status: 'failed',
         total: 1,
         done: 1,
