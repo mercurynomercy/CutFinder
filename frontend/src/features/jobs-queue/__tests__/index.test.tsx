@@ -113,6 +113,24 @@ describe('JobsQueuePage', () => {
     await waitFor(() => expect(retry).toHaveBeenCalledWith(2))
   })
 
+  it('shows the error message on a failed job', async () => {
+    installQueue([
+      job({
+        id: 5,
+        kind: 'reanalyze',
+        status: 'failed',
+        total: 1,
+        done: 1,
+        failed: 1,
+        error: 'OMLX returned HTTP 401: Invalid API key',
+      }),
+    ])
+
+    render(<JobsQueuePage onClose={() => {}} />)
+
+    expect(await screen.findByText(/Invalid API key/)).toBeInTheDocument()
+  })
+
   it('pauses then resumes, toggling the button label', async () => {
     installQueue([job({ id: 1, status: 'running' })], { paused: false })
 

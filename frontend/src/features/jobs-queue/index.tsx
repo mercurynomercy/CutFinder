@@ -154,6 +154,14 @@ function JobRow({ job, paused, onChanged }: { job: JobStatus; paused: boolean; o
                 style={{ width: `${pct}%` }}
               />
             </div>
+            {job.status === 'failed' && job.error && (
+              <p
+                className="mt-1 max-w-full truncate text-xs text-[--error]"
+                title={job.error}
+              >
+                {t('jobs.errorLabel')}: {job.error}
+              </p>
+            )}
           </div>
         )}
       </td>

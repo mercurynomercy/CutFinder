@@ -31,6 +31,7 @@ export interface JobStatus {
   total: number
   done: number
   failed: number
+  error?: string | null
   started_at: string | null
   finished_at?: string | null
   kind?: 'scan' | 'reanalyze' | 'keyframes' | 'subtitle'
