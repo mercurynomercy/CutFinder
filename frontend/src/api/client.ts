@@ -196,6 +196,13 @@ export interface ClipFilter {
   tag?: string | null
 }
 
+export interface OmlxTestResult {
+  ok: boolean
+  models?: string[]
+  missing?: string[]
+  error?: string
+}
+
 // ── Rough-cut director agent (§3.15) ────────────────────────────
 
 export interface CutSession {
@@ -405,6 +412,16 @@ export const api = {
   /** PUT /api/settings — update prefs. */
   putSettings(body: UpdateSettingsBody): Promise<{ status: string }> {
     return _fetch('/api/settings', { method: 'PUT', body: JSON.stringify(body) })
+  },
+
+  /** POST /api/settings/omlx/test — probe the OMLX endpoint/key/models. */
+  testOmlxConnection(body: {
+    OMLX_BASE_URL?: string
+    OMLX_API_KEY?: string
+    TEXT_MODEL?: string
+    VISION_MODEL?: string
+  }): Promise<OmlxTestResult> {
+    return _fetch('/api/settings/omlx/test', { method: 'POST', body: JSON.stringify(body) })
   },
 
   /** GET /api/library — the active library path (or null). */

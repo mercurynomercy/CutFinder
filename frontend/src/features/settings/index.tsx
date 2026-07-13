@@ -126,6 +126,11 @@ export function SettingsPage({ onSave }: SettingsPageProps) {
   const [textModelGlobal, setTextModelGlobal] = useState('')
   const [visionModelGlobal, setVisionModelGlobal] = useState('')
   const [apiKeyConfigured, setApiKeyConfigured] = useState(false)
+  const [omlxTest, setOmlxTest] = useState<
+    { state: 'idle' | 'testing' } |
+    { state: 'ok'; models: string[]; missing: string[] } |
+    { state: 'err'; error: string }
+  >({ state: 'idle' })
 
   // Library binding (when no library is bound, the user sets one here first).
   const [libraryPath, setLibraryPath] = useState<string | null | undefined>(undefined)
@@ -286,6 +291,25 @@ export function SettingsPage({ onSave }: SettingsPageProps) {
       setError(err instanceof Error ? err : new Error(String(err)))
     } finally {
       setSaving(false)
+    }
+  }
+
+  // Probe the OMLX endpoint/key/models with the form's current (unsaved) values,
+  // so "已配置" is verifiable before hitting Save.
+  const handleTestConnection = async () => {
+    setOmlxTest({ state: 'testing' })
+    try {
+      const body: Record<string, string> = {
+        OMLX_BASE_URL: omlxBaseUrl,
+        TEXT_MODEL: textModelGlobal,
+        VISION_MODEL: visionModelGlobal,
+      }
+      if (apiKeyInput.trim()) body.OMLX_API_KEY = apiKeyInput.trim()
+      const res = await api.testOmlxConnection(body)
+      if (res.ok) setOmlxTest({ state: 'ok', models: res.models ?? [], missing: res.missing ?? [] })
+      else setOmlxTest({ state: 'err', error: res.error ?? t('settings.testFailed') })
+    } catch (err: unknown) {
+      setOmlxTest({ state: 'err', error: err instanceof Error ? err.message : String(err) })
     }
   }
 
@@ -470,6 +494,28 @@ export function SettingsPage({ onSave }: SettingsPageProps) {
                 placeholder="Qwen3-VL-8B"
                 className="w-full rounded-md border border-[--border] bg-[--surface-2] px-3 py-1.5 text-sm font-mono outline-none focus:border-[--primary]"
               />
+
+              <button
+                type="button"
+                onClick={handleTestConnection}
+                disabled={omlxTest.state === 'testing'}
+                className="mt-3 rounded-md border border-[--border] bg-[--surface-2] px-3 py-1.5 text-sm hover:border-[--primary] disabled:opacity-60"
+              >
+                {omlxTest.state === 'testing' ? t('settings.testing') : t('settings.testConnection')}
+              </button>
+              {omlxTest.state === 'ok' && omlxTest.missing.length === 0 && (
+                <p className="mt-2 text-xs text-[--success]">
+                  ✅ {t('settings.testOk', { n: omlxTest.models.length })}
+                </p>
+              )}
+              {omlxTest.state === 'ok' && omlxTest.missing.length > 0 && (
+                <p className="mt-2 text-xs text-[--warning]">
+                  ⚠️ {t('settings.testMissing', { models: omlxTest.missing.join(', ') })}
+                </p>
+              )}
+              {omlxTest.state === 'err' && (
+                <p className="mt-2 max-w-full break-words text-xs text-[--error]">❌ {omlxTest.error}</p>
+              )}
             </fieldset>
 
           </div>

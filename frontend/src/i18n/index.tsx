@@ -288,6 +288,11 @@ const en = {
   'settings.visionModel': 'Vision model',
   'settings.visionModelDesc':
     'For B-roll visual tags + description generation (via OMLX, multimodal model). Defaults to Qwen3-VL-8B if blank.',
+  'settings.testConnection': 'Test connection',
+  'settings.testing': 'Testing…',
+  'settings.testOk': 'Connected · {n} model(s) available',
+  'settings.testMissing': 'Connected, but not served: {models}',
+  'settings.testFailed': 'Connection test failed',
 
   'settings.whisperTitle': 'Speech engine (speech-to-text)',
   'settings.whisperDesc': 'How A-roll speech is transcribed — used everywhere: catalog analysis, keyframes, and subtitle export. Runs locally, not via OMLX.',
@@ -596,6 +601,11 @@ const zh: Record<Key, string> = {
   'settings.visionModel': '视觉模型',
   'settings.visionModelDesc':
     '用于 B-roll 的视觉标签 + 描述生成（通过 OMLX，多模态模型）。留空则用默认 Qwen3-VL-8B。',
+  'settings.testConnection': '测试连接',
+  'settings.testing': '测试中…',
+  'settings.testOk': '连接成功 · 可用模型 {n} 个',
+  'settings.testMissing': '连接成功，但服务器未提供：{models}',
+  'settings.testFailed': '连接测试失败',
 
   'settings.whisperTitle': '语音引擎（语音转写）',
   'settings.whisperDesc': 'A-roll 语音转文字的方式——全程通用：编目分析、关键帧、字幕导出都用它。本地运行，不经过 OMLX。',

@@ -118,4 +118,25 @@ describe('SettingsPage', () => {
     await waitFor(() => expect(saved).not.toBeNull())
     expect(saved!.photo_extensions).toEqual(['.jpg', '.jpeg', '.png', '.heic', '.webp'])
   })
+
+  it('tests the OMLX connection and shows success', async () => {
+    server.use(
+      http.post(`${API}/settings/omlx/test`, () =>
+        HttpResponse.json({ ok: true, models: ['Qwen3.6-35B-A3B'], missing: [] })),
+    )
+    render(<SettingsPage />)
+    const btn = await screen.findByRole('button', { name: /测试连接|Test connection/ })
+    await userEvent.click(btn)
+    expect(await screen.findByText(/连接成功|Connected/)).toBeInTheDocument()
+  })
+
+  it('shows the OMLX error when the key is invalid', async () => {
+    server.use(
+      http.post(`${API}/settings/omlx/test`, () =>
+        HttpResponse.json({ ok: false, error: 'OMLX returned HTTP 401: Invalid API key' })),
+    )
+    render(<SettingsPage />)
+    await userEvent.click(await screen.findByRole('button', { name: /测试连接|Test connection/ }))
+    expect(await screen.findByText(/Invalid API key/)).toBeInTheDocument()
+  })
 })
