@@ -171,3 +171,26 @@ async def test_subtitle_job_failure_marks_failed_without_crashing() -> None:
     # Subtitle failures record no retryable item (payload is not a ClipCandidate).
     assert repo.get_failed_items(job_id) == []
     assert queue.get_subtitle_result(job_id) is None
+
+
+@pytest.mark.asyncio
+async def test_subtitle_failure_records_error_on_job() -> None:
+    """A failed subtitle export stores its exception message on jobs.error."""
+    repo = FakeCatalogRepository()
+    queue = WorkerQueue(
+        repository=repo, subtitle_exporter=_FakeExporter(should_fail=True),
+    )
+    await queue.start()
+
+    job_id = await queue.enqueue_subtitle(_req())
+    while True:
+        job = repo.get_job(job_id)
+        if job and job.status in ("done", "failed"):
+            break
+        await asyncio.sleep(0.02)
+
+    await queue.stop()
+
+    job = repo.get_job(job_id)
+    assert job is not None and job.status == "failed"
+    assert job.error == "export boom"
