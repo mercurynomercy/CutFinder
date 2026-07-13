@@ -324,6 +324,7 @@ class Job(BaseModel, frozen=True):
     total: int = 0
     done: int = 0
     failed: int = 0
+    error: str | None = None
     started_at: str | None = None
     finished_at: str | None = None
 
