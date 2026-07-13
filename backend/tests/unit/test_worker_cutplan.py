@@ -83,3 +83,19 @@ async def test_cutplan_job_failure_marks_failed_without_crashing() -> None:
     assert job is not None and job.status == "failed"
     # No retryable failed item recorded for cutplan jobs.
     assert repo.get_failed_items(job_id) == []
+
+
+@pytest.mark.asyncio
+async def test_cutplan_failure_records_error_on_job() -> None:
+    """A failed rough-cut turn stores its exception message on jobs.error."""
+    repo = FakeCatalogRepository()
+    queue = WorkerQueue(repository=repo, cutplan_service=_FakeCutService(should_fail=True))
+    await queue.start()
+
+    job_id = await queue.enqueue_cutplan(1, "go")
+    await _drain(repo, job_id)
+    await queue.stop()
+
+    job = repo.get_job(job_id)
+    assert job is not None and job.status == "failed"
+    assert job.error == "director boom"

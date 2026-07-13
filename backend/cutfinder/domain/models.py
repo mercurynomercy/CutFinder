@@ -320,10 +320,11 @@ class Job(BaseModel, frozen=True):
 
     id: int | None = None
     status: str  # JobStatus (queued / running / done / failed / cancelled)
-    kind: str = "scan"  # "scan" | "reanalyze"
+    kind: str = "scan"  # "scan" | "reanalyze" | "keyframes" | "subtitle" | "cutplan"
     total: int = 0
     done: int = 0
     failed: int = 0
+    error: str | None = None
     started_at: str | None = None
     finished_at: str | None = None
 

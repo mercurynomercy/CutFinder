@@ -89,7 +89,8 @@ CREATE TABLE IF NOT EXISTS jobs (
     done         INTEGER  DEFAULT 0,
     failed       INTEGER  DEFAULT 0,
     started_at   TEXT,
-    finished_at  TEXT
+    finished_at  TEXT,
+    error        TEXT
 )"""
 
 _CREATE_JOB_FAILED_ITEMS = """
@@ -186,6 +187,8 @@ class SqliteRepository:
         job_cols = {row[1] for row in c.fetchall()}
         if "kind" not in job_cols:
             c.execute("ALTER TABLE jobs ADD COLUMN kind TEXT NOT NULL DEFAULT 'scan'")
+        if "error" not in job_cols:
+            c.execute("ALTER TABLE jobs ADD COLUMN error TEXT")
 
         c.execute(_CREATE_FTS)
 
@@ -671,7 +674,7 @@ class SqliteRepository:
     def get_job(self, job_id: int) -> Job | None:
         c = self._conn.cursor()
         c.execute("""
-            SELECT id, status, total, done, failed, started_at, finished_at, kind
+            SELECT id, status, total, done, failed, started_at, finished_at, kind, error
             FROM jobs WHERE id = ?
         """, (job_id,))
         row = c.fetchone()
@@ -682,12 +685,13 @@ class SqliteRepository:
             id=row[0], status=row[1], total=row[2] or 0,
             done=row[3] or 0, failed=row[4] or 0,
             started_at=row[5], finished_at=row[6], kind=row[7] or "scan",
+            error=row[8],
         )
 
     def list_jobs(self, limit: int | None = None) -> list[Job]:
         c = self._conn.cursor()
         sql = """
-            SELECT id, status, total, done, failed, started_at, finished_at, kind
+            SELECT id, status, total, done, failed, started_at, finished_at, kind, error
             FROM jobs ORDER BY id DESC
         """
         if limit is not None:
@@ -700,6 +704,7 @@ class SqliteRepository:
                 id=row[0], status=row[1], total=row[2] or 0,
                 done=row[3] or 0, failed=row[4] or 0,
                 started_at=row[5], finished_at=row[6], kind=row[7] or "scan",
+                error=row[8],
             )
             for row in c.fetchall()
         ]

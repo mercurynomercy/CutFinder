@@ -13,6 +13,7 @@ broken ``repository`` references.  It is not part of the v1 scope anyway.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any
 
@@ -142,6 +143,50 @@ def _build_router(
                 logger.warning("Settings saved but live reload failed: %s", exc)
 
         return {"status": "ok", "message": "Settings updated"}
+
+    @router.post("/settings/omlx/test", summary="Probe the OMLX connection")
+    async def test_omlx_connection(body: dict[str, Any]) -> dict[str, Any]:
+        """Validate the OMLX endpoint/key/models.
+
+        Any body field left empty (or the masked key) falls back to the stored
+        config, so this verifies either a just-typed key or the saved one.
+        Always returns HTTP 200 — the outcome is in the body so the frontend can
+        tell a bad key ({"ok": false}) apart from a route/server error.
+        """
+        from cutfinder.adapters.omlx_check import check_omlx
+
+        library_path = get_library_fn()
+        if not library_path:
+            raise HTTPException(status_code=404, detail="No library configured")
+        try:
+            config = load_config_fn(library_path)
+        except Exception as exc:  # noqa: BLE001
+            raise HTTPException(status_code=503, detail=f"Config error: {exc}") from exc
+
+        def _pick(key: str, stored: str) -> str:
+            v = body.get(key)
+            if v is None or v == "" or v == _MASKED:
+                return stored
+            return str(v)
+
+        base_url = _pick("OMLX_BASE_URL", config.env.OMLX_BASE_URL)
+        api_key = _pick("OMLX_API_KEY", config.env.OMLX_API_KEY)
+        text_model = _pick("TEXT_MODEL", config.env.TEXT_MODEL)
+        vision_model = _pick("VISION_MODEL", config.env.VISION_MODEL)
+
+        if not api_key:
+            return {"ok": False, "error": "未配置 API 密钥"}
+        if not base_url:
+            return {"ok": False, "error": "未配置 Base URL"}
+
+        try:
+            models = await asyncio.to_thread(check_omlx, base_url, api_key)
+        except Exception as exc:  # noqa: BLE001 — surface OMLX error verbatim
+            return {"ok": False, "error": str(exc)}
+
+        expected = [m for m in (text_model, vision_model) if m]
+        missing = [m for m in expected if m not in models]
+        return {"ok": True, "models": models, "missing": missing}
 
     return router
 
