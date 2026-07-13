@@ -112,6 +112,7 @@ def _build_router(ctx: Any) -> Any:
                     "total": j.total,
                     "done": j.done,
                     "failed": j.failed,
+                    "error": getattr(j, "error", None),
                     "started_at": j.started_at,
                     "finished_at": j.finished_at,
                 }

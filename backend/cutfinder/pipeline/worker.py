@@ -725,7 +725,10 @@ class WorkerQueue:
             and job.done >= job.total
         ):
             if job.failed > 0:
-                self._repository.update_job(job_id, status="failed")
+                fields: dict[str, Any] = {"status": "failed"}
+                if error:
+                    fields["error"] = error
+                self._repository.update_job(job_id, **fields)
                 self._emit({
                     "type": "job_failed", "job_id": job_id,
                     "done": job.done, "total": job.total, "failed": job.failed,
