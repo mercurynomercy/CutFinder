@@ -285,6 +285,56 @@ def test_generate_one_call_per_date_with_date_chapters() -> None:
     assert result.plan.total_s == 22.0                 # 12 + 10
 
 
+def test_generate_groups_days_by_local_capture_date() -> None:
+    """Regression: day chapters follow the *local* shooting date, not the UTC one.
+
+    ``capture_time`` is a UTC instant. In UTC+8 both clips below were shot on
+    2026-04-26 (00:30 and 10:00 local), so they belong to one chapter and one
+    LLM call. Slicing the raw UTC string splits them across two days and labels
+    the first one with the previous date.
+    """
+    import contextlib
+    import os
+    import time
+
+    @contextlib.contextmanager
+    def tz(name: str):
+        old = os.environ.get("TZ")
+        os.environ["TZ"] = name
+        time.tzset()
+        try:
+            yield
+        finally:
+            if old is None:
+                os.environ.pop("TZ", None)
+            else:
+                os.environ["TZ"] = old
+            time.tzset()
+
+    with tz("Asia/Shanghai"):  # UTC+8, no DST
+        llm = ScriptedCompleteLLM([
+            '{"shots": [{"clip_id": 1, "roll": "a", "in_s": 0, "out_s": 12},'
+            ' {"clip_id": 2, "roll": "a", "in_s": 0, "out_s": 10}]}',
+        ])
+        briefs = [
+            ClipBrief(clip_id=1, roll="a", capture_time="2026-04-25T16:30:00+00:00"),
+            ClipBrief(clip_id=2, roll="a", capture_time="2026-04-26T02:00:00+00:00"),
+        ]
+        details = {
+            1: ClipDetail(clip_id=1, roll="a", duration_s=60.0,
+                          capture_time="2026-04-25T16:30:00+00:00"),
+            2: ClipDetail(clip_id=2, roll="a", duration_s=60.0,
+                          capture_time="2026-04-26T02:00:00+00:00"),
+        }
+        director = CutDirector(llm, FakeRetriever(briefs, details))
+        result = director.generate(RoughCutRequest(), [], "按日期剪")
+
+    assert len(llm.calls) == 1                       # one local day → one call
+    assert result.plan is not None
+    assert result.plan.chapters == ["2026-04-26"]
+    assert [s.clip_date for s in result.plan.shots] == ["2026-04-26", "2026-04-26"]
+
+
 def test_generate_orders_day_context_by_capture_time() -> None:
     # Briefs supplied out of order; context must list them by shooting time.
     llm = ScriptedCompleteLLM(['{"shots": []}'])

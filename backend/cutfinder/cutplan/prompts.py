@@ -164,8 +164,11 @@ _MESSAGES: dict[str, tuple[str, str]] = {
     "no_date": ("无日期", "No date"),
     "searching_footage": ("正在检索素材…", "Searching footage…"),
     "no_footage_in_range": (
-        "没有在该日期范围找到已编目的素材。请确认素材已扫描入库，或调整日期范围。",
-        "No cataloged footage in that date range. Check your scan or adjust the range.",
+        "没有在该日期范围找到已编目的素材。请写完整的年月日（例如「用 2016/08/31 的素材」）"
+        "——只写 8/31 会按今年推断；也请确认素材已扫描入库。",
+        "No cataloged footage in that date range. Give the full year-month-day "
+        "(e.g. \"footage from 2016/08/31\") — a bare 8/31 is read as the current year — "
+        "and check the footage has been scanned in.",
     ),
     "found_clips_days": (
         "找到 {n} 个片段、共 {days} 天，开始生成…",
@@ -308,9 +311,11 @@ _MESSAGES: dict[str, tuple[str, str]] = {
     ),
     "returned_draft": ("（已返回当前分镜草稿。）", "(Returned current shot list draft.)"),
     "no_footage_round_cap": (
-        "没有在该日期范围找到已编目的素材。请确认素材已扫描入库，"
-        "或调整日期范围后重试。",
-        "No cataloged footage found in this date range. Confirm clips are scanned and added, or adjust the range.",
+        "没有在该日期范围找到已编目的素材。请写完整的年月日（例如「用 2016/08/31 的素材」）"
+        "——只写 8/31 会按今年推断；也请确认素材已扫描入库。",
+        "No cataloged footage found in this date range. Give the full year-month-day "
+        "(e.g. \"footage from 2016/08/31\") — a bare 8/31 is read as the current year — "
+        "and confirm the clips are scanned and added.",
     ),
     "generation_failed_round_cap": (
         "尝试多次仍未能生成分镜表（本地模型的工具调用可能不稳定）。"

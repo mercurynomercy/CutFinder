@@ -146,6 +146,28 @@ def test_handle_parses_request_from_message_text() -> None:
     assert director.calls[1][0].date_from == "2026-04-25"
 
 
+def test_handle_drops_remembered_dates_when_prior_turn_made_no_plan() -> None:
+    """A date range that produced nothing must not poison every follow-up.
+
+    Turn 1 scoped to a range with no footage → no plan. Turn 2 mentions no date,
+    so inheriting turn 1's range would just repeat "no footage in that range";
+    clear it instead and let the director search the whole library.
+    """
+    store = MemoryCutSessionStore()
+    s = store.create_session()
+    director = FakeDirector(CutDirectorResult("没有在该日期范围找到已编目的素材。", None))
+    svc = CutPlanService(store, director)  # type: ignore[arg-type]
+
+    svc.handle(s.id, "用 2026/8/31 的素材剪一个 10 分钟的 vlog")
+    assert director.calls[0][0].date_from == "2026-08-31"
+
+    svc.handle(s.id, "帮我剪一个 vlog 10 分钟的")
+    assert director.calls[1][0].date_from is None
+    assert director.calls[1][0].date_to is None
+    # Non-date scoping is still remembered.
+    assert director.calls[1][0].target_min_s == 600.0
+
+
 def test_refine_passes_prior_plan_as_merge_base() -> None:
     # The latest stored plan is handed to the director as prior_plan so a refine
     # turn merges over it instead of replacing the whole timeline (task 28).

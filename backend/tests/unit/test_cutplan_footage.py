@@ -2,11 +2,31 @@
 
 from __future__ import annotations
 
+import contextlib
 import datetime as _dt
+import os
+import time
+from collections.abc import Iterator
 
 from cutfinder.adapters.sqlite_footage import CatalogFootageRetriever
 from cutfinder.adapters.sqlite_repo import MemoryRepository
 from cutfinder.domain.models import Clip, CutSuggestion, Segment, Tag, Transcript
+
+
+@contextlib.contextmanager
+def _tz(name: str) -> Iterator[None]:
+    """Run the block in a fixed local timezone."""
+    old = os.environ.get("TZ")
+    os.environ["TZ"] = name
+    time.tzset()
+    try:
+        yield
+    finally:
+        if old is None:
+            os.environ.pop("TZ", None)
+        else:
+            os.environ["TZ"] = old
+        time.tzset()
 
 
 def _make_clip(repo: MemoryRepository, fp: str, roll: str, day: str) -> int:
@@ -45,6 +65,33 @@ def test_date_range_tolerates_non_zero_padded_and_slash_dates() -> None:
     # Model may emit "2026-4-25" or "2026/4/25" — both must still match.
     assert [r.clip_id for r in retr.search_footage(date_from="2026-4-25", date_to="2026-5-11")] == [a1]
     assert [r.clip_id for r in retr.search_footage(date_from="2026/04/25", date_to="2026/05/11")] == [a1]
+
+
+def test_date_range_uses_local_shooting_day() -> None:
+    """Regression: the range must match the *local* shooting day, not the UTC one.
+
+    ``capture_time`` is stored as a UTC instant. A clip shot 2016-08-31 04:41 in
+    UTC+8 is stored as ``2016-08-30T20:41Z``; the gallery and the library folder
+    both call that day 2016-08-31, so asking the director for 2016-08-31 has to
+    find it — and 2016-08-30 must not, or a range picks up the neighbouring day.
+    """
+    with _tz("Asia/Shanghai"):  # UTC+8, no DST
+        repo = MemoryRepository()
+        cid = repo.upsert_clip(Clip(
+            fingerprint="tz1",
+            source_path="/src/tz1.mov",
+            library_path="/lib/2016-08-31/tz1.mov",
+            roll_type="b",
+            capture_time=_dt.datetime(2016, 8, 30, 20, 41, tzinfo=_dt.timezone.utc),
+            date_source="embedded",
+            duration_s=30.0,
+            status="done",
+            created_at="",
+        ))
+        retr = CatalogFootageRetriever(repo)
+        found = retr.search_footage(date_from="2016-08-31", date_to="2016-08-31")
+        assert [r.clip_id for r in found] == [cid]
+        assert retr.search_footage(date_from="2016-08-30", date_to="2016-08-30") == []
 
 
 def test_tag_filter() -> None:

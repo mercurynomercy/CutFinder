@@ -52,6 +52,7 @@ from cutfinder.domain.models import (
     VisionResult,
 )
 from cutfinder.domain.enums import RollType
+from cutfinder.localdate import local_day
 from cutfinder.ports.ai import Summarizer, VisionTagger as _VisionTaggerPort
 from cutfinder.ports.library import LibraryWriter
 from cutfinder.ports.media import FrameExtractor, ThumbnailMaker
@@ -71,9 +72,7 @@ def _library_date_str(capture_time: _dt.datetime | None) -> str:
     value mis-files clips shot after local midnight into the previous day, so
     convert to local time first. Returns ``"unknown"`` when absent.
     """
-    if capture_time is None:
-        return "unknown"
-    return capture_time.astimezone().strftime("%Y-%m-%d")
+    return local_day(capture_time) or "unknown"
 
 
 # ── Progress events ───────────────────────────────────────────────

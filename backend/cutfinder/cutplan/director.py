@@ -28,6 +28,7 @@ from ..domain.models import (
     RoughCutRequest,
     Shot,
 )
+from ..localdate import local_day, local_stamp
 from ..ports.cutplan import BrollInspector, FootageRetriever, LLMAgentClient
 from .prompts import (
     CRITIC_SYSTEM_PROMPT_EN,
@@ -137,7 +138,9 @@ class CutDirector:
         groups: dict[str, list[Any]] = defaultdict(list)
         no_date = self._t("no_date")
         for b in clips:
-            day = (getattr(b, "capture_time", None) or "")[:10] or no_date
+            # Local shooting day, matching the gallery + library folders — the
+            # raw UTC prefix would split a day at local midnight (see localdate).
+            day = local_day(getattr(b, "capture_time", None)) or no_date
             groups[day].append(b)
         # Sort each day's clips by capture time so the context — and therefore the
         # shot order the model produces — follows the real shooting timeline.
@@ -646,7 +649,7 @@ class CutDirector:
             tags = ",".join(b.tags[:6]) if b.tags else ""
             # Full timestamp (date + time of day) so the model can order shots by
             # the real shooting timeline within a day.
-            when = (b.capture_time or "").replace("T", " ")[:19] or self._t("no_capture_time")
+            when = local_stamp(b.capture_time) or self._t("no_capture_time")
             mark = self._t("has_transcript_mark") if (b.roll == "a" and b.has_transcript) else ""
             head = f"[{b.clip_id}] {when} {b.roll}-roll dur={dur}{mark} {desc} tags={tags}"
             lines.append(head)
@@ -894,7 +897,7 @@ class CutDirector:
                 rationale=str(item.get("rationale") or ""),
                 chapter=chapter,
                 clip_label=_clip_label(detail),
-                clip_date=(detail.capture_time or "")[:10] if detail else "",
+                clip_date=(local_day(detail.capture_time) or "") if detail else "",
                 thumb_ref=f"/api/clips/{cid}/thumbnail",
                 clip_path=(detail.library_path or detail.source_path) if detail else None,
             ))
