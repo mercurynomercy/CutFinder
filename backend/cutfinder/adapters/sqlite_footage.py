@@ -10,6 +10,7 @@ from __future__ import annotations
 import datetime as _dt
 
 from ..domain.models import ClipBrief, ClipDetail, ClipFilter, ClipSummary
+from ..localdate import local_day
 from ..ports.repository import CatalogRepository
 
 
@@ -100,15 +101,20 @@ def _parse_day(value: str | None) -> _dt.date | None:
 
 
 def _in_date_range(r: ClipSummary, date_from: str | None, date_to: str | None) -> bool:
-    """True if the clip's capture date falls within [date_from, date_to]."""
+    """True if the clip's *local* shooting day falls within [date_from, date_to].
+
+    The bounds come from the user, who names the day the gallery and the library
+    folder show — the local date. ``capture_time`` is a UTC instant, so compare
+    on ``local_day`` (see :mod:`cutfinder.localdate`); using the raw UTC date
+    shifts every clip shot near local midnight into the neighbouring day.
+    """
     lo = _parse_day(date_from)
     hi = _parse_day(date_to)
     if lo is None and hi is None:
         return True
-    ct = r.capture_time
-    if ct is None or not hasattr(ct, "date"):
+    day = _parse_day(local_day(r.capture_time))
+    if day is None:
         return False
-    day = ct.date()
     if lo is not None and day < lo:
         return False
     if hi is not None and day > hi:

@@ -63,6 +63,15 @@ class CutPlanService:
             stored = self._load_request(session_id) or RoughCutRequest()
             parsed = parse_request_fields(user_text)
             req = stored.model_copy(update=parsed) if parsed else stored
+            # A remembered date range is only worth keeping if it actually
+            # produced a cut. When the previous turn ended with no plan (almost
+            # always "no footage in that range"), inheriting its dates makes
+            # every follow-up repeat the same failure — drop them and let this
+            # turn search the whole library instead.
+            if not (parsed.keys() & {"date_from", "date_to"}) and (
+                self._store.get_latest_plan(session_id) is None
+            ):
+                req = req.model_copy(update={"date_from": None, "date_to": None})
         self._store.set_session_request(
             session_id, json.dumps(req.model_dump(), ensure_ascii=False),
         )
