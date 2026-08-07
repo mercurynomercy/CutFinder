@@ -198,6 +198,7 @@ test.describe('Gallery', () => {
 
     // Navigate and wait for React to render the gallery.
     await page.goto('/')
+    await page.getByRole('button', { name: /library/i }).click()
     console.log('[beforeEach] after goto, waiting...')
 
     // Simple fixed delay — gives React time to fetch data and render.
@@ -302,6 +303,7 @@ test.describe('Filter by roll type', () => {
   test.beforeEach(async ({ page }) => {
     await interceptApi(page)
     await page.goto('/')
+    await page.getByRole('button', { name: /library/i }).click()
   })
 
   test('filtering by A-roll shows only A-clip cards', async ({ page }) => {
@@ -369,6 +371,7 @@ test.describe('Detail panel', () => {
   test.beforeEach(async ({ page }) => {
     await interceptApi(page)
     await page.goto('/')
+    await page.getByRole('button', { name: /library/i }).click()
   })
 
   test('shows clip metadata in detail panel', async ({ page }) => {
@@ -703,6 +706,7 @@ test.describe('Search', () => {
   test.beforeEach(async ({ page }) => {
     await interceptApi(page)
     await page.goto('/')
+    await page.getByRole('button', { name: /library/i }).click()
   })
 
   // Search filters the gallery client-side (App.handleSearch sets a query that
@@ -883,6 +887,7 @@ test.describe('Integration', () => {
   test.beforeEach(async ({ page }) => {
     await interceptApi(page)
     await page.goto('/')
+    await page.getByRole('button', { name: /library/i }).click()
   })
 
   test('full flow: filter  select detail  correct roll  close', async ({ page }) => {
