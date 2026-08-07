@@ -38,6 +38,21 @@ const en = {
   'app.menu': 'Menu',
   'app.roughcut': 'Rough cut',
 
+  // Launcher (entry screen)
+  'launcher.title': 'CutFinder',
+  'launcher.subtitle': 'AI-powered vlog cataloging and rough-cut tool',
+  'launcher.open': 'Open',
+  'launcher.cardGallery': 'Library',
+  'launcher.cardGalleryDesc': 'Browse, filter, and manage all scanned clips',
+  'launcher.cardSettings': 'Settings',
+  'launcher.cardSettingsDesc': 'Configure OMLX connection, speech engine, processing options',
+  'launcher.cardTasks': 'Task queue',
+  'launcher.cardTasksDesc': 'View scan / keyframe / rough-cut task status and progress',
+  'launcher.cardCut': 'Rough cut',
+  'launcher.cardCutDesc': 'AI chat-driven shot list and cut generation',
+  'launcher.cardSubtitles': 'Subtitle export',
+  'launcher.cardSubtitlesDesc': 'Export iTT / SRT subtitles from transcribed audio',
+
   // Rough-cut director (chat → shot list)
   'roughcut.title': 'Rough cut',
   'roughcut.desc': 'Chat with the director to build a shot list from your cataloged footage.',
@@ -363,6 +378,20 @@ const zh: Record<Key, string> = {
   'app.themeToDark': '切换到深色模式',
   'app.menu': '菜单',
   'app.roughcut': '初剪',
+
+  'launcher.title': 'CutFinder',
+  'launcher.subtitle': 'AI 驱动的短视频素材管理与初剪工具',
+  'launcher.open': '打开',
+  'launcher.cardGallery': '素材库',
+  'launcher.cardGalleryDesc': '浏览、筛选和管理所有已扫描的素材片段',
+  'launcher.cardSettings': '设置',
+  'launcher.cardSettingsDesc': '配置 OMLX 连接、语音引擎、处理选项等',
+  'launcher.cardTasks': '任务队列',
+  'launcher.cardTasksDesc': '查看扫描、关键帧、初剪等任务状态与进度',
+  'launcher.cardCut': '初剪',
+  'launcher.cardCutDesc': 'AI 对话驱动，自动生成分镜表与剪辑方案',
+  'launcher.cardSubtitles': '字幕导出',
+  'launcher.cardSubtitlesDesc': '从已转录音频中导出 iTT / SRT 字幕文件',
 
   'roughcut.title': '初剪',
   'roughcut.desc': '和导演 Agent 对话，从已编目的素材库生成分镜表。',
