@@ -32,6 +32,7 @@ describe('App — library cleanup from the header menu', () => {
     )
 
     render(<App />)
+    await userEvent.click(await screen.findByRole('button', { name: /library/i }))
     await userEvent.click(await screen.findByRole('button', { name: /menu/i }))
     await userEvent.click(await screen.findByRole('menuitem', { name: /clean up deleted files/i }))
     await userEvent.click(await screen.findByRole('button', { name: 'OK' }))
@@ -52,6 +53,7 @@ describe('App — library cleanup from the header menu', () => {
     )
 
     render(<App />)
+    await userEvent.click(await screen.findByRole('button', { name: /library/i }))
     await userEvent.click(await screen.findByRole('button', { name: /menu/i }))
     await userEvent.click(await screen.findByRole('menuitem', { name: /clean up deleted files/i }))
 

@@ -16,6 +16,7 @@ import { JobsQueuePage } from '@/features/jobs-queue'
 import { SettingsPage } from '@/features/settings'
 import { SubtitlesPage } from '@/features/subtitles'
 import { CutplanPage } from '@/features/cutplan'
+import { LauncherPage, type LauncherScreen } from '@/features/launcher'
 import { LogModal } from '@/features/logs'
 import { ConfirmDialog } from '@/components'
 import { localDateKey } from '@/lib/date'
@@ -46,6 +47,7 @@ export default function App() {
   const [showJobs, setShowJobs] = useState(false)
   const [showSubtitles, setShowSubtitles] = useState(false)
   const [showCutplan, setShowCutplan] = useState(false)
+  const [showLauncher, setShowLauncher] = useState(true)
   const [showLogs, setShowLogs] = useState(false)
   const [selectedClipId, setSelectedClipId] = useState<DetailPanelPropsType['clipId']>(null)
   const [activeJobId, setActiveJobId] = useState<JobsPanelProps['activeJobId']>(null)
@@ -118,6 +120,24 @@ export default function App() {
     const next: Theme = theme === 'dark' ? 'light' : 'dark'
     applyTheme(next)
     setTheme(next)
+  }
+
+  // Launcher navigation — enter a specific screen from the launcher cards.
+  const handleNavigate = (screen: LauncherScreen) => {
+    setShowLauncher(false)
+    if (screen === 'settings') setShowSettings(true)
+    else if (screen === 'jobs') setShowJobs(true)
+    else if (screen === 'cutplan') setShowCutplan(true)
+    else if (screen === 'subtitles') setShowSubtitles(true)
+  }
+
+  // Logo click — back out of any full-screen view to the launcher.
+  const handleBackToLauncher = () => {
+    setShowSettings(false)
+    setShowJobs(false)
+    setShowSubtitles(false)
+    setShowCutplan(false)
+    setShowLauncher(true)
   }
 
   // Close the header overflow menu on outside click or Escape.
@@ -355,6 +375,11 @@ export default function App() {
     }
   }
 
+  // Launcher (主目录) — CutFinder's entry screen; shown before anything else.
+  if (showLauncher) {
+    return <LauncherPage theme={theme} onToggleTheme={toggleTheme} onNavigate={handleNavigate} />
+  }
+
   // If loading, show empty gallery with skeleton (handled by Gallery itself)
   if (loading && clips.length === 0) {
     return <Gallery clips={[]} selectedClipId={selectedClipId} onSelect={setSelectedClipId} />
@@ -388,8 +413,10 @@ export default function App() {
       {/* Header bar */}
       <header className="h-14 shrink-0 border-b border-[--border] bg-[--surface-1] px-6 flex items-center justify-between">
         <h1 className="flex items-center">
-          {/* Full colour logo (transparent SVG, includes the wordmark). */}
-          <img src="/logo.svg" alt="CutFinder" className="h-11 w-auto select-none" />
+          {/* Full colour logo (transparent SVG, includes the wordmark) — click to return to the launcher. */}
+          <button onClick={handleBackToLauncher} className="flex items-center">
+            <img src="/logo.svg" alt="CutFinder" className="h-11 w-auto select-none" />
+          </button>
           <span className="sr-only">CutFinder</span>
         </h1>
         <div className="flex items-center gap-3">
