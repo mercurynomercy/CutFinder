@@ -381,7 +381,7 @@ export default function App() {
   }
 
   // If loading, show empty gallery with skeleton (handled by Gallery itself)
-  if (loading && clips.length === 0) {
+  if (loading && clips.length === 0 && !showSettings && !showJobs && !showSubtitles && !showCutplan) {
     return <Gallery clips={[]} selectedClipId={selectedClipId} onSelect={setSelectedClipId} />
   }
 
