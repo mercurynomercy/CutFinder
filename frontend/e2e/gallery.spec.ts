@@ -889,14 +889,11 @@ test.describe('Integration', () => {
     // Step 8: Verify detail panel is closed
     await expect(page.locator('h1:has-text("Clip detail")')).not.toBeVisible()
 
-    // Step 9: Clear filter to see all clips. NOTE (app bug, not a stale test):
-    // closing the full-screen detail panel remounts the whole gallery/sidebar
-    // (Filters included), which resets Filters' local `filters` state to its
-    // defaults — so `hasActiveFilters` reads false and the "Clear all filters"
-    // button never renders, even though the roll_type filter applied before
-    // the detail panel opened is still in effect underneath (the gallery still
-    // shows only 3 clips). Use the "All" type button instead — it explicitly
-    // sets roll_type to null rather than depending on stale local state.
+    // Step 9: Clear filter to see all clips. Filters now takes App's applied
+    // filters as a controlled prop, so closing/reopening the full-screen detail
+    // panel no longer resets it to defaults on remount — "Clear all filters"
+    // would work here too, but the "All" type button is used since it's the
+    // most direct way to set roll_type back to null.
     await page.locator('button').filter({ hasText: /^All$/ }).click()
 
     // Step 10: All clips should be visible again
@@ -925,16 +922,14 @@ test.describe('Integration', () => {
     // Step 5: Close detail panel
     await page.locator('button[aria-label="Back to gallery"]').click()
 
-    // Step 6: Clear search. NOTE (app bug, not a stale test): closing the
-    // full-screen detail panel remounts the whole gallery/header (Search
-    // included), which resets Search's local `query` state to '' — so the
-    // "Clear search" button (only rendered while `query` is truthy) never
-    // appears, even though the previously-applied search query is still in
-    // effect underneath. Clear via the input itself instead of that button.
+    // Step 6: Clear search via the input. Search now seeds its initial value
+    // from App's searchQuery, so the remounted input already shows "mountain"
+    // here rather than resetting to empty — clearing it through the input
+    // itself (rather than the "Clear search" button) still exercises the
+    // debounced onSearch('') path regardless.
     const searchInputAfterReturn = page.locator('input[placeholder*="Search clips"]')
-    // The remounted input's local value is already '' — fill('') alone is a
-    // no-op that doesn't fire a change event, so go through a non-empty value
-    // first to guarantee the debounced onSearch('') actually fires.
+    // fill('') alone can be a no-op if the value is already '' — go through a
+    // non-empty value first to guarantee the debounced onSearch('') actually fires.
     await searchInputAfterReturn.fill('x')
     await searchInputAfterReturn.fill('')
     await page.waitForTimeout(450)

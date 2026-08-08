@@ -49,15 +49,18 @@ const DEFAULT_FILTERS: FiltersState = { date: null, roll_type: null, tag: null }
 export interface FiltersProps {
   /** Called whenever any filter changes; receives the full filters object. */
   onFilterChange: (filters: FiltersState) => void
+  /** Controlled current filter values. Omit to let Filters manage its own (uncontrolled). */
+  filters?: FiltersState
   /** Controlled collapsed state. Omit to let Filters manage its own (uncontrolled). */
   collapsed?: boolean
   /** Called to toggle collapse when controlled (required alongside `collapsed`). */
   onToggleCollapsed?: () => void
 }
 
-export function Filters({ onFilterChange, collapsed: collapsedProp, onToggleCollapsed }: FiltersProps) {
+export function Filters({ onFilterChange, filters: filtersProp, collapsed: collapsedProp, onToggleCollapsed }: FiltersProps) {
   const { t } = useI18n()
-  const [filters, setFilters] = useState<FiltersState>(DEFAULT_FILTERS)
+  const [internalFilters, setInternalFilters] = useState<FiltersState>(DEFAULT_FILTERS)
+  const filters = filtersProp ?? internalFilters
   const [internalCollapsed, setInternalCollapsed] = useState(false)
   const collapsed = collapsedProp ?? internalCollapsed
   const toggleCollapsed = onToggleCollapsed ?? (() => setInternalCollapsed((v) => !v))
@@ -112,12 +115,12 @@ export function Filters({ onFilterChange, collapsed: collapsedProp, onToggleColl
 
   const updateFilter = <K extends keyof FiltersState>(key: K, value: FiltersState[K]) => {
     const next = { ...filters, [key]: value }
-    setFilters(next)
+    setInternalFilters(next)
     onFilterChange(next)
   }
 
   const clearAll = () => {
-    setFilters(DEFAULT_FILTERS)
+    setInternalFilters(DEFAULT_FILTERS)
     onFilterChange({ ...DEFAULT_FILTERS })
   }
 

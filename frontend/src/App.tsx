@@ -52,7 +52,7 @@ export default function App() {
   const [showLogs, setShowLogs] = useState(false)
   const [selectedClipId, setSelectedClipId] = useState<DetailPanelPropsType['clipId']>(null)
   const [activeJobId, setActiveJobId] = useState<JobsPanelProps['activeJobId']>(null)
-  const [appliedFilters, setAppliedFilters] = useState<Partial<FilterState>>({})
+  const [appliedFilters, setAppliedFilters] = useState<FilterState>({ date: null, roll_type: null, tag: null })
   const [reanalyzingIds, setReanalyzingIds] = useState<Set<number>>(new Set())
   const [sortBy, setSortBy] = useState<'date-newest' | 'date-oldest'>('date-newest')
   const [collapsedDates, setCollapsedDates] = useState<Set<string>>(new Set())
@@ -436,7 +436,7 @@ export default function App() {
         <span className="sr-only">CutFinder</span>
 
         <div className="min-w-0 flex-1">
-          <Search onSearch={handleSearch} />
+          <Search onSearch={handleSearch} query={searchQuery} />
         </div>
 
         <nav className="flex shrink-0 items-center gap-1">
@@ -514,6 +514,7 @@ export default function App() {
           {/* Filters sidebar (fixed width) — also hosts the search box */}
           <Filters
             onFilterChange={handleFilterChange}
+            filters={appliedFilters}
             collapsed={filtersCollapsed}
             onToggleCollapsed={() => setFiltersCollapsed((v) => !v)}
           />

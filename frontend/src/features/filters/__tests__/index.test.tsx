@@ -149,4 +149,17 @@ describe('Filters', () => {
     render(<Filters onFilterChange={() => {}} />)
     expect(screen.getByText('No dates yet')).toBeInTheDocument()
   })
+
+  it('reflects a controlled `filters` prop (e.g. after a remount) by highlighting the matching roll-type button', () => {
+    render(
+      <Filters
+        onFilterChange={() => {}}
+        filters={{ date: null, roll_type: 'a', tag: null }}
+      />,
+    )
+    expect(screen.getByRole('button', { name: 'A-roll' })).toHaveClass('bg-[--primary]')
+    expect(screen.getByRole('button', { name: 'All' })).not.toHaveClass('bg-[--primary]')
+    // "Clear all filters" should also show, since the controlled value is non-default.
+    expect(screen.getByText('Clear all filters')).toBeInTheDocument()
+  })
 })

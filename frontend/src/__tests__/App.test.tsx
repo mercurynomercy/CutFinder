@@ -82,6 +82,39 @@ describe('App — full-screen clip detail', () => {
   })
 })
 
+describe('App — filters/search stay visually in sync across the clip-detail round trip', () => {
+  it('keeps the active roll-type filter and search query shown after returning from the full-screen clip detail view', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    const user = userEvent.setup()
+    server.use(
+      http.get(`${API}/clips`, () =>
+        HttpResponse.json([
+          { id: 1, source_path: '/a.mp4', roll_type: 'a', duration_s: 5, thumbnail_path: null, status: 'done', tags: [] },
+        ]),
+      ),
+    )
+    render(<App />)
+    await user.click(await screen.findByRole('button', { name: /library/i }))
+
+    // Apply a roll-type filter and a search query — both are state App itself owns.
+    await user.click(screen.getByRole('button', { name: 'A-roll' }))
+    await user.type(screen.getByPlaceholderText('Search clips…'), 'sunset')
+    await vi.advanceTimersByTimeAsync(300) // let the search debounce fire
+
+    // Open the full-screen clip detail view — this unmounts Filters/Search.
+    window.dispatchEvent(new CustomEvent('cutfinder:navigate', { detail: { clipId: 1 } }))
+    expect(await screen.findByText('Clip detail')).toBeInTheDocument()
+
+    // Return to the gallery — Filters/Search remount fresh from App's still-applied state.
+    await user.click(screen.getByRole('button', { name: 'Back to gallery' }))
+
+    expect(await screen.findByRole('button', { name: 'A-roll' })).toHaveClass('bg-[--primary]')
+    expect(screen.getByPlaceholderText('Search clips…')).toHaveValue('sunset')
+
+    vi.useRealTimers()
+  })
+})
+
 describe('App — library cleanup from Settings', () => {
   it('finds orphaned entries and deletes them after confirmation', async () => {
     let deletedIds: number[] | null = null
