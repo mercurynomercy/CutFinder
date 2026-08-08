@@ -143,6 +143,21 @@ describe('ThumbnailCard', () => {
     expect(screen.queryByText('B-roll')).toBeNull()
   })
 
+  it('renders the roll-type badge inside the thumbnail wrapper, not the info row', () => {
+    const container = render(<ThumbnailCard {...baseProps} rollType="a" thumbnailUrl="/thumb.jpg" />)
+    const thumbWrapper = container.container.querySelector('div[class*="pb-[56.25%]"]') as HTMLElement | null
+    expect(thumbWrapper).toBeTruthy()
+    const badgeInThumb = thumbWrapper!.querySelector('span')
+    expect(badgeInThumb?.textContent).toBe('A-roll')
+  })
+
+  it('does not render a roll-type badge in the info row anymore', () => {
+    const container = render(<ThumbnailCard {...baseProps} rollType="b" />)
+    const infoRow = container.container.querySelector('p[class*="truncate"]')!.parentElement!
+    const badgeInInfoRow = [...infoRow.querySelectorAll('span')].find((s) => s.textContent === 'B-roll')
+    expect(badgeInInfoRow).toBeUndefined()
+  })
+
   // ── Duration label ────────────────────────────────────────
 
   it('renders duration when provided as a number', () => {

@@ -6,7 +6,6 @@ A/B roll badge overlay, and optional duration label.
 
 import * as React from 'react'
 
-import { Badge } from '@/components/ChipBadge'
 import { cn } from '@/lib/cn'
 import { localDateKey } from '@/lib/date'
 import { useI18n } from '@/i18n'
@@ -166,6 +165,18 @@ const ThumbnailCard = React.forwardRef<HTMLDivElement, ThumbnailCardProps>(
             </div>
           )}
 
+          {/* Roll-type badge (top-left, solid color + blur, overlaid on the thumbnail) */}
+          {rollType && (
+            <span
+              className={cn(
+                'absolute left-1.5 top-1.5 rounded px-1.5 py-0.5 text-[10px] font-semibold text-white backdrop-blur-sm',
+                rollType === 'a' ? 'bg-[--roll-a]' : rollType === 'b' ? 'bg-[--roll-b]' : 'bg-[--roll-photo]',
+              )}
+            >
+              {rollType === 'photo' ? t('card.photo') : rollType === 'a' ? 'A-roll' : 'B-roll'}
+            </span>
+          )}
+
           {/* Duration label (bottom-right) — not for photos (no playback time) */}
           {rollType !== 'photo' && duration !== null && duration !== undefined ? (
             <div className="absolute bottom-2 right-2 rounded bg-black/70 px-1.5 py-0.5 text-xs font-medium text-white tabular-numbers">
@@ -186,16 +197,9 @@ const ThumbnailCard = React.forwardRef<HTMLDivElement, ThumbnailCardProps>(
         {/* Info row (filename, summary, tags) — flex-1 so the date pins to the
             card bottom and aligns across cards of differing tag/summary heights */}
         <div className="flex flex-1 flex-col gap-1.5 px-3 py-2">
-          <div className="flex items-center gap-1.5">
-            {rollType && (
-              <Badge type={rollType} className="shrink-0 px-1.5">
-                {rollType === 'photo' ? t('card.photo') : rollType === 'a' ? 'A-roll' : 'B-roll'}
-              </Badge>
-            )}
-            <p className="truncate text-xs text-[--text-secondary]" title={libraryPath || sourcePath}>
-              {displayName}
-            </p>
-          </div>
+          <p className="truncate text-xs text-[--text-secondary]" title={libraryPath || sourcePath}>
+            {displayName}
+          </p>
 
           {summary ? (
             <p className="line-clamp-2 text-[11px] leading-snug text-[--text-muted]" title={summary}>
