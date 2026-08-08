@@ -364,7 +364,7 @@ export default function App() {
   }
 
   // If loading, show empty gallery with skeleton (handled by Gallery itself)
-  if (loading && clips.length === 0 && !showSettings && !showJobs && !showSubtitles && !showCutplan) {
+  if (loading && clips.length === 0 && !showSettings && !showJobs && !showSubtitles && !showCutplan && selectedClipId === null) {
     return <Gallery clips={[]} selectedClipId={selectedClipId} onSelect={setSelectedClipId} />
   }
 
@@ -410,6 +410,17 @@ export default function App() {
   // Rough-cut director view (full-screen, replaces main layout)
   if (showCutplan) {
     return <CutplanPage onClose={() => setShowCutplan(false)} />
+  }
+
+  // Clip detail view (full-screen, replaces main layout)
+  if (selectedClipId !== null) {
+    return (
+      <DetailPanel
+        clipId={selectedClipId}
+        onClose={() => setSelectedClipId(null)}
+        onOpenPath={handleOpenPath}
+      />
+    )
   }
 
   return (
@@ -570,9 +581,6 @@ export default function App() {
             />
           </div>
         </div>
-
-        {/* Detail panel (slide-in drawer, right side) */}
-        <DetailPanel clipId={selectedClipId} onClose={() => setSelectedClipId(null)} onOpenPath={handleOpenPath} />
       </div>
 
       {/* Pause→resume scan confirmation dialog */}

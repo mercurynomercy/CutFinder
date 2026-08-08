@@ -59,6 +59,29 @@ describe('App — filters sidebar collapse', () => {
   })
 })
 
+describe('App — full-screen clip detail', () => {
+  it('replaces the whole screen with DetailPanel when a clip is selected, and returns to the gallery on close', async () => {
+    server.use(
+      http.get(`${API}/clips`, () =>
+        HttpResponse.json([
+          { id: 1, source_path: '/a.mp4', roll_type: 'a', duration_s: 5, thumbnail_path: null, status: 'done', tags: [] },
+        ]),
+      ),
+    )
+    render(<App />)
+    await userEvent.click(await screen.findByRole('button', { name: /library/i }))
+
+    window.dispatchEvent(new CustomEvent('cutfinder:navigate', { detail: { clipId: 1 } }))
+
+    expect(await screen.findByText('Clip detail')).toBeInTheDocument()
+    // The gallery's top bar (with the Scan button) is gone — full-screen replacement, not an overlay.
+    expect(screen.queryByRole('button', { name: 'Scan' })).not.toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Back to gallery' }))
+    expect(await screen.findByRole('button', { name: 'Scan' })).toBeInTheDocument()
+  })
+})
+
 describe('App — library cleanup from Settings', () => {
   it('finds orphaned entries and deletes them after confirmation', async () => {
     let deletedIds: number[] | null = null
