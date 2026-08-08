@@ -151,7 +151,7 @@ export function Filters({ onFilterChange, collapsed: collapsedProp, onToggleColl
         <label className="mb-2 block text-xs font-medium uppercase tracking-wider text-[--text-muted]">
           {t('filters.type')}
         </label>
-        <div className="flex gap-1.5">
+        <div className="grid grid-cols-2 gap-1.5">
           {([
             ['all', t('filters.all'), (
               <svg key="i" className="h-3 w-3" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
