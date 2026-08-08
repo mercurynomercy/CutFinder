@@ -1,5 +1,5 @@
 /** App shell — header (title + search + scan button), sidebar filters, gallery grid,
-detail drawer, and top progress bar for active jobs.
+full-screen clip detail view, and bottom status bar for active jobs.
 
 Usage: <App /> — no props needed; state is managed internally.
 */
@@ -67,8 +67,8 @@ export default function App() {
   // clicked again and enqueue a second concurrent scan job.
   const [scanning, setScanning] = useState(false)
 
-  // Library cleanup (remove catalog entries whose copy was deleted) — driven
-  // straight from the header menu, no need to open Settings.
+  // Library cleanup (remove catalog entries whose copy was deleted) — triggered
+  // from the Settings page.
   const [confirmCleanup, setConfirmCleanup] = useState(false)
   const [orphanIds, setOrphanIds] = useState<number[]>([])
 
@@ -430,7 +430,7 @@ export default function App() {
 
   return (
     <div className="flex h-screen w-full flex-col bg-[--bg-canvas] text-[--text-primary]">
-      {/* Top progress bar (absolute, sticky) */}
+      {/* Bottom status bar (fixed) for active jobs, plus the ambient toast host */}
       <JobsPanel activeJobId={activeJobId} />
 
       {/* Header bar */}
@@ -516,7 +516,7 @@ export default function App() {
       <div className="flex min-h-0 flex-1 overflow-hidden">
         {/* Sidebar: filters + gallery */}
         <div className="flex min-h-0 w-full overflow-hidden">
-          {/* Filters sidebar (fixed width) — also hosts the search box */}
+          {/* Filters sidebar (fixed width) — search box lives in the top bar */}
           <Filters
             onFilterChange={handleFilterChange}
             filters={appliedFilters}
