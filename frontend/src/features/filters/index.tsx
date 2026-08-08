@@ -33,12 +33,18 @@ const DEFAULT_FILTERS: FiltersState = { date: null, roll_type: null, tag: null }
 export interface FiltersProps {
   /** Called whenever any filter changes; receives the full filters object. */
   onFilterChange: (filters: FiltersState) => void
+  /** Controlled collapsed state. Omit to let Filters manage its own (uncontrolled). */
+  collapsed?: boolean
+  /** Called to toggle collapse when controlled (required alongside `collapsed`). */
+  onToggleCollapsed?: () => void
 }
 
-export function Filters({ onFilterChange }: FiltersProps) {
+export function Filters({ onFilterChange, collapsed: collapsedProp, onToggleCollapsed }: FiltersProps) {
   const { t } = useI18n()
   const [filters, setFilters] = useState<FiltersState>(DEFAULT_FILTERS)
-  const [collapsed, setCollapsed] = useState(false)
+  const [internalCollapsed, setInternalCollapsed] = useState(false)
+  const collapsed = collapsedProp ?? internalCollapsed
+  const toggleCollapsed = onToggleCollapsed ?? (() => setInternalCollapsed((v) => !v))
 
   // Unique tag names (sorted by frequency) and dates, derived from the clip
   // list (fetched on mount).
@@ -98,33 +104,14 @@ export function Filters({ onFilterChange }: FiltersProps) {
 
   const hasActiveFilters = filters.date !== null || filters.roll_type !== null || filters.tag !== null
 
-  // Collapsed: a thin rail with an expand button (keeps the gallery roomy).
-  if (collapsed) {
-    return (
-      <div className="flex h-full w-11 shrink-0 flex-col items-center border-r border-[--border] bg-[--surface-1] py-4">
-        <button
-          onClick={() => setCollapsed(false)}
-          title={t('filters.expand')}
-          aria-label={t('filters.expand')}
-          className="relative rounded p-2 text-[--text-secondary] hover:bg-[--surface-2] hover:text-[--text-primary]"
-        >
-          <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24">
-            <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3.75 6h16.5M6.75 12h10.5m-7.5 6h4.5" />
-          </svg>
-          {hasActiveFilters && (
-            <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-[--primary]" />
-          )}
-        </button>
-      </div>
-    )
-  }
+  if (collapsed) return null
 
   return (
     <div className="flex h-full w-60 shrink-0 flex-col gap-5 overflow-y-auto border-r border-[--border] bg-[--surface-1] p-4">
       <div className="flex items-center justify-between">
         <h2 className="text-sm font-semibold tracking-tight text-[--text-primary]">{t('filters.title')}</h2>
         <button
-          onClick={() => setCollapsed(true)}
+          onClick={toggleCollapsed}
           title={t('filters.collapse')}
           aria-label={t('filters.collapse')}
           className="rounded p-1 text-[--text-muted] hover:bg-[--surface-2] hover:text-[--text-primary]"

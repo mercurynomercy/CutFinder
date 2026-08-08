@@ -91,4 +91,19 @@ describe('Filters', () => {
     render(<Filters onFilterChange={() => {}} />)
     expect(screen.queryByPlaceholderText('Search clips…')).not.toBeInTheDocument()
   })
+
+  it('renders nothing visible and calls onToggleCollapsed when controlled collapsed=true', () => {
+    const onToggle = vi.fn()
+    render(<Filters onFilterChange={() => {}} collapsed onToggleCollapsed={onToggle} />)
+    expect(screen.queryByText('Filters')).not.toBeInTheDocument()
+  })
+
+  it('calls onToggleCollapsed (not internal state) when the collapse button is clicked in controlled mode', async () => {
+    const onToggle = vi.fn()
+    render(<Filters onFilterChange={() => {}} collapsed={false} onToggleCollapsed={onToggle} />)
+    await userEvent.click(screen.getByLabelText('Collapse filters'))
+    expect(onToggle).toHaveBeenCalledTimes(1)
+    // Still rendered — collapse is controlled by the parent, not internal state.
+    expect(screen.getByText('Filters')).toBeInTheDocument()
+  })
 })
