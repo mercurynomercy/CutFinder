@@ -358,12 +358,6 @@ export default function App() {
     }
   }
 
-  // handleCleanupLibrary/handleSuggestAllKeyframes have no header trigger anymore
-  // (their buttons moved out with the overflow menu) — Settings gets them as
-  // props in a later task. Referenced here only to keep them alive for that.
-  void handleCleanupLibrary
-  void handleSuggestAllKeyframes
-
   // Launcher (主目录) — CutFinder's entry screen; shown before anything else.
   if (showLauncher) {
     return <LauncherPage theme={theme} onToggleTheme={toggleTheme} onNavigate={handleNavigate} />
@@ -376,7 +370,31 @@ export default function App() {
 
   // Settings view (full-screen, replaces main layout)
   if (showSettings) {
-    return <SettingsPage onSave={() => { setShowSettings(false); refreshClips() }} />
+    return (
+      <>
+        <SettingsPage
+          onSave={() => { setShowSettings(false); refreshClips() }}
+          onSuggestAllKeyframes={handleSuggestAllKeyframes}
+          onCleanupLibrary={handleCleanupLibrary}
+          onShowLogs={() => setShowLogs(true)}
+        />
+
+        {/* Ambient toast host — cleanup/keyframe actions raise toasts via this. */}
+        <JobsPanel activeJobId={activeJobId} />
+
+        {/* Backend log viewer (modal) */}
+        <LogModal open={showLogs} onClose={() => setShowLogs(false)} />
+
+        {/* Library cleanup: confirm deletion of orphaned catalog entries */}
+        <ConfirmDialog
+          open={confirmCleanup}
+          title={t('settings.cleanupDeleted')}
+          message={t('settings.cleanupConfirm', { n: orphanIds.length })}
+          onConfirm={handleConfirmCleanup}
+          onCancel={() => { setConfirmCleanup(false); setOrphanIds([]) }}
+        />
+      </>
+    )
   }
 
   // Jobs queue view (full-screen, replaces main layout)
@@ -557,9 +575,6 @@ export default function App() {
         <DetailPanel clipId={selectedClipId} onClose={() => setSelectedClipId(null)} onOpenPath={handleOpenPath} />
       </div>
 
-      {/* Backend log viewer (modal) */}
-      <LogModal open={showLogs} onClose={() => setShowLogs(false)} />
-
       {/* Pause→resume scan confirmation dialog */}
       <ConfirmDialog
         open={confirmPause}
@@ -567,15 +582,6 @@ export default function App() {
         message={t('scan.pausedConfirm')}
         onConfirm={handleConfirmResume}
         onCancel={handleCancelResume}
-      />
-
-      {/* Library cleanup: confirm deletion of orphaned catalog entries */}
-      <ConfirmDialog
-        open={confirmCleanup}
-        title={t('settings.cleanupDeleted')}
-        message={t('settings.cleanupConfirm', { n: orphanIds.length })}
-        onConfirm={handleConfirmCleanup}
-        onCancel={() => { setConfirmCleanup(false); setOrphanIds([]) }}
       />
     </div>
   )

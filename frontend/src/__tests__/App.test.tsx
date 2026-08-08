@@ -1,7 +1,7 @@
 /** App-level tests for the top bar and launcher-loading navigation. */
 
-import { describe, it, expect } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { describe, it, expect, vi } from 'vitest'
+import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
 
@@ -56,5 +56,52 @@ describe('App — filters sidebar collapse', () => {
     await userEvent.click(await screen.findByLabelText('Collapse filters'))
     expect(await screen.findByLabelText('Expand filters')).toBeInTheDocument()
     expect(screen.queryByText('Filters')).not.toBeInTheDocument()
+  })
+})
+
+describe('App — library cleanup from Settings', () => {
+  it('finds orphaned entries and deletes them after confirmation', async () => {
+    let deletedIds: number[] | null = null
+    server.use(
+      http.get(`${API}/library/orphans`, () =>
+        HttpResponse.json({
+          library_reachable: true,
+          orphans: [{ id: 3, source_path: '/s/x.mp4', library_path: '/l/x.mp4', roll_type: 'b' }],
+        }),
+      ),
+      http.post(`${API}/library/orphans/delete`, async ({ request }) => {
+        deletedIds = (await request.json() as { clip_ids: number[] }).clip_ids
+        return HttpResponse.json({ deleted: deletedIds.length })
+      }),
+    )
+
+    render(<App />)
+    await userEvent.click(await screen.findByRole('button', { name: /library/i }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Settings' }))
+    await userEvent.click(await screen.findByRole('button', { name: /clean up deleted files/i }))
+    await userEvent.click(await screen.findByRole('button', { name: 'OK' }))
+
+    await waitFor(() => expect(deletedIds).toEqual([3]))
+  })
+
+  it('skips deletion and shows a notice when the library is unreachable', async () => {
+    const delHit = vi.fn()
+    server.use(
+      http.get(`${API}/library/orphans`, () =>
+        HttpResponse.json({ library_reachable: false, orphans: [] }),
+      ),
+      http.post(`${API}/library/orphans/delete`, () => {
+        delHit()
+        return HttpResponse.json({ deleted: 0 })
+      }),
+    )
+
+    render(<App />)
+    await userEvent.click(await screen.findByRole('button', { name: /library/i }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Settings' }))
+    await userEvent.click(await screen.findByRole('button', { name: /clean up deleted files/i }))
+
+    expect(await screen.findByText(/unreachable/i)).toBeInTheDocument()
+    expect(delHit).not.toHaveBeenCalled()
   })
 })
