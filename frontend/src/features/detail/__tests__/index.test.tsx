@@ -69,4 +69,23 @@ describe('DetailPanel', () => {
     // Re-analyze action (icon button)
     expect(screen.getByRole('button', { name: 'Re-analyze' })).toBeInTheDocument()
   })
+
+  it('renders the Transcript section open by default when a clip has transcript data', async () => {
+    server.use(
+      http.get('http://localhost:5080/api/clips/:id', ({ params }) =>
+        HttpResponse.json({
+          id: Number(params.id), source_path: '/m/v.mp4', library_path: null,
+          roll_type: 'a', roll_source: 'auto', summary: 'sum', description: null,
+          duration_s: 10, width: null, height: null, fps: null, codec: null,
+          thumbnail_path: null, status: 'done', error: null, capture_time: null,
+          date_source: 'embedded', tags: [],
+          transcript: { full_text: 'hello world', segments: [] },
+        }),
+      ),
+    )
+    render(<DetailPanel clipId={1} onClose={() => {}} />)
+    const transcriptText = await screen.findByText('hello world')
+    // <details open> — the <summary>'s parent <details> must have the `open` attribute.
+    expect(transcriptText.closest('details')).toHaveAttribute('open')
+  })
 })

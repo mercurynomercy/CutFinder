@@ -102,11 +102,12 @@ function TagEditor({ tags, onUpdate }: TagEditorProps) {
 interface AccordionProps {
   title: string
   children: React.ReactNode
+  defaultOpen?: boolean
 }
 
-function Accordion({ title, children }: AccordionProps) {
+function Accordion({ title, children, defaultOpen = false }: AccordionProps) {
   return (
-    <details className="group">
+    <details className="group" open={defaultOpen}>
       <summary className="flex cursor-pointer list-none items-center gap-1 text-xs font-medium uppercase tracking-wider text-[--text-muted] transition-colors hover:text-[--text-secondary]">
         <svg className="h-3 w-3 shrink-0 transition-transform group-open:rotate-90" fill="none" viewBox="0 0 24 24">
           <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
@@ -129,7 +130,7 @@ function TranscriptSection({ data }: TranscriptSectionProps) {
   if (!data || !data.full_text.trim()) return null
 
   return (
-    <Accordion title={t('detail.transcript')}>
+    <Accordion title={t('detail.transcript')} defaultOpen>
       <div className="text-sm leading-relaxed text-[--text-secondary]">
         {data.full_text}
 
