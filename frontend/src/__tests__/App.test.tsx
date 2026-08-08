@@ -47,3 +47,14 @@ describe('App — navigating from the launcher while clips are still loading', (
     resolveClips([])
   })
 })
+
+describe('App — filters sidebar collapse', () => {
+  it('shows an "expand filters" button in the gallery toolbar once the sidebar is collapsed', async () => {
+    render(<App />)
+    await userEvent.click(await screen.findByRole('button', { name: /library/i }))
+
+    await userEvent.click(await screen.findByLabelText('Collapse filters'))
+    expect(await screen.findByLabelText('Expand filters')).toBeInTheDocument()
+    expect(screen.queryByText('Filters')).not.toBeInTheDocument()
+  })
+})

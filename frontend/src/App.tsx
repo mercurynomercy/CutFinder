@@ -58,6 +58,7 @@ export default function App() {
   const [collapsedDates, setCollapsedDates] = useState<Set<string>>(new Set())
   const [searchQuery, setSearchQuery] = useState('')
   const [theme, setTheme] = useState<Theme>(getStoredTheme)
+  const [filtersCollapsed, setFiltersCollapsed] = useState(false)
 
   // Confirmation dialog for pause→resume scan (WKWebView has no window.confirm).
   const [confirmPause, setConfirmPause] = useState(false)
@@ -482,13 +483,32 @@ export default function App() {
         {/* Sidebar: filters + gallery */}
         <div className="flex min-h-0 w-full overflow-hidden">
           {/* Filters sidebar (fixed width) — also hosts the search box */}
-          <Filters onFilterChange={handleFilterChange} />
+          <Filters
+            onFilterChange={handleFilterChange}
+            collapsed={filtersCollapsed}
+            onToggleCollapsed={() => setFiltersCollapsed((v) => !v)}
+          />
 
           {/* Gallery column: sort toolbar + scrollable grid */}
           <div className="flex min-h-0 min-w-0 flex-1 flex-col">
             <div className="flex h-11 shrink-0 items-center justify-between border-b border-[--border] px-4">
-              <span className="text-xs text-[--text-muted]">{t('gallery.clipsCount', { n: sortedClips.length })}</span>
+              <div className="flex items-center gap-2">
+                {filtersCollapsed && (
+                  <button
+                    onClick={() => setFiltersCollapsed(false)}
+                    title={t('filters.expand')}
+                    aria-label={t('filters.expand')}
+                    className="rounded p-1 text-[--text-muted] hover:bg-[--surface-2] hover:text-[--text-primary]"
+                  >
+                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" aria-hidden="true">
+                      <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3.75 6h16.5M6.75 12h10.5m-7.5 6h4.5" />
+                    </svg>
+                  </button>
+                )}
+                <span className="text-xs text-[--text-muted]">{t('gallery.clipsCount', { n: sortedClips.length })}</span>
+              </div>
               <div className="flex items-center gap-3">
+
                 <button
                   onClick={toggleAllDates}
                   className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs text-[--text-muted] transition-colors hover:bg-[--surface-2] hover:text-[--text-primary]"
