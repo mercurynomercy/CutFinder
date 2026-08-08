@@ -21,9 +21,6 @@ import { useI18n } from '@/i18n'
 
 const basename = (p: string) => p.split('/').pop() || p
 
-// Format a seconds count as m:ss for the elapsed timer.
-const mmss = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
-
 // Percent at which the backend switches from vocal separation to transcription.
 // Mirrors `_SEPARATION_WEIGHT` (0.4) in the backend mlx_whisper.py adapter.
 const SEPARATION_WEIGHT_PCT = 40
@@ -69,7 +66,6 @@ export function SubtitlesPage({ onClose }: SubtitlesPageProps) {
   const [phase, setPhase] = useState<Phase>('idle')
   const [files, setFiles] = useState<string[]>([])
   const [jobId, setJobId] = useState<number | null>(null)
-  const [elapsed, setElapsed] = useState(0)
   const [progress, setProgress] = useState(0)
   // True when the speech model wasn't on disk at export time: the first export
   // blocks on a multi-GB download before transcription can start, so we surface
@@ -101,15 +97,6 @@ export function SubtitlesPage({ onClose }: SubtitlesPageProps) {
     return () => { cancelled = true }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
-
-  // Tick an elapsed timer while a job is running so the user sees it's working
-  // (Whisper transcription of a long video can take minutes with no sub-step).
-  useEffect(() => {
-    if (phase !== 'running') return
-    setElapsed(0)
-    const id = setInterval(() => setElapsed((s) => s + 1), 1000)
-    return () => clearInterval(id)
-  }, [phase])
 
   const formats = [itt ? 'itt' : null, srt ? 'srt' : null].filter(Boolean) as string[]
   const canExport = Boolean(videoPath) && Boolean(outDir) && formats.length > 0 && phase !== 'running'
@@ -332,34 +319,11 @@ export function SubtitlesPage({ onClose }: SubtitlesPageProps) {
             <p className="text-xs text-[--text-muted] leading-relaxed">{t('subtitles.minDurationDesc')}</p>
           </div>
 
-          {/* ── Progress (determinate, two phases: separation → transcription) ─ */}
-          {phase === 'running' && (
-            <div className="rounded-lg border border-[--border] bg-[--surface-1] p-4">
-              <div className="flex items-center justify-between gap-3">
-                <span className="flex items-center gap-2 text-sm font-medium text-[--text-primary]">
-                  <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-[1.5px] border-[--primary] border-t-transparent" />
-                  {t(
-                    modelDownloading
-                      ? 'subtitles.phaseDownloadingModel'
-                      : progress < SEPARATION_WEIGHT_PCT
-                        ? 'subtitles.phaseSeparating'
-                        : 'subtitles.phaseTranscribing',
-                  )}
-                </span>
-                <span className="number-tabular text-xs text-[--text-muted]">
-                  {t('subtitles.elapsed', { time: mmss(elapsed) })}
-                </span>
-              </div>
-              <div className="mt-3 flex items-center gap-3">
-                <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-[--surface-3]">
-                  <div className="h-full rounded-full bg-[--primary] transition-all duration-500 ease-out" style={{ width: `${progress}%` }} />
-                </div>
-                <span className="tabular-nums text-xs text-[--text-secondary]">{Math.round(progress)}%</span>
-              </div>
-              <p className="mt-2 text-xs text-[--text-muted]">
-                {t(modelDownloading ? 'subtitles.downloadingModelHint' : 'subtitles.progressHint')}
-              </p>
-            </div>
+          {/* ── Model download notice (shown in content while model loads) ─ */}
+          {phase === 'running' && modelDownloading && (
+            <p className="text-xs text-[--text-muted]">
+              {t('subtitles.downloadingModelHint')}
+            </p>
           )}
 
           {/* ── Result ────────────────────────────── */}
@@ -385,21 +349,44 @@ export function SubtitlesPage({ onClose }: SubtitlesPageProps) {
       </div>
 
       {/* ── Footer ──────────────────────────────── */}
-      <footer className="shrink-0 border-t border-[--border] bg-[--surface-1] px-6 py-3 flex items-center justify-between">
-        <span className="text-xs text-[--text-muted]">
-          {phase === 'running' ? t('subtitles.exporting') : statusText}
-        </span>
-        <div className="flex gap-2">
-          <Button variant="secondary" onClick={onClose}>
-            {t('subtitles.close')}
-          </Button>
-          <button
-            onClick={handleExport}
-            disabled={!canExport}
-            className="h-9 px-5 flex items-center justify-center text-sm font-medium rounded-md bg-[--primary] text-[--primary-fg] hover:bg-[--primary-hover] transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:pointer-events-none"
-          >
-            {phase === 'running' ? t('subtitles.exporting') : t('subtitles.export')}
-          </button>
+      <footer className="shrink-0 border-t border-[--border] bg-[--surface-1] px-6 py-3 flex flex-col gap-2">
+        {/* Progress bar in footer — visible during export */}
+        {phase === 'running' && (
+          <div className="flex flex-col gap-1">
+            <div className="h-[4px] flex-1 overflow-hidden rounded-[2px] bg-[--surface-3]">
+              <div className="h-full rounded-[2px] bg-[--primary] transition-all duration-300 ease-out" style={{ width: `${progress}%` }} />
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-[--text-muted]">
+                {t(
+                  modelDownloading
+                    ? 'subtitles.phaseDownloadingModel'
+                    : progress < SEPARATION_WEIGHT_PCT
+                      ? 'subtitles.phaseSeparating'
+                      : 'subtitles.phaseTranscribing',
+                )}
+              </span>
+              <span className="font-mono text-xs text-[--text-muted]">{Math.round(progress)}%</span>
+            </div>
+          </div>
+        )}
+        {/* Buttons row — hidden during export */}
+        <div className={`flex items-center justify-between ${phase === 'running' ? 'invisible' : ''}`}>
+          <span className="text-xs text-[--text-muted]">
+            {statusText}
+          </span>
+          <div className="flex gap-2">
+            <Button variant="secondary" onClick={onClose}>
+              {t('subtitles.close')}
+            </Button>
+            <button
+              onClick={handleExport}
+              disabled={!canExport}
+              className="h-9 px-5 flex items-center justify-center text-sm font-medium rounded-md bg-[--primary] text-[--primary-fg] hover:bg-[--primary-hover] transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:pointer-events-none"
+            >
+              {t('subtitles.export')}
+            </button>
+          </div>
         </div>
       </footer>
     </div>
