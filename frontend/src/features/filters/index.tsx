@@ -18,6 +18,22 @@ function clipDate(c: { capture_time?: string | null; created_at?: string }): str
   return localDateKey(c.capture_time || c.created_at)
 }
 
+interface MonthGroup { month: string; count: number; days: { date: string; count: number }[] }
+
+/** Group sorted YYYY-MM-DD dates into month buckets (newest month first), carrying per-date counts. */
+function groupDatesByMonth(dates: string[], counts: Map<string, number>): MonthGroup[] {
+  const byMonth = new Map<string, { date: string; count: number }[]>()
+  for (const d of dates) {
+    const month = d.slice(0, 7)
+    const list = byMonth.get(month) ?? []
+    list.push({ date: d, count: counts.get(d) ?? 0 })
+    byMonth.set(month, list)
+  }
+  return [...byMonth.entries()]
+    .sort((a, b) => b[0].localeCompare(a[0]))
+    .map(([month, days]) => ({ month, count: days.reduce((sum, d) => sum + d.count, 0), days }))
+}
+
 // ── Filter state interface (mirrors ClipFilter) ────────────────
 
 export interface FiltersState {
@@ -50,6 +66,8 @@ export function Filters({ onFilterChange, collapsed: collapsedProp, onToggleColl
   // list (fetched on mount).
   const [allTags, setAllTags] = useState<string[]>([])
   const [allDates, setAllDates] = useState<string[]>([])
+  const [dateCounts, setDateCounts] = useState<Map<string, number>>(new Map())
+  const [expandedMonths, setExpandedMonths] = useState<Set<string>>(new Set())
 
   // Tag list controls (the list can grow into the hundreds).
   const [tagQuery, setTagQuery] = useState('')
@@ -61,20 +79,21 @@ export function Filters({ onFilterChange, collapsed: collapsedProp, onToggleColl
       .then((clips) => {
         if (cancelled) return
         const tagCounts = new Map<string, number>()
-        const dates = new Set<string>()
+        const dateCountMap = new Map<string, number>()
         for (const c of clips) {
           c.tags?.forEach((t) => tagCounts.set(t.name, (tagCounts.get(t.name) ?? 0) + 1))
           const d = clipDate(c)
-          if (d) dates.add(d)
+          if (d) dateCountMap.set(d, (dateCountMap.get(d) ?? 0) + 1)
         }
         // Most-used tags first, then alphabetical — surfaces the useful ones.
         const sorted = [...tagCounts.keys()].sort(
           (a, b) => (tagCounts.get(b)! - tagCounts.get(a)!) || a.localeCompare(b),
         )
         setAllTags(sorted)
-        setAllDates([...dates].sort().reverse()) // newest first
+        setAllDates([...dateCountMap.keys()].sort().reverse()) // newest first
+        setDateCounts(dateCountMap)
       })
-      .catch(() => { setAllTags([]); setAllDates([]) })
+      .catch(() => { setAllTags([]); setAllDates([]); setDateCounts(new Map()) })
 
     return () => { cancelled = true }
   }, [])
@@ -101,6 +120,11 @@ export function Filters({ onFilterChange, collapsed: collapsedProp, onToggleColl
     setFilters(DEFAULT_FILTERS)
     onFilterChange({ ...DEFAULT_FILTERS })
   }
+
+  // Keep the selected date's month expanded (e.g. a filter set before this mount).
+  useEffect(() => {
+    if (filters.date) setExpandedMonths((prev) => new Set(prev).add(filters.date!.slice(0, 7)))
+  }, [filters.date])
 
   const hasActiveFilters = filters.date !== null || filters.roll_type !== null || filters.tag !== null
 
@@ -169,21 +193,61 @@ export function Filters({ onFilterChange, collapsed: collapsedProp, onToggleColl
         </div>
       </div>
 
-      {/* ── Date filter (accordion) ─────────────────────── */}
+      {/* ── Date filter (month-grouped accordion) ───────── */}
       <div>
         <label className="mb-2 block text-xs font-medium uppercase tracking-wider text-[--text-muted]">
           {t('filters.date')}
         </label>
-        <select
-          value={filters.date ?? ''}
-          onChange={(e) => updateFilter('date', e.target.value || null)}
-          className="w-full rounded-md border border-[--border] bg-[--surface-2] px-3 py-1.5 text-xs text-[--text-primary] outline-none transition-colors focus:border-[--primary]"
-        >
-          <option value="">{t('filters.allDates')}</option>
-          {allDates.map((d) => (
-            <option key={d} value={d}>{d}</option>
-          ))}
-        </select>
+        {allDates.length === 0 ? (
+          <p className="text-xs text-[--text-muted]">{t('filters.noDates')}</p>
+        ) : (
+          <div className="space-y-0.5">
+            {groupDatesByMonth(allDates, dateCounts).map(({ month, count, days }) => {
+              const isOpen = expandedMonths.has(month)
+              return (
+                <div key={month}>
+                  <button
+                    type="button"
+                    onClick={() => setExpandedMonths((prev) => {
+                      const next = new Set(prev)
+                      next.has(month) ? next.delete(month) : next.add(month)
+                      return next
+                    })}
+                    aria-expanded={isOpen}
+                    className="flex w-full items-center justify-between rounded px-1.5 py-1 text-xs text-[--text-secondary] hover:bg-[--surface-2]"
+                  >
+                    <span className="flex items-center gap-1">
+                      <svg className={`h-3 w-3 transition-transform ${isOpen ? 'rotate-90' : ''}`} fill="none" viewBox="0 0 24 24" aria-hidden="true">
+                        <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      </svg>
+                      {month}
+                    </span>
+                    <span className="text-[--text-muted]" aria-hidden="true">{count}</span>
+                  </button>
+                  {isOpen && (
+                    <div className="ml-4 space-y-0.5">
+                      {days.map(({ date, count: dayCount }) => (
+                        <button
+                          key={date}
+                          type="button"
+                          onClick={() => updateFilter('date', filters.date === date ? null : date)}
+                          className={`flex w-full items-center justify-between rounded px-1.5 py-1 text-xs transition-colors ${
+                            filters.date === date
+                              ? 'bg-[--primary-soft] text-[--primary]'
+                              : 'text-[--text-secondary] hover:bg-[--surface-2]'
+                          }`}
+                        >
+                          <span>{date}</span>
+                          <span className="text-[--text-muted]" aria-hidden="true">{dayCount}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        )}
       </div>
 
       {/* ── Tag filter (searchable, capped chips) ───────── */}

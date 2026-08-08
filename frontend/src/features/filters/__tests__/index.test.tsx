@@ -23,6 +23,19 @@ function mockManyTags(count: number) {
   )
 }
 
+/** Override GET /api/clips with clips spread across two months. */
+function mockDatedClips() {
+  server.use(
+    http.get('http://localhost:5080/api/clips', () =>
+      HttpResponse.json([
+        { id: 1, source_path: '/a.mp4', roll_type: 'a', duration_s: 1, thumbnail_path: null, status: 'done', tags: [], capture_time: '2016-08-31T00:00:00Z' },
+        { id: 2, source_path: '/b.mp4', roll_type: 'a', duration_s: 1, thumbnail_path: null, status: 'done', tags: [], capture_time: '2016-08-31T00:00:00Z' },
+        { id: 3, source_path: '/c.mp4', roll_type: 'a', duration_s: 1, thumbnail_path: null, status: 'done', tags: [], capture_time: '2016-07-01T00:00:00Z' },
+      ]),
+    ),
+  )
+}
+
 describe('Filters', () => {
   it('renders the heading and roll-type buttons', () => {
     render(<Filters onFilterChange={() => {}} />)
@@ -113,5 +126,27 @@ describe('Filters', () => {
     expect(onToggle).toHaveBeenCalledTimes(1)
     // Still rendered — collapse is controlled by the parent, not internal state.
     expect(screen.getByText('Filters')).toBeInTheDocument()
+  })
+
+  it('groups dates by month with a per-month count, collapsed by default', async () => {
+    mockDatedClips()
+    render(<Filters onFilterChange={() => {}} />)
+    expect(await screen.findByRole('button', { name: /2016-08/ })).toHaveTextContent('2')
+    expect(screen.queryByRole('button', { name: '2016-08-31' })).not.toBeInTheDocument()
+  })
+
+  it('expands a month to reveal its days, and selecting a day filters by exact date', async () => {
+    mockDatedClips()
+    const onChange = vi.fn()
+    render(<Filters onFilterChange={onChange} />)
+    await userEvent.click(await screen.findByRole('button', { name: /2016-08/ }))
+    const dayBtn = await screen.findByRole('button', { name: '2016-08-31' })
+    await userEvent.click(dayBtn)
+    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ date: '2016-08-31' }))
+  })
+
+  it('shows the "no dates" message when there are no clips', () => {
+    render(<Filters onFilterChange={() => {}} />)
+    expect(screen.getByText('No dates yet')).toBeInTheDocument()
   })
 })
