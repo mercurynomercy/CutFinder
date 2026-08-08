@@ -3,7 +3,7 @@
  * Behavior-focused (rendered text/values + network calls), not exact classes.
  */
 
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
@@ -138,5 +138,27 @@ describe('SettingsPage', () => {
     render(<SettingsPage />)
     await userEvent.click(await screen.findByRole('button', { name: /测试连接|Test connection/ }))
     expect(await screen.findByText(/Invalid API key/)).toBeInTheDocument()
+  })
+
+  it('renders a Maintenance section that calls the three callback props', async () => {
+    const onSuggest = vi.fn()
+    const onCleanup = vi.fn()
+    const onLogs = vi.fn()
+    render(
+      <SettingsPage
+        onSuggestAllKeyframes={onSuggest}
+        onCleanupLibrary={onCleanup}
+        onShowLogs={onLogs}
+      />,
+    )
+
+    await userEvent.click(await screen.findByRole('button', { name: /suggest keyframes for all clips/i }))
+    expect(onSuggest).toHaveBeenCalledTimes(1)
+
+    await userEvent.click(screen.getByRole('button', { name: /clean up deleted files/i }))
+    expect(onCleanup).toHaveBeenCalledTimes(1)
+
+    await userEvent.click(screen.getByRole('button', { name: /backend logs/i }))
+    expect(onLogs).toHaveBeenCalledTimes(1)
   })
 })

@@ -360,6 +360,10 @@ const en = {
   'settings.cleanupUnreachable': 'The library folder is unreachable (e.g. an external drive is unmounted). Skipped to avoid wiping the catalog.',
   'settings.cleanupConfirm': '{n} catalog entr(ies) point to files that no longer exist. Delete these entries (and their thumbnails/keyframes)? Source files are not affected.',
   'settings.cleanupDone': 'Removed {n} entr(ies).',
+  'settings.maintenanceTitle': 'Maintenance',
+  'settings.maintenanceDesc': 'Utility actions that used to live in the header menu.',
+  'settings.suggestAllKeyframes': 'Suggest keyframes for all clips',
+  'settings.suggestAllKeyframesDesc': 'Runs keyframe suggestion for every clip that doesn\'t have one yet.',
   'confirm.confirm': 'OK',
   'confirm.cancel': 'Cancel',
 } as const
@@ -685,6 +689,10 @@ const zh: Record<Key, string> = {
   'settings.cleanupUnreachable': '素材库目录不可达（例如外接盘未挂载）。已跳过，以免误删整个目录。',
   'settings.cleanupConfirm': '有 {n} 条目录记录指向的文件已不存在。删除这些记录（及其缩略图/关键帧）？原始文件不受影响。',
   'settings.cleanupDone': '已清理 {n} 条记录。',
+  'settings.maintenanceTitle': '维护',
+  'settings.maintenanceDesc': '这些是原来放在顶栏菜单里的工具操作。',
+  'settings.suggestAllKeyframes': '为所有片段生成关键帧建议',
+  'settings.suggestAllKeyframesDesc': '为所有还没有关键帧建议的片段批量生成。',
   'confirm.confirm': '确定',
   'confirm.cancel': '取消',
 }

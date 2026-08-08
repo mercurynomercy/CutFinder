@@ -104,9 +104,15 @@ function ExtensionTag({ value, onRemove }: { value: string; onRemove: () => void
 export interface SettingsPageProps {
   /** Called when settings are successfully saved. */
   onSave?: () => void
+  /** Called to trigger keyframe suggestion for every clip missing one. */
+  onSuggestAllKeyframes?: () => void
+  /** Called to open the library-cleanup confirmation flow. */
+  onCleanupLibrary?: () => void
+  /** Called to open the backend logs modal. */
+  onShowLogs?: () => void
 }
 
-export function SettingsPage({ onSave }: SettingsPageProps) {
+export function SettingsPage({ onSave, onSuggestAllKeyframes, onCleanupLibrary, onShowLogs }: SettingsPageProps) {
   const { t, lang, setLang } = useI18n()
   const [prefs, setPrefs] = useState<UpdateSettingsBody | null>(null)
   const [loading, setLoading] = useState(true)
@@ -705,6 +711,23 @@ export function SettingsPage({ onSave }: SettingsPageProps) {
           </div>
 
         </form>
+
+        {/* ── Maintenance (relocated from the old header overflow menu) ─── */}
+        <fieldset className="rounded-lg border border-[--border] bg-[--surface-1] p-4">
+          <legend className="text-sm font-medium text-[--text-primary]">{t('settings.maintenanceTitle')}</legend>
+          <p className="mt-1 text-xs leading-relaxed text-[--text-secondary]">{t('settings.maintenanceDesc')}</p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Button type="button" variant="secondary" size="sm" onClick={() => onSuggestAllKeyframes?.()}>
+              {t('settings.suggestAllKeyframes')}
+            </Button>
+            <Button type="button" variant="secondary" size="sm" onClick={() => onCleanupLibrary?.()}>
+              {t('settings.cleanupDeleted')}
+            </Button>
+            <Button type="button" variant="secondary" size="sm" onClick={() => onShowLogs?.()}>
+              {t('app.logs')}
+            </Button>
+          </div>
+        </fieldset>
 
         {/* ── Save button — full width, below grid ─────────── */}
         <div className="flex justify-end pt-4">
