@@ -10,7 +10,6 @@ Usage:
 import { useEffect, useState } from 'react'
 
 import { api } from '@/api/client'
-import { Search } from '@/features/search'
 import { localDateKey } from '@/lib/date'
 import { useI18n } from '@/i18n'
 
@@ -34,11 +33,9 @@ const DEFAULT_FILTERS: FiltersState = { date: null, roll_type: null, tag: null }
 export interface FiltersProps {
   /** Called whenever any filter changes; receives the full filters object. */
   onFilterChange: (filters: FiltersState) => void
-  /** Called with the current search query (the search box lives in the sidebar). */
-  onSearch?: (query: string) => void
 }
 
-export function Filters({ onFilterChange, onSearch }: FiltersProps) {
+export function Filters({ onFilterChange }: FiltersProps) {
   const { t } = useI18n()
   const [filters, setFilters] = useState<FiltersState>(DEFAULT_FILTERS)
   const [collapsed, setCollapsed] = useState(false)
@@ -123,7 +120,7 @@ export function Filters({ onFilterChange, onSearch }: FiltersProps) {
   }
 
   return (
-    <div className="flex h-full w-64 shrink-0 flex-col gap-5 overflow-y-auto border-r border-[--border] bg-[--surface-1] p-4">
+    <div className="flex h-full w-60 shrink-0 flex-col gap-5 overflow-y-auto border-r border-[--border] bg-[--surface-1] p-4">
       <div className="flex items-center justify-between">
         <h2 className="text-sm font-semibold tracking-tight text-[--text-primary]">{t('filters.title')}</h2>
         <button
@@ -137,9 +134,6 @@ export function Filters({ onFilterChange, onSearch }: FiltersProps) {
           </svg>
         </button>
       </div>
-
-      {/* ── Search box ───────────────────────────────────── */}
-      {onSearch && <Search onSearch={onSearch} />}
 
       {/* ── Roll type filter ─────────────────────────────── */}
       <div>

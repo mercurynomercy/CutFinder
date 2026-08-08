@@ -86,4 +86,9 @@ describe('Filters', () => {
 
     expect(onChange).toHaveBeenLastCalledWith({ date: null, roll_type: null, tag: null })
   })
+
+  it('does not render its own search box (search lives in the top bar now)', () => {
+    render(<Filters onFilterChange={() => {}} />)
+    expect(screen.queryByPlaceholderText('Search clips…')).not.toBeInTheDocument()
+  })
 })

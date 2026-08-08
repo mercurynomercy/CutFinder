@@ -555,7 +555,7 @@ export default function App() {
         {/* Sidebar: filters + gallery */}
         <div className="flex min-h-0 w-full overflow-hidden">
           {/* Filters sidebar (fixed width) — also hosts the search box */}
-          <Filters onFilterChange={handleFilterChange} onSearch={handleSearch} />
+          <Filters onFilterChange={handleFilterChange} />
 
           {/* Gallery column: sort toolbar + scrollable grid */}
           <div className="flex min-h-0 min-w-0 flex-1 flex-col">
