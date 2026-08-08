@@ -38,9 +38,9 @@ describe('ThumbnailCard', () => {
     expect(screen.getByText('vlog.mp4')).toBeInTheDocument()
   })
 
-  it('shows a keyframe badge when hasKeyframes is set', () => {
+  it('does not show a keyframe badge, regardless of hasKeyframes', () => {
     const { rerender } = render(<ThumbnailCard {...baseProps} hasKeyframes />)
-    expect(screen.getByLabelText('Has cut suggestions')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Has cut suggestions')).not.toBeInTheDocument()
     rerender(<ThumbnailCard {...baseProps} hasKeyframes={false} />)
     expect(screen.queryByLabelText('Has cut suggestions')).not.toBeInTheDocument()
   })

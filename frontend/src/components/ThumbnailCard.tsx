@@ -101,24 +101,6 @@ const ThumbnailCard = React.forwardRef<HTMLDivElement, ThumbnailCardProps>(
             </div>
           )}
 
-          {/* Re-analyze button (top-left) — shown on hover, always for 'partial' */}
-          {onReanalyze && (
-            <button
-              onClick={(e) => { e.stopPropagation(); onReanalyze() }}
-              disabled={reanalyzing}
-              title={reanalyzing ? t('card.reanalyzing') : t('card.reanalyze')}
-              aria-label={t('card.reanalyze')}
-              className={cn(
-                'absolute left-2 top-2 rounded-md bg-black/60 p-1.5 text-white backdrop-blur-sm transition-opacity hover:bg-black/80 disabled:opacity-60',
-                reanalyzing || status === 'partial' ? 'opacity-100' : 'opacity-0 group-hover:opacity-100',
-              )}
-            >
-              <svg className={cn('h-4 w-4', reanalyzing && 'animate-spin')} fill="none" viewBox="0 0 24 24">
-                <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
-              </svg>
-            </button>
-          )}
-
           {/* Play / open button (centered) — shown on hover, opens the video */}
           {onOpen && (
             <button
@@ -143,25 +125,6 @@ const ThumbnailCard = React.forwardRef<HTMLDivElement, ThumbnailCardProps>(
                 <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 9v3.75m0 3.75h.008M10.34 3.94l-7.6 13.16A1.5 1.5 0 004.04 19.5h15.92a1.5 1.5 0 001.3-2.4L13.66 3.94a1.5 1.5 0 00-2.6 0z" />
               </svg>
               {t('card.partial')}
-            </div>
-          )}
-
-          {/* Keyframe-suggestions badge (top-right) — scissors mark */}
-          {hasKeyframes && (
-            <div
-              className={cn(
-                'absolute top-2 flex items-center rounded bg-black/60 p-1 text-white backdrop-blur-sm',
-                isSelected ? 'right-9' : 'right-2',  // make room for the selection check
-              )}
-              title={t('card.hasKeyframes')}
-              aria-label={t('card.hasKeyframes')}
-            >
-              <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" aria-hidden="true">
-                <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M20.2 6 3 11l-.9-2.4c-.3-1.1.3-2.2 1.3-2.5l13.5-4c1.1-.3 2.2.3 2.5 1.3Z" />
-                <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="m6.2 5.3 3.1 3.9" />
-                <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="m12.4 3.4 3.1 4" />
-                <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M3 11h18v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z" />
-              </svg>
             </div>
           )}
 
