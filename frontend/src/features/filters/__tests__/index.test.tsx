@@ -87,6 +87,14 @@ describe('Filters', () => {
     expect(onChange).toHaveBeenLastCalledWith({ date: null, roll_type: null, tag: null })
   })
 
+  it('renders an icon inside each type-filter button', () => {
+    render(<Filters onFilterChange={() => {}} />)
+    for (const name of ['All', 'A-roll', 'B-roll', 'Photo']) {
+      const btn = screen.getByRole('button', { name })
+      expect(btn.querySelector('svg')).toBeTruthy()
+    }
+  })
+
   it('does not render its own search box (search lives in the top bar now)', () => {
     render(<Filters onFilterChange={() => {}} />)
     expect(screen.queryByPlaceholderText('Search clips…')).not.toBeInTheDocument()

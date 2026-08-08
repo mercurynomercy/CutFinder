@@ -128,18 +128,40 @@ export function Filters({ onFilterChange, collapsed: collapsedProp, onToggleColl
           {t('filters.type')}
         </label>
         <div className="flex gap-1.5">
-          {([['all', t('filters.all')], ['a', 'A-roll'], ['b', 'B-roll'], ['photo', t('filters.photo')]] as const).map(([value, label]) => {
+          {([
+            ['all', t('filters.all'), (
+              <svg key="i" className="h-3 w-3" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
+                <rect x="1.5" y="1.5" width="4" height="4" rx="0.5" /><rect x="6.5" y="1.5" width="4" height="4" rx="0.5" />
+                <rect x="1.5" y="6.5" width="4" height="4" rx="0.5" /><rect x="6.5" y="6.5" width="4" height="4" rx="0.5" />
+              </svg>
+            )],
+            ['a', 'A-roll', (
+              <svg key="i" className="h-3 w-3" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true">
+                <path d="M6 1a1.5 1.5 0 0 0-1.5 1.5v2.5L3 6v3a1 1 0 0 0 1 1h4a1 1 0 0 0 1-1V6L7.5 5V2.5A1.5 1.5 0 0 0 6 1Z" />
+              </svg>
+            )],
+            ['b', 'B-roll', (
+              <svg key="i" className="h-3 w-3" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true">
+                <rect x="1.5" y="2" width="9" height="8" rx="1" />
+              </svg>
+            )],
+            ['photo', t('filters.photo'), (
+              <svg key="i" className="h-3 w-3" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true">
+                <rect x="1.5" y="2" width="9" height="8" rx="1" /><circle cx="4" cy="5" r="1" />
+                <path d="M1.5 9l3-3 2 2 2-2 2.5 2.5" />
+              </svg>
+            )],
+          ] as const).map(([value, label, icon]) => {
             const isActive = value === 'all' ? filters.roll_type === null : filters.roll_type === value
             return (
               <button
                 key={value}
                 onClick={() => updateFilter('roll_type', value === 'all' ? null : (value as 'a' | 'b' | 'photo'))}
-                className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
-                  isActive
-                    ? 'bg-[--primary] text-white'
-                    : 'text-[--text-secondary] hover:bg-[--surface-2]'
+                className={`flex flex-1 items-center justify-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
+                  isActive ? 'bg-[--primary] text-white' : 'text-[--text-secondary] hover:bg-[--surface-2]'
                 }`}
               >
+                {icon}
                 {label}
               </button>
             )
