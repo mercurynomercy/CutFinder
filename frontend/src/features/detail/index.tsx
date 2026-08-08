@@ -1,8 +1,8 @@
-/** Detail panel feature — right-side slide-in drawer.
+/** Detail panel feature — full-screen clip-detail view.
 
-Displays clip metadata, editable summary/description (with optimistic updates),
-tag editor (add/delete tags with source indicators), collapsible transcript section,
-A/B roll correction button, and re-analyze trigger with loading state.
+Displays clip metadata, read-only summary/description, tag editor (add/delete
+tags with source indicators), collapsible transcript section, A/B roll
+correction button, and re-analyze trigger with loading state.
 
 Usage:
   <DetailPanel clipId={clipId} onClose={() => setSelectedClip(null)} />
@@ -12,7 +12,7 @@ import React, { useCallback, useEffect, useState } from 'react'
 
 import type { ClipDetail, TagItem, TranscriptData } from '@/api/client'
 import { api } from '@/api/client'
-import { Badge, Chip } from '@/components/ChipBadge'
+import { Chip } from '@/components/ChipBadge'
 import { Button } from '@/components/Button'
 import { useI18n } from '@/i18n'
 
@@ -167,9 +167,6 @@ export function DetailPanel({ clipId, onClose, onOpenPath }: DetailPanelProps) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<Error | null>(null)
 
-  // Editing state
-  const [editSummary, setEditSummary] = useState('')
-  const [saving, setSaving] = useState(false)
   const [reanalyzing, setReanalyzing] = useState(false)
   const [suggesting, setSuggesting] = useState(false)
 
@@ -180,7 +177,6 @@ export function DetailPanel({ clipId, onClose, onOpenPath }: DetailPanelProps) {
     return api.getClip(id)
       .then((data) => {
         setClip(data)
-        setEditSummary(data.summary || '')
       })
       .catch((err: unknown) => {
         setError(err instanceof Error ? err : new Error(String(err)))
@@ -216,20 +212,6 @@ export function DetailPanel({ clipId, onClose, onOpenPath }: DetailPanelProps) {
     setClip(null)
     loadClip(clipId)
   }, [clipId, loadClip])
-
-  // Optimistic save summary/description
-  const handleSave = async () => {
-    if (!clip) return
-    setSaving(true)
-
-    try {
-      await api.updateClip(clip.id, { summary: editSummary })
-    } catch (err) {
-      console.error('Failed to save summary:', err)
-    } finally {
-      setSaving(false)
-    }
-  }
 
   // Trigger a re-analyze job, wait for it to finish, then refresh the panel.
   const runReanalyze = useCallback(async (id: number) => {
@@ -299,145 +281,106 @@ export function DetailPanel({ clipId, onClose, onOpenPath }: DetailPanelProps) {
 
   if (clipId === null || clipId === undefined) return null
 
-  // Wrapper that prevents clicks from bubbling into backdrop
-  const stopPropagation: React.MouseEventHandler = (e) => {
-    e.stopPropagation()
-  }
+  const displayFilename = clip ? (clip.library_path || clip.source_path).split('/').pop() || clip.source_path : ''
 
   return (
-    <div className="fixed inset-0 z-50 flex justify-end" role="dialog" aria-modal onClick={onClose}>
-      {/* Backdrop — catches clicks (outer div handles click-outside) */}
-      <div className="absolute inset-0 bg-black/50" />
+    <div className="flex h-screen w-full flex-col bg-[--bg-canvas] text-[--text-primary]">
+      {/* Top bar */}
+      <header className="flex h-14 shrink-0 items-center justify-between border-b border-[--border] bg-[--surface-1] px-6">
+        <h1 className="text-sm font-semibold text-[--text-primary]">{t('detail.pageTitle')}</h1>
+        <button
+          onClick={onClose}
+          className="rounded-md p-1.5 text-[--text-muted] hover:bg-[--surface-3] hover:text-[--text-primary]"
+          aria-label={t('detail.backToGallery')}
+          title={t('detail.backToGallery')}
+        >
+          <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24">
+            <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </header>
 
-      {/* Slide-in drawer — stops propagation so clicks inside don't close */}
-      <div
-        className="relative flex h-full w-[480px] max-w-full bg-[--surface-1] shadow-xl"
-        onClick={stopPropagation}
-      >
-        <div className="flex h-full w-full flex-col overflow-y-auto">
-          {loading ? (
-            <div className="flex items-center justify-center p-8">
-              <p className="text-[--text-muted]">{t('detail.loadingClip')}</p>
-            </div>
-          ) : error ? (
-            <div className="flex items-center justify-center p-8">
-              <p className="text-[--error]">{error.message}</p>
-            </div>
-          ) : clip ? (
-            <>
-              {/* ── Header: A/B roll label (left) + close (right) ── */}
-              <div className="flex items-center justify-between border-b border-[--border] px-5 py-3">
-                <Badge type={clip.roll_type === 'photo' ? 'photo' : clip.roll_type === 'b' ? 'b' : 'a'}>
-                  {clip.roll_type === 'photo' ? t('detail.photo') : clip.roll_type === 'b' ? 'B-roll' : 'A-roll'}
-                </Badge>
-                <button
-                  onClick={onClose}
-                  className="rounded p-1 text-[--text-muted] hover:text-[--text-primary]"
-                  aria-label={t('detail.closePanel')}
-                >
-                  <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24">
-                    <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
+      {loading ? (
+        <div className="flex flex-1 items-center justify-center">
+          <p className="text-[--text-muted]">{t('detail.loadingClip')}</p>
+        </div>
+      ) : error ? (
+        <div className="flex flex-1 items-center justify-center">
+          <p className="text-[--error]">{error.message}</p>
+        </div>
+      ) : clip ? (
+        <>
+          <div className="flex min-h-0 flex-1 overflow-hidden">
+            {/* ── Left: video preview ─────────────────────── */}
+            <div className="flex min-w-0 flex-1 flex-col gap-4 overflow-y-auto p-6">
+              <div className="group relative aspect-video w-full overflow-hidden rounded-lg bg-black">
+                {clip.thumbnail_path ? (
+                  <img src={`/api/clips/${clip.id}/thumbnail`} alt="Thumbnail" className="h-full w-full object-cover" />
+                ) : (
+                  <div className="flex h-full items-center justify-center">
+                    <svg className="h-10 w-10 text-[--text-muted]" fill="none" viewBox="0 0 24 24">
+                      <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 002.25-2.25v-9A2.25 2.25 0 0013.5 5.25h-9A2.25 2.25 0 002.25 7.5v9A2.25 2.25 0 004.5 18.75z" />
+                    </svg>
+                  </div>
+                )}
+                {onOpenPath && (
+                  <button
+                    onClick={() => onOpenPath(clip.library_path || clip.source_path)}
+                    title={t('detail.openVideo')}
+                    aria-label={t('detail.openVideo')}
+                    className="absolute inset-0 m-auto flex h-14 w-14 items-center justify-center rounded-full bg-black/60 text-white opacity-0 backdrop-blur-sm transition-opacity hover:bg-black/80 group-hover:opacity-100"
+                  >
+                    <svg className="h-7 w-7 translate-x-px" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="M8 5v14l11-7z" />
+                    </svg>
+                  </button>
+                )}
               </div>
 
-              {/* ── Content area ─────────────────────────── */}
-              <div className="flex flex-1 flex-col gap-4 p-5">
+              <div>
+                <p className="font-mono text-sm text-[--text-primary]">{displayFilename}</p>
+                {clip.roll_type === 'a' && clip.summary && (
+                  <p className="mt-1 text-sm text-[--text-secondary]">{clip.summary}</p>
+                )}
+                {(clip.roll_type === 'b' || clip.roll_type === 'photo') && clip.description && (
+                  <p className="mt-1 text-sm text-[--text-secondary]">{clip.description}</p>
+                )}
+                {clip.tags?.length > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {clip.tags.map((tag) => <Chip key={tag.name} source={tag.source}>{tag.name}</Chip>)}
+                  </div>
+                )}
+              </div>
 
-                {/* ── File destination (renamed library copy) ─ */}
+              <div className="mt-auto flex flex-wrap items-end justify-between gap-x-4 gap-y-1 border-t border-[--border] pt-3 text-xs text-[--text-muted]">
                 {clip.library_path && (
-                  <div>
-                    <p className="text-xs font-medium uppercase tracking-wider text-[--text-muted]">
-                      {t('detail.fileDestination')}
-                    </p>
-                    <p className="mt-0.5 break-all text-sm text-[--text-primary]">{clip.library_path}</p>
-                  </div>
+                  <p className="break-all">
+                    <span className="font-medium uppercase tracking-wider">{t('detail.fileDestination')}</span>
+                    {': '}<span>{clip.library_path}</span>
+                  </p>
                 )}
-
-                {/* ── Capture date ─────────────────────── */}
                 {captureDate && (
-                  <div>
-                    <p className="text-xs font-medium uppercase tracking-wider text-[--text-muted]">
-                      {clip.date_source === 'file' ? t('detail.captureDateFromFile') : t('detail.captureDate')}
-                    </p>
-                    <p className="mt-0.5 text-sm tabular-nums text-[--text-primary]">{captureDate}</p>
-                  </div>
+                  <p className="tabular-nums">
+                    {clip.date_source === 'file' ? t('detail.captureDateFromFile') : t('detail.captureDate')}: {captureDate}
+                  </p>
                 )}
+              </div>
+            </div>
 
-                {/* ── Thumbnail preview (compact, click to play) ─ */}
-                <div className="group relative h-40 w-full overflow-hidden rounded-lg bg-[--surface-2]">
-                  {clip.thumbnail_path ? (
-                    <img src={`/api/clips/${clip.id}/thumbnail`} alt="Thumbnail" className="h-full w-full object-cover" />
-                  ) : (
-                    <div className="flex h-full items-center justify-center">
-                      <svg className="h-10 w-10 text-[--text-muted]" fill="none" viewBox="0 0 24 24">
-                        <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 002.25-2.25v-9A2.25 2.25 0 0013.5 5.25h-9A2.25 2.25 0 002.25 7.5v9A2.25 2.25 0 004.5 18.75z" />
-                      </svg>
-                    </div>
-                  )}
-                  {onOpenPath && (
-                    <button
-                      onClick={() => onOpenPath(clip.library_path || clip.source_path)}
-                      title={t('detail.openVideo')}
-                      aria-label={t('detail.openVideo')}
-                      className="absolute inset-0 m-auto flex h-12 w-12 items-center justify-center rounded-full bg-black/60 text-white opacity-0 backdrop-blur-sm transition-opacity hover:bg-black/80 group-hover:opacity-100"
-                    >
-                      <svg className="h-6 w-6 translate-x-px" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                        <path d="M8 5v14l11-7z" />
-                      </svg>
-                    </button>
-                  )}
-                </div>
+            {/* ── Right: detail drawer ─────────────────────── */}
+            <aside className="flex w-[480px] shrink-0 flex-col gap-4 overflow-y-auto border-l border-[--border] bg-[--surface-1] p-5">
+              <div>
+                <label className="mb-1 block text-xs font-medium uppercase tracking-wider text-[--text-muted]">
+                  {t('filters.tags')}
+                </label>
+                <TagEditor tags={clip.tags} onUpdate={async (next) => {
+                  if (!clip) return
+                  await api.setTags(clip.id, { tags: next })
+                  setClip((prev) => prev ? { ...prev, tags: next } : null)
+                }} />
+              </div>
 
-                {/* ── Summary (editable, A-roll) ─────────── */}
-                {clip.roll_type === 'a' && (
-                  <div>
-                    <label className="mb-1 block text-xs font-medium uppercase tracking-wider text-[--text-muted]">
-                      {t('detail.summaryARoll')}
-                    </label>
-                    <textarea
-                      value={editSummary}
-                      onChange={(e) => setEditSummary(e.target.value)}
-                      rows={4}
-                      className="w-full rounded-md border border-[--border] bg-[--surface-2] px-3 py-2 text-sm text-[--text-primary] outline-none transition-colors focus:border-[--primary]"
-                    />
-                    <div className="mt-1 flex justify-end">
-                      <Button size="sm" variant="secondary" onClick={handleSave} disabled={saving}>
-                        {saving ? t('detail.saving') : t('detail.save')}
-                      </Button>
-                    </div>
-                  </div>
-                )}
-
-                {/* ── Description (read-only, B-roll + photos) ─── */}
-                {(clip.roll_type === 'b' || clip.roll_type === 'photo') && (
-                  <div>
-                    <label className="mb-1 block text-xs font-medium uppercase tracking-wider text-[--text-muted]">
-                      {clip.roll_type === 'photo' ? t('detail.photoDescription') : t('detail.descriptionBRoll')}
-                    </label>
-                    <textarea
-                      value={clip.description || ''}
-                      readOnly
-                      rows={3}
-                      className="w-full rounded-md border border-[--border] bg-[--surface-2] px-3 py-2 text-sm text-[--text-primary]"
-                    />
-                  </div>
-                )}
-
-                {/* ── Tags (add/delete) ─────────────────── */}
-                <div>
-                  <label className="mb-1 block text-xs font-medium uppercase tracking-wider text-[--text-muted]">
-                    {t('filters.tags')}
-                  </label>
-                  <TagEditor tags={clip.tags} onUpdate={async (next) => {
-                    if (!clip) return
-                    await api.setTags(clip.id, { tags: next })
-                    setClip((prev) => prev ? { ...prev, tags: next } : null)
-                  }} />
-                </div>
-
-                {/* ── Suggested cuts (keyframes) — not for photos ── */}
-                {clip.roll_type !== 'photo' && (
+              {clip.roll_type !== 'photo' && (
                 <div>
                   <div className="mb-1 flex items-center justify-between gap-2">
                     <label className="text-xs font-medium uppercase tracking-wider text-[--text-muted]">
@@ -478,91 +421,82 @@ export function DetailPanel({ clipId, onClose, onOpenPath }: DetailPanelProps) {
                     <p className="text-xs text-[--text-muted]">{t('detail.noKeyframes')}</p>
                   )}
                 </div>
-                )}
-
-                {/* ── Transcript (collapsible, A-roll only) */}
-                {clip.roll_type === 'a' && (
-                  <TranscriptSection data={clip.transcript} />
-                )}
-
-                {/* ── Source file + Metadata (grouped, same style) ─ */}
-                <div className="space-y-3 border-t border-[--border] pt-4">
-                  <Accordion title={t('detail.sourceFile')}>
-                    <p className="break-all text-sm text-[--text-primary]">{clip.source_path}</p>
-                  </Accordion>
-
-                  <Accordion title={t('detail.metadata')}>
-                    <div className="space-y-1.5 text-xs">
-                      <div className="flex justify-between gap-4">
-                        <span className="text-[--text-muted]">{t('detail.duration')}</span>
-                        <span>{clip.duration_s !== null ? `${(clip.duration_s / 60).toFixed(1)} ${t('detail.minutes')}` : '—'}</span>
-                      </div>
-                      {clip.width && (
-                        <div className="flex justify-between gap-4">
-                          <span className="text-[--text-muted]">{t('detail.resolution')}</span>
-                          <span>{clip.width}×{clip.height}</span>
-                        </div>
-                      )}
-                      {clip.fps && (
-                        <div className="flex justify-between gap-4">
-                          <span className="text-[--text-muted]">{t('detail.frameRate')}</span>
-                          <span>{clip.fps} {t('detail.fps')}</span>
-                        </div>
-                      )}
-                      {clip.codec && (
-                        <div className="flex justify-between gap-4">
-                          <span className="text-[--text-muted]">{t('detail.codec')}</span>
-                          <span>{clip.codec}</span>
-                        </div>
-                      )}
-                    </div>
-                  </Accordion>
-                </div>
-
-              </div>
-
-              {/* ── Footer actions (sticky bottom) — not for photos
-                   (no A/B classification, no re-analysis) ── */}
-              {clip.roll_type !== 'photo' && (
-              <div className="flex items-center justify-between border-t border-[--border] px-5 py-3">
-                {/* A/B correction — compact segmented toggle. Switching type then
-                    hitting re-analyze re-runs through the right pipeline. */}
-                <div className="inline-flex rounded-md border border-[--border] p-0.5">
-                  {(['a', 'b'] as const).map((roll) => (
-                    <button
-                      key={roll}
-                      onClick={() => handleCorrectRoll(roll)}
-                      className={`rounded px-3 py-1 text-xs font-medium transition-colors ${
-                        clip.roll_type === roll
-                          ? 'bg-[--primary] text-white'
-                          : 'text-[--text-secondary] hover:text-[--text-primary]'
-                      }`}
-                    >
-                      {roll === 'a' ? 'A-roll' : 'B-roll'}
-                    </button>
-                  ))}
-                </div>
-
-                {/* Re-analyze with the current A/B type (icon button) */}
-                <button
-                  onClick={handleReanalyze}
-                  disabled={reanalyzing}
-                  title={reanalyzing ? t('detail.reanalyzing') : t('detail.reanalyze')}
-                  aria-label={t('detail.reanalyze')}
-                  className="inline-flex items-center gap-1.5 rounded-md border border-[--border] px-3 py-1.5 text-xs font-medium text-[--text-secondary] transition-colors hover:text-[--text-primary] disabled:opacity-50"
-                >
-                  <svg className={`h-4 w-4 ${reanalyzing ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24">
-                    <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
-                  </svg>
-                  {t('detail.reanalyze')}
-                </button>
-              </div>
               )}
 
-            </>
-          ) : null}
-        </div>
-      </div>
+              {clip.roll_type === 'a' && (
+                <TranscriptSection data={clip.transcript} />
+              )}
+
+              <div className="space-y-3 border-t border-[--border] pt-4">
+                <Accordion title={t('detail.sourceFile')}>
+                  <p className="break-all text-sm text-[--text-primary]">{clip.source_path}</p>
+                </Accordion>
+
+                <Accordion title={t('detail.metadata')}>
+                  <div className="space-y-1.5 text-xs">
+                    <div className="flex justify-between gap-4">
+                      <span className="text-[--text-muted]">{t('detail.duration')}</span>
+                      <span>{clip.duration_s !== null ? `${(clip.duration_s / 60).toFixed(1)} ${t('detail.minutes')}` : '—'}</span>
+                    </div>
+                    {clip.width && (
+                      <div className="flex justify-between gap-4">
+                        <span className="text-[--text-muted]">{t('detail.resolution')}</span>
+                        <span>{clip.width}×{clip.height}</span>
+                      </div>
+                    )}
+                    {clip.fps && (
+                      <div className="flex justify-between gap-4">
+                        <span className="text-[--text-muted]">{t('detail.frameRate')}</span>
+                        <span>{clip.fps} {t('detail.fps')}</span>
+                      </div>
+                    )}
+                    {clip.codec && (
+                      <div className="flex justify-between gap-4">
+                        <span className="text-[--text-muted]">{t('detail.codec')}</span>
+                        <span>{clip.codec}</span>
+                      </div>
+                    )}
+                  </div>
+                </Accordion>
+              </div>
+            </aside>
+          </div>
+
+          {/* ── Bottom bar ── */}
+          {clip.roll_type !== 'photo' && (
+            <div className="flex shrink-0 items-center justify-between border-t border-[--border] bg-[--surface-1] px-5 py-3">
+              <div className="inline-flex rounded-md border border-[--border] p-0.5">
+                {(['a', 'b'] as const).map((roll) => (
+                  <button
+                    key={roll}
+                    onClick={() => handleCorrectRoll(roll)}
+                    className={`rounded px-3 py-1 text-xs font-medium transition-colors ${
+                      clip.roll_type === roll
+                        ? 'bg-[--primary] text-white'
+                        : 'text-[--text-secondary] hover:text-[--text-primary]'
+                    }`}
+                  >
+                    {roll === 'a' ? 'A-roll' : 'B-roll'}
+                  </button>
+                ))}
+              </div>
+
+              <button
+                onClick={handleReanalyze}
+                disabled={reanalyzing}
+                title={reanalyzing ? t('detail.reanalyzing') : t('detail.reanalyze')}
+                aria-label={t('detail.reanalyze')}
+                className="inline-flex items-center gap-1.5 rounded-md border border-[--border] px-3 py-1.5 text-xs font-medium text-[--text-secondary] transition-colors hover:text-[--text-primary] disabled:opacity-50"
+              >
+                <svg className={`h-4 w-4 ${reanalyzing ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24">
+                  <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
+                </svg>
+                {t('detail.reanalyze')}
+              </button>
+            </div>
+          )}
+        </>
+      ) : null}
     </div>
   )
 }
