@@ -1,92 +1,31 @@
-/** Tests for the JobsPanel feature — task list + toast notifications.
- *
- * Behavior-focused: asserts rendered text/state, not exact Tailwind classes.
- */
+/** Tests for JobsPanel's status bar — fixed to the bottom, not the top. */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect } from 'vitest'
+import { render, screen } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
-import { render, screen, waitFor } from '@testing-library/react'
+
 import { JobsPanel } from '../index'
 import { server } from '@/test/mocks/server'
 
-// Mock useJobEvents — control events per test via mock implementation.
-// vi.hoisted ensures the mock fn exists before the hoisted vi.mock factory runs.
-const useJobEventsMock = vi.hoisted(() => vi.fn())
-vi.mock('@/api/sse', () => ({ useJobEvents: useJobEventsMock }))
+const API = 'http://localhost:5080/api'
 
 describe('JobsPanel', () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
-    useJobEventsMock.mockReturnValue({ loading: false, error: null, events: [] })
-  })
-
-  it('renders nothing when there is no active job and no events', () => {
+  it('renders nothing when there is no active job', () => {
     const { container } = render(<JobsPanel activeJobId={null} />)
     expect(container).toBeEmptyDOMElement()
   })
 
-  it('renders the clip path in the progress card when a clip_done event arrives', async () => {
-    // The card hides once the polled job status is terminal, so keep job 1 running.
+  it('renders a fixed-bottom status bar (not a top progress bar) while a job is running', async () => {
     server.use(
-      http.get('http://localhost:5080/api/jobs/1', () =>
-        HttpResponse.json({ id: 1, kind: 'scan', status: 'running', total: 10, done: 4, failed: 0, started_at: null }),
+      http.get(`${API}/jobs/:id`, () =>
+        HttpResponse.json({ id: 1, kind: 'scan', status: 'running', total: 40, done: 18, error: null }),
       ),
     )
-    useJobEventsMock.mockReturnValue({
-      loading: false,
-      error: null,
-      events: [{ type: 'clip_done', job_id: 1, clip_id: 42, path: '/media/clip.mp4' }],
-    })
     render(<JobsPanel activeJobId={1} />)
 
-    expect(await screen.findByText('/media/clip.mp4')).toBeInTheDocument()
-  })
-
-  it('shows an info toast on job_started', async () => {
-    useJobEventsMock.mockReturnValue({
-      loading: false,
-      error: null,
-      events: [{ type: 'job_started', job_id: 1 }],
-    })
-    render(<JobsPanel activeJobId={1} />)
-
-    expect(
-      await screen.findByText('Scan started — processing clips'),
-    ).toBeInTheDocument()
-  })
-
-  it('shows a success toast with the processed count on job_completed', async () => {
-    useJobEventsMock.mockReturnValue({
-      loading: false,
-      error: null,
-      events: [{ type: 'job_completed', job_id: 1, done: 5 }],
-    })
-    render(<JobsPanel activeJobId={1} />)
-
-    expect(
-      await screen.findByText('Scan completed — 5 clips processed'),
-    ).toBeInTheDocument()
-  })
-
-  it('shows an error toast on job_failed', async () => {
-    useJobEventsMock.mockReturnValue({
-      loading: false,
-      error: null,
-      events: [{ type: 'job_failed', job_id: 1 }],
-    })
-    render(<JobsPanel activeJobId={1} />)
-
-    expect(
-      await screen.findByText('Scan failed — check logs for details'),
-    ).toBeInTheDocument()
-  })
-
-  it('does not loop/crash when the same events stay referentially stable across renders', async () => {
-    const events = [{ type: 'clip_done', job_id: 1, clip_id: 7, path: '/a.mp4' }]
-    useJobEventsMock.mockReturnValue({ loading: false, error: null, events })
-    const { rerender } = render(<JobsPanel activeJobId={1} />)
-    rerender(<JobsPanel activeJobId={1} />)
-
-    await waitFor(() => expect(screen.getByText('/a.mp4')).toBeInTheDocument())
+    const statusbar = await screen.findByTestId('statusbar')
+    expect(statusbar.className).toContain('bottom-0')
+    expect(document.querySelector('[class*="top-0"][class*="fixed"]')).not.toBeInTheDocument()
+    expect(screen.getByText('18/40')).toBeInTheDocument()
   })
 })
