@@ -415,11 +415,16 @@ export default function App() {
   // Clip detail view (full-screen, replaces main layout)
   if (selectedClipId !== null) {
     return (
-      <DetailPanel
-        clipId={selectedClipId}
-        onClose={() => setSelectedClipId(null)}
-        onOpenPath={handleOpenPath}
-      />
+      <>
+        <DetailPanel
+          clipId={selectedClipId}
+          onClose={() => setSelectedClipId(null)}
+          onOpenPath={handleOpenPath}
+        />
+
+        {/* Ambient toast host — keeps job progress/toasts visible while viewing a clip. */}
+        <JobsPanel activeJobId={activeJobId} />
+      </>
     )
   }
 
