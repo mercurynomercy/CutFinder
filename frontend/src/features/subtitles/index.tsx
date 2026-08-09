@@ -349,13 +349,13 @@ export function SubtitlesPage({ onClose }: SubtitlesPageProps) {
       </div>
 
       {/* ── Footer ──────────────────────────────── */}
-      <footer className="shrink-0 border-t border-[--border] bg-[--surface-1] py-3 flex flex-col gap-2">
-        {/* Progress bar — visible during export */}
-        <div className={`px-6 flex flex-col gap-1 ${phase === 'running' ? '' : 'hidden'}`}>
+      <footer className="shrink-0 border-t border-[--border] bg-[--surface-1] py-3 flex flex-col">
+        {/* Progress bar — visible during export, takes full footer height */}
+        <div className={`px-6 flex flex-col gap-1 min-h-9 ${phase === 'running' ? '' : 'hidden'}`}>
           <div className="h-[4px] w-full overflow-hidden rounded-[2px] bg-[--surface-3]">
             <div className="h-full rounded-[2px] bg-[--primary] transition-all duration-300 ease-out" style={{ width: `${progress}%` }} />
           </div>
-          <div className="flex items-center justify-between">
+          <div className="flex-1 flex items-end justify-between">
             <span className="text-xs text-[--text-muted]">
               {t(
                 modelDownloading
@@ -368,8 +368,8 @@ export function SubtitlesPage({ onClose }: SubtitlesPageProps) {
             <span className="font-mono text-xs text-[--text-muted]">{Math.round(progress)}%</span>
           </div>
         </div>
-        {/* Status + buttons row — always present, invisible during export */}
-        <div className={`px-6 flex items-center justify-between ${phase === 'running' ? 'invisible' : ''}`}>
+        {/* Status + buttons row — hidden during export */}
+        <div className={`px-6 flex items-center justify-between ${phase === 'running' ? 'hidden' : ''}`}>
           <span className="text-xs text-[--text-muted]">
             {statusText}
           </span>
