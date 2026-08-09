@@ -18,7 +18,7 @@ import { SettingsPage } from '@/features/settings'
 import { SubtitlesPage } from '@/features/subtitles'
 import { CutplanPage } from '@/features/cutplan'
 import { LauncherPage, type LauncherScreen } from '@/features/launcher'
-import { LogModal } from '@/features/logs'
+import { LogsPage } from '@/features/logs'
 import { ConfirmDialog } from '@/components'
 import { localDateKey } from '@/lib/date'
 import { useI18n } from '@/i18n'
@@ -368,6 +368,17 @@ export default function App() {
     return <Gallery clips={[]} selectedClipId={selectedClipId} onSelect={setSelectedClipId} />
   }
 
+  // Backend log viewer (full-screen, replaces main layout)
+  if (showLogs) {
+    return (
+      <LogsPage
+        onClose={() => setShowLogs(false)}
+        theme={theme}
+        onToggleTheme={toggleTheme}
+      />
+    )
+  }
+
   // Settings view (full-screen, replaces main layout)
   if (showSettings) {
     return (
@@ -377,13 +388,13 @@ export default function App() {
           onSuggestAllKeyframes={handleSuggestAllKeyframes}
           onCleanupLibrary={handleCleanupLibrary}
           onShowLogs={() => setShowLogs(true)}
+          onClose={handleBackToLauncher}
+          theme={theme}
+          onToggleTheme={toggleTheme}
         />
 
         {/* Ambient toast host — cleanup/keyframe actions raise toasts via this. */}
         <JobsPanel activeJobId={activeJobId} />
-
-        {/* Backend log viewer (modal) */}
-        <LogModal open={showLogs} onClose={() => setShowLogs(false)} />
 
         {/* Library cleanup: confirm deletion of orphaned catalog entries */}
         <ConfirmDialog

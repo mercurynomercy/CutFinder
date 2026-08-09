@@ -136,14 +136,18 @@ const en = {
   'subtitles.downloadingModelHint': 'First use downloads the speech model (several GB). This runs once; transcription starts automatically when it finishes.',
   'subtitles.elapsed': 'Elapsed {time}',
 
-  // Backend logs modal
+  // Backend logs page
   'logs.title': 'Backend logs',
   'logs.empty': 'No logs yet',
+  'logs.noMatch': 'No matching logs',
   'logs.autoscroll': 'Auto-scroll',
   'logs.clear': 'Clear',
   'logs.close': 'Close',
   'logs.paused': 'Paused',
   'logs.live': 'Live',
+  'logs.all': 'All',
+  'logs.scan': 'Scan',
+  'logs.back': 'Back',
 
   // Gallery toolbar + empty state
   'gallery.clipsCount': '{n} clips',
@@ -480,11 +484,15 @@ const zh: Record<Key, string> = {
 
   'logs.title': '后端日志',
   'logs.empty': '暂无日志',
+  'logs.noMatch': '没有匹配的日志',
   'logs.autoscroll': '自动滚动',
   'logs.clear': '清空',
   'logs.close': '关闭',
   'logs.paused': '已暂停',
   'logs.live': '实时',
+  'logs.all': '全部',
+  'logs.scan': '扫描',
+  'logs.back': '返回',
 
   'gallery.clipsCount': '{n} 个片段',
   'gallery.sort': '排序',

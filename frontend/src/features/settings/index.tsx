@@ -145,9 +145,15 @@ export interface SettingsPageProps {
   onCleanupLibrary?: () => void
   /** Called to open the backend logs modal. */
   onShowLogs?: () => void
+  /** Called to navigate back to the gallery/launcher. */
+  onClose?: () => void
+  /** Current theme. */
+  theme?: 'light' | 'dark'
+  /** Toggle theme. */
+  onToggleTheme?: () => void
 }
 
-export function SettingsPage({ onSave, onSuggestAllKeyframes, onCleanupLibrary, onShowLogs }: SettingsPageProps) {
+export function SettingsPage({ onSave, onSuggestAllKeyframes, onCleanupLibrary, onShowLogs, onClose, theme, onToggleTheme }: SettingsPageProps) {
   const { t, lang, setLang } = useI18n()
   const [prefs, setPrefs] = useState<UpdateSettingsBody | null>(null)
   const [loading, setLoading] = useState(true)
@@ -391,9 +397,41 @@ export function SettingsPage({ onSave, onSuggestAllKeyframes, onCleanupLibrary, 
   const photoExtDisplay = (prefs.photo_extensions || []).map((e: string) => e.startsWith('.') ? e : `.${e}`)
 
   return (
-    <div className="flex flex-1 overflow-auto">
-      <div className="mx-auto w-full max-w-5xl p-6 pb-24">
-        <h1 className="mb-8 text-2xl font-semibold tracking-tight text-[--text-primary]">{t('settings.title')}</h1>
+    <div className="flex h-screen w-full flex-col">
+      {/* ── Top Bar ─────────────────────────────────────────── */}
+      <header className="flex h-12 shrink-0 items-center gap-3 border-b border-[--border] bg-[--surface-1] px-4">
+        <button
+          onClick={onClose}
+          className="flex items-center gap-1.5 rounded-md px-2.5 py-1 text-sm font-medium text-[--text-secondary] transition-colors hover:bg-[--surface-3] hover:text-[--text-primary]"
+        >
+          <svg className="h-4 w-4" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.5} aria-hidden="true">
+            <path d="M10 4L6 8l4 4" />
+          </svg>
+          {t('settings.backToGallery')}
+        </button>
+        <span className="flex-1 text-lg font-semibold tracking-tight text-[--text-primary]">{t('settings.title')}</span>
+        <button
+          onClick={onToggleTheme}
+          aria-label={theme === 'dark' ? t('app.themeToLight') : t('app.themeToDark')}
+          className="flex h-8 w-8 items-center justify-center rounded-md text-[--text-secondary] transition-colors hover:bg-[--surface-3] hover:text-[--text-primary]"
+        >
+          {theme === 'dark' ? (
+            <svg className="h-4 w-4" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.5} aria-hidden="true">
+              <circle cx="8" cy="8" r="3" />
+              <path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.1 3.1l1.4 1.4M11.5 11.5l1.4 1.4M12.9 3.1l-1.4 1.4M4.5 11.5l-1.4 1.4" />
+            </svg>
+          ) : (
+            <svg className="h-4 w-4" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.5} aria-hidden="true">
+              <path d="M13.5 9.5A5.5 5.5 0 0 1 6.5 2.5a5.5 5.5 0 1 0 7 7Z" />
+            </svg>
+          )}
+        </button>
+      </header>
+
+      {/* ── Content ─────────────────────────────────────────── */}
+      <div className="flex flex-1 overflow-auto">
+        <div className="mx-auto w-full max-w-5xl p-6 pb-24">
+          <h1 className="sr-only">{t('settings.title')}</h1>
 
         {/* Responsive two-column grid — single column on narrow screens */}
         <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
@@ -773,6 +811,7 @@ export function SettingsPage({ onSave, onSuggestAllKeyframes, onCleanupLibrary, 
           onConfirm={handleConfirmSwitch}
           onCancel={handleCancelSwitch}
         />
+      </div>
       </div>
 
       {/* ── Fixed save bar ───────────────────────────────────── */}

@@ -72,10 +72,10 @@ describe('SettingsPage', () => {
 
   it('renders the vocal-separation toggle reflecting the loaded value (off)', async () => {
     render(<SettingsPage />)
-    const toggle = await screen.findByRole('checkbox', {
+    const toggle = await screen.findByRole('switch', {
       name: /Separate vocals before A-roll transcription/i,
     })
-    expect((toggle as HTMLInputElement).checked).toBe(false)
+    expect(toggle.getAttribute('aria-checked')).toBe('false')
   })
 
   it('sends vocal_separation in the PUT payload when toggled on', async () => {
@@ -88,7 +88,7 @@ describe('SettingsPage', () => {
     )
 
     render(<SettingsPage />)
-    const toggle = await screen.findByRole('checkbox', {
+    const toggle = await screen.findByRole('switch', {
       name: /Separate vocals before A-roll transcription/i,
     })
     await userEvent.click(toggle)
