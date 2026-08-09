@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CutFinder — 任务队列</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  color-scheme: light;
+  --bg-canvas: #EEF0F3;
+  --surface-1: #FFFFFF;
+  --surface-2: #F6F7F9;
+  --surface-3: #E4E7EC;
+  --border: #D8DCE2;
+  --border-strong: #BCC2CB;
+  --text-primary: #1A1D21;
+  --text-secondary: #4B5563;
+  --text-muted: #6B7280;
+  --primary: #5256E0;
+  --primary-hover: #4146C4;
+  --primary-press: #383DB0;
+  --primary-fg: #FFFFFF;
+  --primary-soft: rgba(82, 86, 224, 0.12);
+  --success: #15803D;
+  --success-bg: rgba(21, 128, 61, 0.1);
+  --warning: #B45309;
+  --error: #DC2626;
+  --processing: #5256E0;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --font-ui: "Inter", "PingFang SC", -apple-system, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", monospace;
+  --text-xs: 12px;
+  --text-sm: 13px;
+  --text-base: 14px;
+  --text-md: 15px;
+  --text-lg: 16px;
+  --text-xl: 20px;
+  --text-2xl: 24px;
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+  --bg-canvas: #0E0F11;
+  --surface-1: #16181B;
+  --surface-2: #1E2125;
+  --surface-3: #282C31;
+  --border: #2E333A;
+  --border-strong: #3A4048;
+  --text-primary: #F2F4F7;
+  --text-secondary: #A4ACB9;
+  --text-muted: #6B7280;
+  --primary: #6366F1;
+  --primary-hover: #7077F2;
+  --primary-press: #525AE0;
+  --primary-fg: #FFFFFF;
+  --primary-soft: rgba(99, 102, 241, 0.15);
+  --success: #22C55E;
+  --success-bg: rgba(34, 197, 94, 0.12);
+  --warning: #F59E0B;
+  --error: #EF4444;
+  --processing: #6366F1;
+}
+
+body {
+  font-family: var(--font-ui);
+  font-size: var(--text-base);
+  line-height: 1.5;
+  color: var(--text-primary);
+  background: var(--bg-canvas);
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3 { line-height: 1.35; }
+a { color: inherit; text-decoration: none; }
+button { font-family: inherit; cursor: pointer; border: none; background: none; }
+
+/* ── Top Bar ── */
+.topbar {
+  display: flex; align-items: center; gap: 12px;
+  height: 48px; padding: 0 16px;
+  background: var(--surface-1);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0; z-index: 100;
+}
+.topbar-brand {
+  display: flex; align-items: center; gap: 8px;
+  font-size: var(--text-lg); font-weight: 600;
+  letter-spacing: -0.01em; color: var(--text-primary);
+}
+.topbar-brand svg { flex-shrink: 0; }
+.topbar-spacer { flex: 1; }
+.topbar-btn {
+  display: flex; align-items: center; gap: 6px;
+  height: 32px; padding: 0 12px;
+  font-size: var(--text-sm); font-weight: 500;
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  transition: background 150ms, color 150ms;
+}
+.topbar-btn:hover { background: var(--surface-3); color: var(--text-primary); }
+.topbar-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--bg-canvas), 0 0 0 4px var(--primary);
+}
+.topbar-btn-primary {
+  background: var(--primary); color: var(--primary-fg);
+}
+.topbar-btn-primary:hover { background: var(--primary-hover); }
+.topbar-theme-toggle {
+  width: 32px; height: 32px; padding: 0;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: var(--radius-sm); color: var(--text-secondary);
+  transition: background 150ms, color 150ms;
+}
+.topbar-theme-toggle:hover { background: var(--surface-3); color: var(--text-primary); }
+.topbar-theme-toggle:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--bg-canvas), 0 0 0 4px var(--primary);
+}
+
+/* ── Page ── */
+.page { padding: 24px; max-width: 1100px; margin: 0 auto; }
+.page-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 20px;
+}
+.page-title {
+  font-size: var(--text-2xl); font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.page-actions { display: flex; align-items: center; gap: 8px; }
+
+/* ── Table ── */
+.table-container {
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+table {
+  width: 100%; border-collapse: collapse;
+  font-size: var(--text-sm);
+}
+thead {
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+}
+th {
+  text-align: left; padding: 10px 16px;
+  font-size: var(--text-xs); font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+td {
+  padding: 10px 16px;
+  border-top: 1px solid var(--border);
+  vertical-align: middle;
+}
+tbody tr { transition: background 150ms; }
+tbody tr:hover { background: var(--surface-2); }
+
+/* Task ID */
+.task-id {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+/* Type badge */
+.task-type {
+  display: inline-flex; align-items: center;
+  height: 22px; padding: 0 8px;
+  font-size: var(--text-xs); font-weight: 600;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+.task-type-scan {
+  background: var(--primary-soft); color: var(--primary);
+}
+.task-type-keyframe {
+  background: rgba(180, 83, 9, 0.1); color: var(--warning);
+}
+.task-type-cut {
+  background: rgba(15, 118, 110, 0.1); color: var(--roll-b);
+}
+
+/* Status */
+.task-status {
+  font-size: var(--text-sm); font-weight: 500;
+  white-space: nowrap;
+}
+.task-status-completed { color: var(--success); }
+.task-status-processing { color: var(--processing); }
+.task-status-pending { color: var(--text-muted); }
+.task-status-failed { color: var(--error); }
+
+/* Progress */
+.task-progress-cell { min-width: 140px; }
+.task-progress-bar {
+  height: 4px; background: var(--surface-3);
+  border-radius: 2px; overflow: hidden;
+  margin-bottom: 2px;
+}
+.task-progress-fill {
+  height: 100%; border-radius: 2px;
+  transition: width 300ms;
+}
+.task-progress-fill-complete { background: var(--success); }
+.task-progress-fill-processing { background: var(--processing); }
+.task-progress-label {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+/* Start time */
+.task-time {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+/* Action button */
+.task-action {
+  height: 26px; padding: 0 10px;
+  font-size: var(--text-xs); font-weight: 500;
+  border-radius: var(--radius-sm);
+  color: var(--error);
+  border: 1px solid var(--error);
+  transition: background 150ms, color 150ms;
+  white-space: nowrap;
+}
+.task-action:hover {
+  background: var(--error); color: #FFFFFF;
+}
+.task-action:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--bg-canvas), 0 0 0 4px var(--error);
+}
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--border-strong); }
+
+.icon-sm { width: 14px; height: 14px; }
+.icon-md { width: 16px; height: 16px; }
+</style>
+</head>
+<body>
+<!-- ── Top Bar ── -->
+<header class="topbar">
+  <a href="home.html" class="topbar-brand" data-od-id="brand">
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+      <rect x="2" y="2" width="16" height="16" rx="4" fill="var(--primary)"/>
+      <path d="M7 7.5L13 10L7 12.5V7.5Z" fill="white"/>
+    </svg>
+    CutFinder
+  </a>
+  <span class="topbar-spacer"></span>
+  <nav style="display:flex;align-items:center;gap:4px;">
+    <a href="home.html" class="topbar-btn">
+      <svg class="icon-md" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+        <path d="M2 5h12M2 8h12M2 11h8"/>
+      </svg>
+      返回图库
+    </a>
+    <button class="topbar-theme-toggle" id="themeToggle" aria-label="切换主题">
+      <svg class="icon-md sun-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true" style="display:none">
+        <circle cx="8" cy="8" r="3"/><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.1 3.1l1.4 1.4M11.5 11.5l1.4 1.4M12.9 3.1l-1.4 1.4M4.5 11.5l-1.4 1.4"/>
+      </svg>
+      <svg class="icon-md moon-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+        <path d="M13.5 9.5A5.5 5.5 0 0 1 6.5 2.5a5.5 5.5 0 1 0 7 7Z"/>
+      </svg>
+    </button>
+  </nav>
+</header>
+
+<!-- ── Page ── -->
+<main class="page" data-od-id="tasks-page">
+  <div class="page-header">
+    <h1 class="page-title">任务队列</h1>
+    <div class="page-actions">
+      <button class="topbar-btn" data-od-id="pause-btn">
+        <svg class="icon-sm" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+          <rect x="4" y="3" width="3" height="10" rx="0.5"/>
+          <rect x="9" y="3" width="3" height="10" rx="0.5"/>
+        </svg>
+        暂停
+      </button>
+
+    </div>
+  </div>
+
+  <div class="table-container" data-od-id="task-table">
+    <table>
+      <thead>
+        <tr>
+          <th style="width:60px">ID</th>
+          <th style="width:80px">类型</th>
+          <th style="width:100px">状态</th>
+          <th>进度</th>
+          <th style="width:160px">开始时间</th>
+          <th style="width:80px">操作</th>
+        </tr>
+      </thead>
+      <tbody>
+        <!-- Task #7 -->
+        <tr data-od-id="task-7">
+          <td><span class="task-id">#7</span></td>
+          <td><span class="task-type task-type-cut">初剪</span></td>
+          <td><span class="task-status task-status-completed">已完成</span></td>
+          <td class="task-progress-cell">
+            <div class="task-progress-bar">
+              <div class="task-progress-fill task-progress-fill-complete" style="width:100%"></div>
+            </div>
+            <span class="task-progress-label">1/1</span>
+          </td>
+          <td><span class="task-time">2026-08-02 15:24:08</span></td>
+          <td><button class="task-action" aria-label="删除任务 #7">删除</button></td>
+        </tr>
+        <!-- Task #6 -->
+        <tr data-od-id="task-6">
+          <td><span class="task-id">#6</span></td>
+          <td><span class="task-type task-type-cut">初剪</span></td>
+          <td><span class="task-status task-status-completed">已完成</span></td>
+          <td class="task-progress-cell">
+            <div class="task-progress-bar">
+              <div class="task-progress-fill task-progress-fill-complete" style="width:100%"></div>
+            </div>
+            <span class="task-progress-label">1/1</span>
+          </td>
+          <td><span class="task-time">2026-08-02 15:23:52</span></td>
+          <td><button class="task-action" aria-label="删除任务 #6">删除</button></td>
+        </tr>
+        <!-- Task #5 -->
+        <tr data-od-id="task-5">
+          <td><span class="task-id">#5</span></td>
+          <td><span class="task-type task-type-cut">初剪</span></td>
+          <td><span class="task-status task-status-completed">已完成</span></td>
+          <td class="task-progress-cell">
+            <div class="task-progress-bar">
+              <div class="task-progress-fill task-progress-fill-complete" style="width:100%"></div>
+            </div>
+            <span class="task-progress-label">1/1</span>
+          </td>
+          <td><span class="task-time">2026-08-02 15:07:41</span></td>
+          <td><button class="task-action" aria-label="删除任务 #5">删除</button></td>
+        </tr>
+        <!-- Task #4 -->
+        <tr data-od-id="task-4">
+          <td><span class="task-id">#4</span></td>
+          <td><span class="task-type task-type-cut">初剪</span></td>
+          <td><span class="task-status task-status-completed">已完成</span></td>
+          <td class="task-progress-cell">
+            <div class="task-progress-bar">
+              <div class="task-progress-fill task-progress-fill-complete" style="width:100%"></div>
+            </div>
+            <span class="task-progress-label">1/1</span>
+          </td>
+          <td><span class="task-time">2026-08-02 15:07:28</span></td>
+          <td><button class="task-action" aria-label="删除任务 #4">删除</button></td>
+        </tr>
+        <!-- Task #3 -->
+        <tr data-od-id="task-3">
+          <td><span class="task-id">#3</span></td>
+          <td><span class="task-type task-type-cut">初剪</span></td>
+          <td><span class="task-status task-status-completed">已完成</span></td>
+          <td class="task-progress-cell">
+            <div class="task-progress-bar">
+              <div class="task-progress-fill task-progress-fill-complete" style="width:100%"></div>
+            </div>
+            <span class="task-progress-label">1/1</span>
+          </td>
+          <td><span class="task-time">2026-08-02 15:07:09</span></td>
+          <td><button class="task-action" aria-label="删除任务 #3">删除</button></td>
+        </tr>
+        <!-- Task #2 -->
+        <tr data-od-id="task-2">
+          <td><span class="task-id">#2</span></td>
+          <td><span class="task-type task-type-keyframe">关键帧</span></td>
+          <td><span class="task-status task-status-completed">已完成</span></td>
+          <td class="task-progress-cell">
+            <div class="task-progress-bar">
+              <div class="task-progress-fill task-progress-fill-complete" style="width:100%"></div>
+            </div>
+            <span class="task-progress-label">45/45</span>
+          </td>
+          <td><span class="task-time">2026-08-02 12:50:38</span></td>
+          <td><button class="task-action" aria-label="删除任务 #2">删除</button></td>
+        </tr>
+        <!-- Task #1 -->
+        <tr data-od-id="task-1">
+          <td><span class="task-id">#1</span></td>
+          <td><span class="task-type task-type-scan">扫描</span></td>
+          <td><span class="task-status task-status-completed">已完成</span></td>
+          <td class="task-progress-cell">
+            <div class="task-progress-bar">
+              <div class="task-progress-fill task-progress-fill-complete" style="width:100%"></div>
+            </div>
+            <span class="task-progress-label">45/45</span>
+          </td>
+          <td><span class="task-time">2026-08-02 12:42:56</span></td>
+          <td><button class="task-action" aria-label="删除任务 #1">删除</button></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</main>
+
+<script>
+// ── Theme Toggle ──
+(function() {
+  var stored = localStorage.getItem('cutfinder-theme');
+  if (stored === 'dark') {
+    document.documentElement.setAttribute('data-theme', 'dark');
+    updateIcons(true);
+  }
+  function updateIcons(dark) {
+    document.querySelector('.sun-icon').style.display = dark ? '' : 'none';
+    document.querySelector('.moon-icon').style.display = dark ? 'none' : '';
+  }
+  document.getElementById('themeToggle').addEventListener('click', function() {
+    var isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+    var next = isDark ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', next);
+    localStorage.setItem('cutfinder-theme', next);
+    updateIcons(!isDark);
+  });
+})();
+</script>
+</body>
+</html>

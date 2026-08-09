@@ -54,4 +54,3 @@ test_*.mjs
 # Git worktrees (isolated feature branches)
 .worktrees/
 
-opendesign

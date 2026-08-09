@@ -1,0 +1,817 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CutFinder — 片段详情</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  color-scheme: light;
+  --bg-canvas: #EEF0F3;
+  --surface-1: #FFFFFF;
+  --surface-2: #F6F7F9;
+  --surface-3: #E4E7EC;
+  --border: #D8DCE2;
+  --border-strong: #BCC2CB;
+  --text-primary: #1A1D21;
+  --text-secondary: #4B5563;
+  --text-muted: #6B7280;
+  --primary: #5256E0;
+  --primary-hover: #4146C4;
+  --primary-fg: #FFFFFF;
+  --primary-soft: rgba(82, 86, 224, 0.12);
+  --roll-a: #B45309;
+  --roll-a-soft: rgba(180, 83, 9, 0.1);
+  --roll-b: #0F766E;
+  --roll-b-soft: rgba(15, 118, 110, 0.1);
+  --success: #15803D;
+  --warning: #B45309;
+  --error: #DC2626;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 10px;
+  --shadow-1: 0 1px 2px rgba(0,0,0,0.06);
+  --shadow-2: 0 4px 12px rgba(0,0,0,0.08);
+  --font-ui: "Inter", "PingFang SC", -apple-system, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", monospace;
+  --text-xs: 12px;
+  --text-sm: 13px;
+  --text-base: 14px;
+  --text-md: 15px;
+  --text-lg: 16px;
+  --text-xl: 20px;
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+  --bg-canvas: #0E0F11;
+  --surface-1: #16181B;
+  --surface-2: #1E2125;
+  --surface-3: #282C31;
+  --border: #2E333A;
+  --border-strong: #3A4048;
+  --text-primary: #F2F4F7;
+  --text-secondary: #A4ACB9;
+  --text-muted: #6B7280;
+  --primary: #6366F1;
+  --primary-hover: #7077F2;
+  --primary-fg: #FFFFFF;
+  --primary-soft: rgba(99, 102, 241, 0.15);
+  --roll-a: #F59E0B;
+  --roll-a-soft: rgba(245, 158, 11, 0.12);
+  --roll-b: #2DD4BF;
+  --roll-b-soft: rgba(45, 212, 191, 0.12);
+  --success: #22C55E;
+  --warning: #F59E0B;
+  --error: #EF4444;
+}
+
+body {
+  font-family: var(--font-ui);
+  font-size: var(--text-base);
+  line-height: 1.5;
+  color: var(--text-primary);
+  background: var(--bg-canvas);
+  -webkit-font-smoothing: antialiased;
+}
+
+[data-theme="dark"] h1, [data-theme="dark"] h2, [data-theme="dark"] h3 { line-height: 1.35; }
+:root h1, :root h2, :root h3 { line-height: 1.35; }
+
+a { color: inherit; text-decoration: none; }
+button { font-family: inherit; cursor: pointer; border: none; background: none; }
+input, textarea { font-family: inherit; }
+
+/* ── App Shell ── */
+.app { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+
+/* ── Top Bar ── */
+.topbar {
+  display: flex; align-items: center; gap: 12px;
+  height: 48px; padding: 0 16px;
+  background: var(--surface-1);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0; z-index: 100;
+}
+.topbar-title {
+  font-size: var(--text-lg); font-weight: 600;
+  letter-spacing: -0.01em; color: var(--text-primary);
+}
+.topbar-spacer { flex: 1; }
+.topbar-btn {
+  display: flex; align-items: center; gap: 6px;
+  height: 32px; padding: 0 12px;
+  font-size: var(--text-sm); font-weight: 500;
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  transition: background 150ms, color 150ms;
+}
+.topbar-btn:hover { background: var(--surface-3); color: var(--text-primary); }
+.topbar-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--bg-canvas), 0 0 0 4px var(--primary);
+}
+.topbar-save {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  font-weight: 600;
+}
+.topbar-save:hover { background: var(--surface-3); }
+.topbar-close {
+  width: 32px; height: 32px; padding: 0;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: var(--radius-sm);
+}
+.topbar-theme-toggle {
+  width: 32px; height: 32px; padding: 0;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: var(--radius-sm); color: var(--text-secondary);
+  transition: background 150ms, color 150ms;
+}
+.topbar-theme-toggle:hover { background: var(--surface-3); color: var(--text-primary); }
+
+/* ── Main Layout ── */
+.main { display: flex; flex: 1; overflow: hidden; }
+
+/* ── Left: Video Preview ── */
+.preview-panel {
+  flex: 1; display: flex; flex-direction: column;
+  background: var(--bg-canvas);
+  overflow-y: auto;
+}
+.preview-video {
+  flex: 1; display: flex; align-items: center; justify-content: center;
+  background: #000;
+  min-height: 300px;
+  position: relative;
+}
+.preview-video-placeholder {
+  width: 100%; height: 100%;
+  display: flex; align-items: center; justify-content: center;
+  background: linear-gradient(135deg, var(--surface-2) 0%, var(--surface-3) 100%);
+}
+.preview-video-placeholder svg { color: var(--text-muted); opacity: 0.3; }
+.preview-info {
+  padding: 16px 20px;
+  background: var(--surface-1);
+  border-top: 1px solid var(--border);
+}
+.preview-filename {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm); font-weight: 500;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+.preview-desc {
+  font-size: var(--text-sm); color: var(--text-secondary);
+  line-height: 1.6;
+  margin-bottom: 10px;
+}
+.preview-tags { display: flex; flex-wrap: wrap; gap: 4px; }
+.preview-tag {
+  height: 22px; padding: 0 8px;
+  font-size: var(--text-xs);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+.preview-more {
+  font-size: var(--text-xs); color: var(--text-muted);
+  font-family: var(--font-mono);
+  display: flex; align-items: center;
+}
+.preview-meta-row {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-top: 8px; gap: 12px;
+}
+.preview-source {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.preview-date {
+  font-size: var(--text-sm); color: var(--text-muted);
+  text-align: right; flex-shrink: 0;
+}
+
+/* ── Right: Detail Drawer ── */
+.detail-drawer {
+  width: 480px; flex-shrink: 0;
+  background: var(--surface-1);
+  border-left: 1px solid var(--border);
+  display: flex; flex-direction: column;
+  overflow-y: auto;
+}
+.detail-section { padding: 16px 20px; border-bottom: 1px solid var(--border); }
+.detail-section:last-child { border-bottom: none; }
+.detail-section-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 12px;
+}
+.detail-section-title {
+  font-size: var(--text-sm); font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+}
+.detail-section-action {
+  height: 28px; padding: 0 10px;
+  display: flex; align-items: center; gap: 4px;
+  font-size: var(--text-xs); font-weight: 500;
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  transition: background 150ms;
+}
+.detail-section-action:hover { background: var(--surface-3); }
+.detail-section-action:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--bg-canvas), 0 0 0 4px var(--primary);
+}
+
+/* Tags */
+.tag-list { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.tag-pill {
+  height: 26px; padding: 0 8px 0 10px;
+  display: flex; align-items: center; gap: 6px;
+  font-size: var(--text-sm);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 13px;
+  color: var(--text-primary);
+}
+.tag-pill-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  flex-shrink: 0;
+}
+.tag-pill-remove {
+  width: 16px; height: 16px; display: flex; align-items: center; justify-content: center;
+  border-radius: 50%; color: var(--text-muted);
+  transition: background 150ms; font-size: var(--text-xs);
+}
+.tag-pill-remove:hover { background: var(--surface-3); }
+.tag-input-row { display: flex; gap: 8px; }
+.tag-input {
+  flex: 1; height: 32px; padding: 0 10px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+  outline: none;
+  transition: border-color 150ms, box-shadow 150ms;
+}
+.tag-input::placeholder { color: var(--text-muted); }
+.tag-input:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px var(--primary-soft);
+}
+.tag-add-btn {
+  height: 32px; padding: 0 14px;
+  font-size: var(--text-sm); font-weight: 600;
+  background: var(--primary); color: var(--primary-fg);
+  border-radius: var(--radius-sm);
+  transition: background 150ms;
+  white-space: nowrap;
+}
+.tag-add-btn:hover { background: var(--primary-hover); }
+.tag-add-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--bg-canvas), 0 0 0 4px var(--primary);
+}
+
+/* Suggested Cuts */
+.cut-card {
+  display: flex; gap: 10px;
+  padding: 10px 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  margin-bottom: 8px;
+  transition: box-shadow 150ms;
+}
+.cut-card:hover { box-shadow: var(--shadow-1); }
+.cut-thumb {
+  width: 80px; height: 45px; flex-shrink: 0;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: var(--surface-3);
+}
+.cut-thumb-placeholder {
+  width: 100%; height: 100%;
+  display: flex; align-items: center; justify-content: center;
+}
+.cut-thumb-placeholder svg { color: var(--text-muted); opacity: 0.3; }
+.cut-info { flex: 1; min-width: 0; }
+.cut-time {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm); font-weight: 500;
+  color: var(--text-primary);
+  margin-bottom: 2px;
+}
+.cut-desc {
+  font-size: var(--text-xs); color: var(--text-secondary);
+  line-height: 1.5;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+
+/* Collapsible Sections */
+.collapsible { margin-bottom: 4px; }
+.collapsible-header {
+  display: flex; align-items: center; gap: 6px;
+  padding: 8px 0;
+  font-size: var(--text-sm); font-weight: 600;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: color 150ms;
+  user-select: none;
+}
+.collapsible-header:hover { color: var(--text-primary); }
+.collapsible-header:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--primary-soft);
+  border-radius: var(--radius-sm);
+}
+.collapsible-chevron {
+  width: 14px; height: 14px;
+  transition: transform 150ms;
+  flex-shrink: 0;
+}
+.collapsible-header.open .collapsible-chevron { transform: rotate(90deg); }
+.collapsible-body { padding: 4px 0 12px; }
+.collapsible-body.hidden { display: none; }
+
+/* Transcript */
+.transcript-full {
+  font-size: var(--text-sm); color: var(--text-primary);
+  line-height: 1.7; margin-bottom: 12px;
+}
+.transcript-timeline {
+  display: flex; flex-direction: column; gap: 4px;
+}
+.transcript-segment {
+  display: flex; gap: 8px;
+  font-size: var(--text-xs); line-height: 1.5;
+}
+.transcript-time {
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+  flex-shrink: 0;
+  min-width: 36px;
+}
+.transcript-text { color: var(--text-secondary); }
+
+/* Source File */
+.source-path {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+  word-break: break-all;
+  line-height: 1.5;
+}
+
+/* Metadata */
+.meta-grid {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 6px 16px;
+  font-size: var(--text-sm);
+}
+.meta-label {
+  color: var(--text-secondary);
+}
+.meta-value {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--text-primary);
+  text-align: right;
+}
+
+/* Bottom Bar */
+.detail-bottom {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 20px;
+  background: var(--surface-1);
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.roll-toggle {
+  display: flex; height: 32px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+.roll-toggle-btn {
+  height: 100%; padding: 0 14px;
+  display: flex; align-items: center;
+  font-size: var(--text-sm); font-weight: 500;
+  color: var(--text-secondary);
+  transition: background 150ms, color 150ms;
+}
+.roll-toggle-btn:hover { color: var(--text-primary); }
+.roll-toggle-btn.active {
+  background: var(--primary); color: var(--primary-fg);
+}
+.roll-toggle-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--bg-canvas), 0 0 0 4px var(--primary);
+}
+.reanalyze-btn {
+  height: 32px; padding: 0 12px;
+  display: flex; align-items: center; gap: 6px;
+  font-size: var(--text-sm); font-weight: 500;
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  transition: background 150ms;
+}
+.reanalyze-btn:hover { background: var(--surface-3); }
+.reanalyze-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--bg-canvas), 0 0 0 4px var(--primary);
+}
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--border-strong); }
+
+.icon-sm { width: 14px; height: 14px; }
+.icon-md { width: 16px; height: 16px; }
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- ── Top Bar ── -->
+  <header class="topbar">
+    <span class="topbar-title">片段详情</span>
+    <span class="topbar-spacer"></span>
+    <button class="topbar-btn topbar-save" data-od-id="save-btn">Save</button>
+    <button class="topbar-theme-toggle" id="themeToggle" aria-label="切换主题">
+      <svg class="icon-md sun-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true" style="display:none">
+        <circle cx="8" cy="8" r="3"/><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.1 3.1l1.4 1.4M11.5 11.5l1.4 1.4M12.9 3.1l-1.4 1.4M4.5 11.5l-1.4 1.4"/>
+      </svg>
+      <svg class="icon-md moon-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+        <path d="M13.5 9.5A5.5 5.5 0 0 1 6.5 2.5a5.5 5.5 0 1 0 7 7Z"/>
+      </svg>
+    </button>
+    <a href="home.html" class="topbar-close" aria-label="关闭">
+      <svg class="icon-md" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+        <path d="M4 4l8 8M12 4l-8 8"/>
+      </svg>
+    </a>
+  </header>
+
+  <!-- ── Main ── -->
+  <div class="main">
+    <!-- Left: Video Preview -->
+    <div class="preview-panel" data-od-id="preview-panel">
+      <div class="preview-video">
+        <div class="preview-video-placeholder">
+          <svg class="icon-md" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1" aria-hidden="true">
+            <rect x="2" y="2" width="12" height="12" rx="2"/><circle cx="6.5" cy="6" r="1.2"/><path d="M2 11l3.5-3L8 10.5 10.5 8.5 14 11"/>
+          </svg>
+        </div>
+      </div>
+      <div class="preview-info">
+        <div class="preview-filename">GH010237.MP4</div>
+        <div class="preview-desc">
+          视频记录了在游乐园排队体验红色小蜜蜂和摩天轮项目的过程。游客们尝试玩鸭子赛跑失败，到观察小猪表演，展现了轻松愉快的亲子互动。
+        </div>
+        <div class="preview-tags">
+          <span class="preview-tag">Express票</span>
+          <span class="preview-tag">人山人海</span>
+          <span class="preview-tag">排队体验</span>
+          <span class="preview-tag">排队等候</span>
+          <span class="preview-tag">旅行攻略</span>
+          <span class="preview-tag">景点打卡</span>
+          <span class="preview-tag">热门景区</span>
+          <span class="preview-more">+5</span>
+        </div>
+        <div class="preview-meta-row">
+          <span class="preview-source" title="/Users/jianhengpan/CNE/GH010237.MP4">/Users/jianhengpan/CNE/GH010237.MP4</span>
+          <span class="preview-date">2016/08/31</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right: Detail Drawer -->
+    <aside class="detail-drawer" data-od-id="detail-drawer">
+      <!-- Tags -->
+      <div class="detail-section" data-od-id="tags-section">
+        <div class="detail-section-header">
+          <span class="detail-section-title">Tags</span>
+        </div>
+        <div class="tag-list">
+          <span class="tag-pill">
+            <span class="tag-pill-dot"></span>
+            Express票
+            <button class="tag-pill-remove" aria-label="移除标签">×</button>
+          </span>
+          <span class="tag-pill">
+            <span class="tag-pill-dot"></span>
+            人山人海
+            <button class="tag-pill-remove" aria-label="移除标签">×</button>
+          </span>
+          <span class="tag-pill">
+            <span class="tag-pill-dot"></span>
+            排队体验
+            <button class="tag-pill-remove" aria-label="移除标签">×</button>
+          </span>
+          <span class="tag-pill">
+            <span class="tag-pill-dot"></span>
+            排队等候
+            <button class="tag-pill-remove" aria-label="移除标签">×</button>
+          </span>
+          <span class="tag-pill">
+            <span class="tag-pill-dot"></span>
+            旅行攻略
+            <button class="tag-pill-remove" aria-label="移除标签">×</button>
+          </span>
+          <span class="tag-pill">
+            <span class="tag-pill-dot"></span>
+            景点打卡
+            <button class="tag-pill-remove" aria-label="移除标签">×</button>
+          </span>
+          <span class="tag-pill">
+            <span class="tag-pill-dot"></span>
+            热门景区
+            <button class="tag-pill-remove" aria-label="移除标签">×</button>
+          </span>
+        </div>
+        <div class="tag-input-row">
+          <input class="tag-input" type="text" placeholder="Add tag..." aria-label="添加标签">
+          <button class="tag-add-btn">Add</button>
+        </div>
+      </div>
+
+      <!-- Suggested Cuts -->
+      <div class="detail-section" data-od-id="cuts-section">
+        <div class="detail-section-header">
+          <span class="detail-section-title">Suggested Cuts</span>
+          <div style="display:flex;align-items:center;gap:6px;">
+            <span class="cuts-auto-status" id="cuts-auto-status" style="display:none;font-size:var(--text-xs);color:var(--text-muted);">已自动推荐</span>
+            <button class="detail-section-action" id="suggest-keyframes-btn" data-od-id="suggest-keyframes-btn">
+              <svg class="icon-sm" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+                <path d="M1.5 8a6.5 6.5 0 0 1 11.45-4.15M14.5 8a6.5 6.5 0 0 1-11.45 4.15"/><path d="M12 1v3h-3M4 15v-3h3"/>
+              </svg>
+              Suggest keyframes
+            </button>
+          </div>
+        </div>
+
+        <div class="cut-card">
+          <div class="cut-thumb">
+            <div class="cut-thumb-placeholder">
+              <svg class="icon-sm" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1" aria-hidden="true">
+                <rect x="2" y="2" width="12" height="12" rx="2"/><circle cx="6.5" cy="6" r="1.2"/><path d="M2 11l3.5-3L8 10.5 10.5 8.5 14 11"/>
+              </svg>
+            </div>
+          </div>
+          <div class="cut-info">
+            <div class="cut-time">0:08–0:15</div>
+            <div class="cut-desc">揭示了游客大量购买快速通行票的现象，并直接引出了排队时间长的核心痛点。</div>
+          </div>
+        </div>
+
+        <div class="cut-card">
+          <div class="cut-thumb">
+            <div class="cut-thumb-placeholder">
+              <svg class="icon-sm" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1" aria-hidden="true">
+                <rect x="2" y="2" width="12" height="12" rx="2"/><circle cx="6.5" cy="6" r="1.2"/><path d="M2 11l3.5-3L8 10.5 10.5 8.5 14 11"/>
+              </svg>
+            </div>
+          </div>
+          <div class="cut-info">
+            <div class="cut-time">0:13–0:16</div>
+            <div class="cut-desc">给出了关于购买快速通行票的实用建议，强调了排队时长的严峻性。</div>
+          </div>
+        </div>
+
+        <div class="cut-card">
+          <div class="cut-thumb">
+            <div class="cut-thumb-placeholder">
+              <svg class="icon-sm" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1" aria-hidden="true">
+                <rect x="2" y="2" width="12" height="12" rx="2"/><circle cx="6.5" cy="6" r="1.2"/><path d="M2 11l3.5-3L8 10.5 10.5 8.5 14 11"/>
+              </svg>
+            </div>
+          </div>
+          <div class="cut-info">
+            <div class="cut-time">0:01–0:08</div>
+            <div class="cut-desc">通过描述现场络绎不绝的人流，为后续解释排队原因提供了直观的背景铺垫。</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Transcript -->
+      <div class="detail-section" data-od-id="transcript-section">
+        <div class="collapsible" data-od-id="transcript-collapsible">
+          <div class="collapsible-header open" tabindex="0">
+            <svg class="collapsible-chevron" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <path d="M6 4l4 4-4 4"/>
+            </svg>
+            Transcript
+          </div>
+          <div class="collapsible-body">
+            <div class="transcript-full">
+              我们现在还在排队，然后我们看到后面的人络绎不绝地过来，所以我觉得应该挺多人都买了那种 all right all right 的票，所以怪不得他们说要买 express 下班的话，你真的排队排挺久的。
+            </div>
+            <div class="transcript-timeline">
+              <div class="transcript-segment">
+                <span class="transcript-time">1.2s</span>
+                <span class="transcript-text">我们现在还在排队，然后我们看到后面的</span>
+              </div>
+              <div class="transcript-segment">
+                <span class="transcript-time">5.1s</span>
+                <span class="transcript-text">人络绎不绝地过来，所以我觉得应该挺多</span>
+              </div>
+              <div class="transcript-segment">
+                <span class="transcript-time">8.0s</span>
+                <span class="transcript-text">人都买了那种 all right all</span>
+              </div>
+              <div class="transcript-segment">
+                <span class="transcript-time">10.2s</span>
+                <span class="transcript-text">right 的票，所以怪不得他们说要</span>
+              </div>
+              <div class="transcript-segment">
+                <span class="transcript-time">12.9s</span>
+                <span class="transcript-text">买 express 下班的话，你真的</span>
+              </div>
+              <div class="transcript-segment">
+                <span class="transcript-time">15.0s</span>
+                <span class="transcript-text">排队排挺久的。</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Source File -->
+      <div class="detail-section" data-od-id="source-section">
+        <div class="collapsible" data-od-id="source-collapsible">
+          <div class="collapsible-header" tabindex="0">
+            <svg class="collapsible-chevron" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <path d="M6 4l4 4-4 4"/>
+            </svg>
+            Source File
+          </div>
+          <div class="collapsible-body hidden">
+            <div class="source-path">/Users/jianhengpan/CNE/GH010237.MP4</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Metadata -->
+      <div class="detail-section" data-od-id="metadata-section">
+        <div class="collapsible" data-od-id="metadata-collapsible">
+          <div class="collapsible-header" tabindex="0">
+            <svg class="collapsible-chevron" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <path d="M6 4l4 4-4 4"/>
+            </svg>
+            Metadata
+          </div>
+          <div class="collapsible-body hidden">
+            <div class="meta-grid">
+              <span class="meta-label">Duration</span>
+              <span class="meta-value">0.3 min</span>
+              <span class="meta-label">Resolution</span>
+              <span class="meta-value">2704×1520</span>
+              <span class="meta-label">Frame rate</span>
+              <span class="meta-value">59.94005994005994 fps</span>
+              <span class="meta-label">Codec</span>
+              <span class="meta-value">h264</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <!-- ── Bottom Bar ── -->
+  <div class="detail-bottom">
+    <div class="roll-toggle" data-od-id="roll-toggle">
+      <button class="roll-toggle-btn active" data-od-id="roll-a-btn" aria-pressed="true">A-roll</button>
+      <button class="roll-toggle-btn" data-od-id="roll-b-btn" aria-pressed="false">B-roll</button>
+    </div>
+    <div style="display:flex;gap:8px;">
+      <button class="reanalyze-btn" data-od-id="reanalyze-btn">
+        <svg class="icon-sm" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+          <path d="M1.5 8a6.5 6.5 0 0 1 11.45-4.15M14.5 8a6.5 6.5 0 0 1-11.45 4.15"/><path d="M12 1v3h-3M4 15v-3h3"/>
+        </svg>
+        Re-analyze
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── Theme Toggle ──
+(function() {
+  var stored = localStorage.getItem('cutfinder-theme');
+  if (stored === 'dark') {
+    document.documentElement.setAttribute('data-theme', 'dark');
+    updateIcons(true);
+  }
+  function updateIcons(dark) {
+    document.querySelector('.sun-icon').style.display = dark ? '' : 'none';
+    document.querySelector('.moon-icon').style.display = dark ? 'none' : '';
+  }
+  document.getElementById('themeToggle').addEventListener('click', function() {
+    var isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+    var next = isDark ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', next);
+    localStorage.setItem('cutfinder-theme', next);
+    updateIcons(!isDark);
+  });
+})();
+
+// ── Collapsible Sections ──
+(function() {
+  var headers = document.querySelectorAll('.collapsible-header');
+  headers.forEach(function(header) {
+    header.addEventListener('click', function() {
+      var body = this.nextElementSibling;
+      this.classList.toggle('open');
+      body.classList.toggle('hidden');
+    });
+  });
+})();
+
+// ── Roll Toggle ──
+(function() {
+  var rollBtns = document.querySelectorAll('.roll-toggle-btn');
+  rollBtns.forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      rollBtns.forEach(function(b) { b.classList.remove('active'); b.setAttribute('aria-pressed', 'false'); });
+      this.classList.add('active');
+      this.setAttribute('aria-pressed', 'true');
+    });
+  });
+})();
+
+// ── Tag Remove ──
+(function() {
+  var removes = document.querySelectorAll('.tag-pill-remove');
+  removes.forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      this.parentElement.remove();
+    });
+  });
+})();
+
+// ── Tag Add ──
+(function() {
+  var input = document.querySelector('.tag-input');
+  var addBtn = document.querySelector('.tag-add-btn');
+  var list = document.querySelector('.tag-list');
+  function addTag() {
+    var val = input.value.trim();
+    if (!val) return;
+    var pill = document.createElement('span');
+    pill.className = 'tag-pill';
+    pill.innerHTML = '<span class="tag-pill-dot"></span>' + val + '<button class="tag-pill-remove" aria-label="移除标签">×</button>';
+    list.appendChild(pill);
+    input.value = '';
+    // Re-bind remove handler
+    var newRemove = pill.querySelector('.tag-pill-remove');
+    newRemove.addEventListener('click', function() { this.parentElement.remove(); });
+  }
+  addBtn.addEventListener('click', addTag);
+  input.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') { e.preventDefault(); addTag(); }
+  });
+})();
+
+// ── Suggest Keyframes: show button only when auto is OFF ──
+(function() {
+  var autoEnabled = localStorage.getItem('cutfinder-auto-keyframes') !== 'false';
+  var btn = document.getElementById('suggest-keyframes-btn');
+  var status = document.getElementById('cuts-auto-status');
+  if (autoEnabled) {
+    btn.style.display = 'none';
+    status.style.display = '';
+  } else {
+    btn.style.display = '';
+    status.style.display = 'none';
+  }
+})();
+</script>
+</body>
+</html>

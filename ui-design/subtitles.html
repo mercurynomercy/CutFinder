@@ -1,0 +1,701 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CutFinder — 字幕导出</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  color-scheme: light;
+  --bg-canvas: #EEF0F3;
+  --surface-1: #FFFFFF;
+  --surface-2: #F6F7F9;
+  --surface-3: #E4E7EC;
+  --border: #D8DCE2;
+  --border-strong: #BCC2CB;
+  --text-primary: #1A1D21;
+  --text-secondary: #4B5563;
+  --text-muted: #6B7280;
+  --primary: #5256E0;
+  --primary-hover: #4146C4;
+  --primary-press: #383DB0;
+  --primary-fg: #FFFFFF;
+  --primary-soft: rgba(82, 86, 224, 0.12);
+  --success: #15803D;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 10px;
+  --shadow-1: 0 1px 2px rgba(0,0,0,0.06);
+  --shadow-2: 0 4px 12px rgba(0,0,0,0.08);
+  --font-ui: "Inter", "PingFang SC", -apple-system, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", monospace;
+  --text-xs: 12px;
+  --text-sm: 13px;
+  --text-base: 14px;
+  --text-md: 15px;
+  --text-lg: 16px;
+  --text-xl: 20px;
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+  --bg-canvas: #0E0F11;
+  --surface-1: #16181B;
+  --surface-2: #1E2125;
+  --surface-3: #282C31;
+  --border: #2E333A;
+  --border-strong: #3A4048;
+  --text-primary: #F2F4F7;
+  --text-secondary: #A4ACB9;
+  --text-muted: #6B7280;
+  --primary: #6366F1;
+  --primary-hover: #7077F2;
+  --primary-press: #525AE0;
+  --primary-fg: #FFFFFF;
+  --primary-soft: rgba(99, 102, 241, 0.15);
+  --success: #22C55E;
+  --shadow-1: 0 1px 2px rgba(0,0,0,0.3);
+  --shadow-2: 0 4px 12px rgba(0,0,0,0.4);
+}
+
+body {
+  font-family: var(--font-ui);
+  font-size: var(--text-base);
+  line-height: 1.5;
+  color: var(--text-primary);
+  background: var(--bg-canvas);
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3 { line-height: 1.35; }
+a { color: inherit; text-decoration: none; }
+button { font-family: inherit; cursor: pointer; border: none; background: none; }
+input { font-family: inherit; }
+
+/* ── App Shell ── */
+.app { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+
+/* ── Top Bar ── */
+.topbar {
+  display: flex; align-items: center; gap: 12px;
+  height: 48px; padding: 0 16px;
+  background: var(--surface-1);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0; z-index: 100;
+}
+.topbar-title {
+  font-size: var(--text-lg); font-weight: 600;
+  letter-spacing: -0.01em; color: var(--text-primary);
+}
+.topbar-spacer { flex: 1; }
+.topbar-btn {
+  width: 32px; height: 32px; padding: 0;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  transition: background 150ms;
+}
+.topbar-btn:hover { background: var(--surface-3); }
+.topbar-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--bg-canvas), 0 0 0 4px var(--primary);
+}
+.topbar-theme-toggle {
+  width: 32px; height: 32px; padding: 0;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: var(--radius-sm); color: var(--text-secondary);
+  transition: background 150ms;
+}
+.topbar-theme-toggle:hover { background: var(--surface-3); }
+.topbar-theme-toggle:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--bg-canvas), 0 0 0 4px var(--primary);
+}
+
+/* ── Content ── */
+.content {
+  flex: 1; overflow-y: auto; padding: 24px;
+  display: flex; flex-direction: column; gap: 20px;
+  max-width: 640px; width: 100%; margin: 0 auto;
+}
+
+.instruction {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+/* ── Setting Card ── */
+.setting-card {
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 16px;
+  display: flex; flex-direction: column; gap: 12px;
+}
+.setting-card-header {
+  display: flex; align-items: center; justify-content: space-between;
+}
+.setting-card-label {
+  font-size: var(--text-sm); font-weight: 600;
+  color: var(--text-primary);
+}
+.setting-card-state {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  font-style: italic;
+}
+.setting-card-btn {
+  height: 30px; padding: 0 12px;
+  display: flex; align-items: center; justify-content: center; gap: 4px;
+  font-size: var(--text-sm); font-weight: 500;
+  background: var(--primary); color: var(--primary-fg);
+  border-radius: var(--radius-sm);
+  transition: background 150ms;
+}
+.setting-card-btn:hover { background: var(--primary-hover); }
+.setting-card-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--bg-canvas), 0 0 0 4px var(--primary);
+}
+.setting-card-btn.selected {
+  background: var(--success);
+}
+.setting-card-selected-info {
+  display: flex; flex-direction: column; gap: 2px;
+}
+.setting-card-selected-name {
+  font-size: var(--text-sm); font-weight: 500;
+  color: var(--text-primary);
+}
+.setting-card-selected-meta {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs); color: var(--text-muted);
+}
+
+/* ── Format Options ── */
+.format-group {
+  display: flex; flex-direction: column; gap: 10px;
+}
+.format-row {
+  display: flex; align-items: center; gap: 8px;
+}
+.format-checkbox {
+  position: relative;
+  width: 18px; height: 18px;
+  flex-shrink: 0;
+}
+.format-checkbox input {
+  position: absolute;
+  opacity: 0; width: 100%; height: 100%;
+  cursor: pointer; z-index: 1;
+  margin: 0;
+}
+.format-checkbox .checkmark {
+  width: 18px; height: 18px;
+  border: 1.5px solid var(--border);
+  border-radius: 4px;
+  background: var(--surface-2);
+  display: flex; align-items: center; justify-content: center;
+  transition: background 150ms, border-color 150ms;
+}
+.format-checkbox .checkmark svg {
+  width: 12px; height: 12px;
+  opacity: 0;
+  transition: opacity 150ms;
+  color: var(--primary-fg);
+}
+.format-checkbox input:checked + .checkmark {
+  background: var(--primary);
+  border-color: var(--primary);
+}
+.format-checkbox input:checked + .checkmark svg {
+  opacity: 1;
+}
+.format-checkbox input:focus-visible + .checkmark {
+  box-shadow: 0 0 0 2px var(--bg-canvas), 0 0 0 4px var(--primary);
+}
+.format-label {
+  font-size: var(--text-sm); font-weight: 500;
+  color: var(--text-primary);
+}
+
+.format-helper {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  line-height: 1.5;
+  margin-top: -2px;
+}
+
+/* ── Duration Input ── */
+.duration-row {
+  display: flex; align-items: center; gap: 8px;
+  padding-top: 4px;
+  border-top: 1px solid var(--border);
+}
+.duration-label {
+  font-size: var(--text-xs); font-weight: 500;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+.duration-input {
+  width: 72px; height: 30px;
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  outline: none;
+  transition: border-color 150ms, box-shadow 150ms;
+  -moz-appearance: textfield;
+}
+.duration-input::-webkit-outer-spin-button,
+.duration-input::-webkit-inner-spin-button {
+  -webkit-appearance: none; margin: 0;
+}
+.duration-input:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px var(--primary-soft);
+}
+.duration-unit {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+/* ── Footer ── */
+.footer {
+  padding: 12px 24px;
+  background: var(--surface-1);
+  border-top: 1px solid var(--border);
+  display: flex; flex-direction: column; gap: 8px;
+  flex-shrink: 0;
+}
+.footer-top {
+  display: flex; align-items: center; justify-content: space-between;
+}
+.footer-status {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+.footer-actions {
+  display: flex; gap: 8px;
+}
+.footer-btn {
+  height: 34px; padding: 0 20px;
+  font-size: var(--text-sm); font-weight: 500;
+  border-radius: var(--radius-sm);
+  transition: background 150ms, opacity 150ms;
+}
+.footer-btn-secondary {
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+}
+.footer-btn-secondary:hover { background: var(--surface-3); }
+.footer-btn-secondary:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--bg-canvas), 0 0 0 4px var(--primary);
+}
+.footer-btn-primary {
+  background: var(--primary); color: var(--primary-fg);
+}
+.footer-btn-primary:hover { background: var(--primary-hover); }
+.footer-btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
+.footer-btn-primary:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--bg-canvas), 0 0 0 4px var(--primary);
+}
+
+/* ── Progress Bar ── */
+.progress-bar {
+  display: none;
+  flex-direction: column;
+  gap: 4px;
+}
+.progress-bar.visible {
+  display: flex;
+}
+.progress-track {
+  height: 4px;
+  background: var(--surface-3);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.progress-fill {
+  height: 100%;
+  width: 0%;
+  background: var(--primary);
+  border-radius: 2px;
+  transition: width 300ms ease;
+}
+.progress-info {
+  display: flex; align-items: center; justify-content: space-between;
+}
+.progress-label {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+.progress-percent {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  min-width: 32px;
+  text-align: right;
+}
+.footer-actions {
+  display: flex; gap: 8px;
+}
+.footer-btn {
+  height: 34px; padding: 0 20px;
+  font-size: var(--text-sm); font-weight: 500;
+  border-radius: var(--radius-sm);
+  transition: background 150ms, opacity 150ms;
+}
+.footer-btn-secondary {
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+}
+.footer-btn-secondary:hover { background: var(--surface-3); }
+.footer-btn-secondary:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--bg-canvas), 0 0 0 4px var(--primary);
+}
+.footer-btn-primary {
+  background: var(--primary); color: var(--primary-fg);
+}
+.footer-btn-primary:hover { background: var(--primary-hover); }
+.footer-btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
+.footer-btn-primary:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--bg-canvas), 0 0 0 4px var(--primary);
+}
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--border-strong); }
+
+.icon-sm { width: 14px; height: 14px; }
+.icon-md { width: 16px; height: 16px; }
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- ── Top Bar ── -->
+  <header class="topbar">
+    <span class="topbar-title">字幕导出</span>
+    <span class="topbar-spacer"></span>
+    <button class="topbar-theme-toggle" id="themeToggle" aria-label="切换主题">
+      <svg class="icon-md sun-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true" style="display:none">
+        <circle cx="8" cy="8" r="3"/><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.1 3.1l1.4 1.4M11.5 11.5l1.4 1.4M12.9 3.1l-1.4 1.4M4.5 11.5l-1.4 1.4"/>
+      </svg>
+      <svg class="icon-md moon-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+        <path d="M13.5 9.5A5.5 5.5 0 0 1 6.5 2.5a5.5 5.5 0 1 0 7 7Z"/>
+      </svg>
+    </button>
+    <a href="index.html" class="topbar-btn" aria-label="关闭">
+      <svg class="icon-md" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+        <path d="M4 4l8 8M12 4l-8 8"/>
+      </svg>
+    </a>
+  </header>
+
+  <!-- ── Content ── -->
+  <div class="content" data-od-id="subtitle-content">
+    <p class="instruction">选择一个已完成的视频和一个输出文件夹，然后导出从音频中转录的字幕。</p>
+
+    <!-- Video Selection -->
+    <div class="setting-card" data-od-id="card-video">
+      <div class="setting-card-header">
+        <span class="setting-card-label">视频</span>
+      </div>
+      <div class="setting-card-body" id="video-body">
+        <span class="setting-card-state" id="video-state">未选择视频</span>
+      </div>
+      <button class="setting-card-btn" id="video-select-btn" data-od-id="video-select-btn">
+        选择视频
+      </button>
+    </div>
+
+    <!-- Output Folder -->
+    <div class="setting-card" data-od-id="card-folder">
+      <div class="setting-card-header">
+        <span class="setting-card-label">输出文件夹</span>
+      </div>
+      <div class="setting-card-body" id="folder-body">
+        <span class="setting-card-state" id="folder-state">未选择文件夹</span>
+      </div>
+      <button class="setting-card-btn" id="folder-select-btn" data-od-id="folder-select-btn">
+        选择输出文件夹
+      </button>
+    </div>
+
+    <!-- Format Options -->
+    <div class="setting-card" data-od-id="card-formats">
+      <div class="setting-card-header">
+        <span class="setting-card-label">格式</span>
+      </div>
+      <div class="format-group">
+        <label class="format-row">
+          <span class="format-checkbox">
+            <input type="checkbox" id="format-itc" checked>
+            <span class="checkmark">
+              <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <path d="M2.5 6.5L4.5 8.5L9.5 3.5"/>
+              </svg>
+            </span>
+          </span>
+          <span class="format-label">iTT</span>
+        </label>
+        <label class="format-row">
+          <span class="format-checkbox">
+            <input type="checkbox" id="format-srt" checked>
+            <span class="checkmark">
+              <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <path d="M2.5 6.5L4.5 8.5L9.5 3.5"/>
+              </svg>
+            </span>
+          </span>
+          <span class="format-label">SRT</span>
+        </label>
+        <p class="format-helper">字幕语言跟随「设置」中配置的 AI 输出语言。</p>
+      </div>
+
+      <div class="duration-row">
+        <span class="duration-label">每条字幕最短时长（秒）</span>
+        <input type="number" class="duration-input" id="min-duration" value="2" min="0" max="30" step="0.5">
+        <span class="duration-unit">s</span>
+      </div>
+      <p class="format-helper">短字幕在屏幕上至少停留此时间（不与下一条重叠），让 2–3 个字符的行保持可读。0 保持转录的原始时间。</p>
+    </div>
+  </div>
+
+  <!-- ── Footer ── -->
+  <div class="footer" data-od-id="export-footer">
+    <div class="progress-bar" id="progress-bar">
+      <div class="progress-track">
+        <div class="progress-fill" id="progress-fill"></div>
+      </div>
+      <div class="progress-info">
+        <span class="progress-label" id="progress-label">正在导出…</span>
+        <span class="progress-percent" id="progress-percent">0%</span>
+      </div>
+    </div>
+    <div class="footer-top">
+      <span class="footer-status" id="export-status"></span>
+      <div class="footer-actions">
+        <button class="footer-btn footer-btn-secondary" id="cancel-btn">取消</button>
+        <button class="footer-btn footer-btn-primary" id="export-btn" disabled data-od-id="export-btn">导出</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── Theme Toggle ──
+(function() {
+  var stored = localStorage.getItem('cutfinder-theme');
+  if (stored === 'dark') {
+    document.documentElement.setAttribute('data-theme', 'dark');
+    updateIcons(true);
+  }
+  function updateIcons(dark) {
+    document.querySelector('.sun-icon').style.display = dark ? '' : 'none';
+    document.querySelector('.moon-icon').style.display = dark ? 'none' : '';
+  }
+  document.getElementById('themeToggle').addEventListener('click', function() {
+    var isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+    var next = isDark ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', next);
+    localStorage.setItem('cutfinder-theme', next);
+    updateIcons(!isDark);
+  });
+})();
+
+// ── Subtitle Export Logic ──
+(function() {
+  var videoState = document.getElementById('video-state');
+  var videoBody = document.getElementById('video-body');
+  var videoBtn = document.getElementById('video-select-btn');
+  var folderState = document.getElementById('folder-state');
+  var folderBody = document.getElementById('folder-body');
+  var folderBtn = document.getElementById('folder-select-btn');
+  var exportBtn = document.getElementById('export-btn');
+  var exportStatus = document.getElementById('export-status');
+  var cancelBtn = document.getElementById('cancel-btn');
+  var minDuration = document.getElementById('min-duration');
+  var formatItc = document.getElementById('format-itc');
+  var formatSrt = document.getElementById('format-srt');
+
+  var selectedVideo = null;
+  var selectedFolder = null;
+
+  // Mock video list (in real app, this would come from the backend)
+  var mockVideos = [
+    { name: '2016-08-31 A-0001.MP4', size: '245 MB', duration: '00:12:34' },
+    { name: '2016-08-31 B-0001.MP4', size: '128 MB', duration: '00:05:22' },
+    { name: '2016-09-01 A-0005.MP4', size: '312 MB', duration: '00:18:45' },
+    { name: '2016-09-02 A-0012.MP4', size: '189 MB', duration: '00:08:17' },
+  ];
+
+  // ── Video Selection ──
+  function showVideoPicker() {
+    // Replace button with a dropdown-like list
+    var existing = document.getElementById('video-picker');
+    if (existing) { existing.remove(); return; }
+
+    var picker = document.createElement('div');
+    picker.id = 'video-picker';
+    picker.style.cssText = 'display:flex;flex-direction:column;gap:4px;margin-top:8px;max-height:200px;overflow-y:auto;';
+
+    mockVideos.forEach(function(video) {
+      var item = document.createElement('div');
+      item.style.cssText = 'padding:8px 10px;border-radius:var(--radius-sm);font-size:var(--text-sm);cursor:pointer;transition:background 150ms;display:flex;justify-content:space-between;align-items:center;';
+      item.innerHTML = '<span>' + video.name + '</span><span style="font-family:var(--font-mono);font-size:var(--text-xs);color:var(--text-muted)">' + video.duration + '</span>';
+      item.addEventListener('click', function() {
+        selectVideo(video);
+        picker.remove();
+      });
+      picker.appendChild(item);
+    });
+
+    videoBtn.parentNode.insertBefore(picker, videoBtn);
+    videoBtn.style.display = 'none';
+  }
+
+  function selectVideo(video) {
+    selectedVideo = video;
+    videoBody.innerHTML = '<div class="setting-card-selected-info"><span class="setting-card-selected-name">' + video.name + '</span><span class="setting-card-selected-meta">' + video.size + ' · ' + video.duration + '</span></div>';
+    videoBtn.textContent = '更换视频';
+    videoBtn.className = 'setting-card-btn selected';
+    checkReady();
+  }
+
+  videoBtn.addEventListener('click', function() {
+    if (selectedVideo) {
+      // Reset
+      selectedVideo = null;
+      videoBody.innerHTML = '<span class="setting-card-state" id="video-state">未选择视频</span>';
+      videoBtn.textContent = '选择视频';
+      videoBtn.className = 'setting-card-btn';
+      checkReady();
+    } else {
+      showVideoPicker();
+    }
+  });
+
+  // ── Folder Selection ──
+  function selectFolder(folder) {
+    selectedFolder = folder;
+    folderBody.innerHTML = '<div class="setting-card-selected-info"><span class="setting-card-selected-name">' + folder + '</span></div>';
+    folderBtn.textContent = '更换文件夹';
+    folderBtn.className = 'setting-card-btn selected';
+    checkReady();
+  }
+
+  folderBtn.addEventListener('click', function() {
+    if (selectedFolder) {
+      selectedFolder = null;
+      folderBody.innerHTML = '<span class="setting-card-state" id="folder-state">未选择文件夹</span>';
+      folderBtn.textContent = '选择输出文件夹';
+      folderBtn.className = 'setting-card-btn';
+      checkReady();
+    } else {
+      // Simulate folder picker — use a default output path
+      selectFolder('~/Videos/CutFinder/exports');
+    }
+  });
+
+  // ── Validation ──
+  function checkReady() {
+    var hasVideo = !!selectedVideo;
+    var hasFolder = !!selectedFolder;
+    var hasFormat = formatItc.checked || formatSrt.checked;
+    exportBtn.disabled = !(hasVideo && hasFolder && hasFormat);
+    if (hasVideo && hasFolder && hasFormat) {
+      exportStatus.textContent = '就绪 — 将导出 ' + (formatItc.checked ? 'iTT' : '') + (formatItc.checked && formatSrt.checked ? ' + ' : '') + (formatSrt.checked ? 'SRT' : '') + ' 格式';
+    } else {
+      exportStatus.textContent = '';
+    }
+  }
+
+  formatItc.addEventListener('change', checkReady);
+  formatSrt.addEventListener('change', checkReady);
+
+  // ── Export ──
+  var progressBar = document.getElementById('progress-bar');
+  var progressFill = document.getElementById('progress-fill');
+  var progressLabel = document.getElementById('progress-label');
+  var progressPercent = document.getElementById('progress-percent');
+
+  exportBtn.addEventListener('click', function() {
+    if (!selectedVideo || !selectedFolder) return;
+
+    var formats = [];
+    if (formatItc.checked) formats.push('iTT');
+    if (formatSrt.checked) formats.push('SRT');
+    var duration = minDuration.value || '0';
+
+    // Show progress bar
+    exportBtn.disabled = true;
+    exportBtn.style.display = 'none';
+    cancelBtn.style.display = 'none';
+    progressBar.classList.add('visible');
+    progressLabel.textContent = '正在导出 ' + selectedVideo.name + '…';
+    progressPercent.textContent = '0%';
+    progressFill.style.width = '0%';
+    exportStatus.textContent = '';
+
+    // Simulate progress
+    var progress = 0;
+    var interval = setInterval(function() {
+      progress += Math.random() * 8 + 2;
+      if (progress > 95) progress = 95;
+      progressFill.style.width = progress.toFixed(1) + '%';
+      progressPercent.textContent = Math.round(progress) + '%';
+    }, 200);
+
+    // Complete
+    setTimeout(function() {
+      clearInterval(interval);
+      progressFill.style.width = '100%';
+      progressPercent.textContent = '100%';
+      progressLabel.textContent = '导出完成';
+
+      // Reset after 3 seconds
+      setTimeout(function() {
+        progressBar.classList.remove('visible');
+        exportBtn.style.display = '';
+        cancelBtn.style.display = '';
+        exportBtn.textContent = '导出';
+        exportBtn.style.background = '';
+        exportBtn.disabled = false;
+        exportStatus.textContent = '导出完成：' + formats.join(', ') + ' → ' + selectedFolder;
+      }, 1500);
+    }, 3000);
+  });
+
+  // ── Cancel ──
+  cancelBtn.addEventListener('click', function() {
+    window.location.href = 'index.html';
+  });
+
+  // ── Duration input validation ──
+  minDuration.addEventListener('input', function() {
+    var val = parseFloat(this.value);
+    if (isNaN(val) || val < 0) this.value = 0;
+    if (val > 30) this.value = 30;
+  });
+})();
+</script>
+</body>
+</html>
