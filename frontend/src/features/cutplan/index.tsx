@@ -52,9 +52,10 @@ function ThinkingDots() {
 
 export interface CutplanPageProps {
   onClose: () => void
+  onOpenSettings: () => void
 }
 
-export function CutplanPage({ onClose }: CutplanPageProps) {
+export function CutplanPage({ onClose, onOpenSettings }: CutplanPageProps) {
   const { t } = useI18n()
   const [sessions, setSessions] = useState<CutSession[]>([])
   const [activeId, setActiveId] = useState<number | null>(null)
@@ -73,19 +74,6 @@ export function CutplanPage({ onClose }: CutplanPageProps) {
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null)
   const [listCollapsed, setListCollapsed] = useState(false)
   const [planFullscreen, setPlanFullscreen] = useState(false)
-  const [promptOpen, setPromptOpen] = useState(false)
-  const [promptText, setPromptText] = useState('')
-  const [promptDefault, setPromptDefault] = useState('')
-  const [promptIsDefault, setPromptIsDefault] = useState(true)
-  const [promptSaved, setPromptSaved] = useState(false)
-  // Per-generation knobs, edited in the same "初剪设置" modal and persisted as
-  // machine-global prefs (PUT /settings rebuilds the director so they take effect).
-  const [directorMode, setDirectorMode] = useState<'agent' | 'staged'>('agent')
-  const [maxToolRounds, setMaxToolRounds] = useState(24)
-  const [criticEnabled, setCriticEnabled] = useState(false)
-  const [visionBudget, setVisionBudget] = useState(6)
-  const [leanTokenBudget, setLeanTokenBudget] = useState(50000)
-  const [stagedTokenBudget, setStagedTokenBudget] = useState(40000)
 
   const threadRef = useRef<HTMLDivElement>(null)
   const progressRef = useRef<HTMLDivElement>(null)
@@ -280,62 +268,6 @@ export function CutplanPage({ onClose }: CutplanPageProps) {
     }
   }
 
-  const openPrompt = async () => {
-    setPromptOpen(true)
-    try {
-      const r = await api.getCutPrompt()
-      setPromptText(r.prompt)
-      setPromptDefault(r.default)
-      setPromptIsDefault(r.is_default)
-    } catch (err) {
-      console.error('Load director prompt failed:', err)
-    }
-    // Generation options live in machine-global prefs; pull current values so
-    // the toggles reflect what's actually in effect.
-    try {
-      const data = await api.getSettings()
-      setDirectorMode(data.prefs.cut_director_mode ?? 'agent')
-      setMaxToolRounds(data.prefs.cut_max_tool_rounds ?? 24)
-      setCriticEnabled(data.prefs.cut_critic_enabled ?? false)
-      setVisionBudget(data.prefs.cut_vision_budget ?? 6)
-      setLeanTokenBudget(data.prefs.cut_lean_token_budget ?? 50000)
-      setStagedTokenBudget(data.prefs.cut_staged_token_budget ?? 40000)
-    } catch {
-      /* no library bound / unreachable — keep defaults */
-    }
-  }
-
-  const savePrompt = async () => {
-    try {
-      const r = await api.setCutPrompt(promptText)
-      setPromptText(r.prompt)
-      setPromptIsDefault(r.is_default)
-      // Persist the generation options too (a partial PUT — only these keys).
-      await api.putSettings({
-        cut_director_mode: directorMode,
-        cut_max_tool_rounds: maxToolRounds,
-        cut_critic_enabled: criticEnabled,
-        cut_vision_budget: visionBudget,
-        cut_lean_token_budget: leanTokenBudget,
-        cut_staged_token_budget: stagedTokenBudget,
-      })
-      setPromptSaved(true)
-      setTimeout(() => setPromptSaved(false), 1500)
-    } catch (err) {
-      console.error('Save rough-cut settings failed:', err)
-    }
-  }
-
-  const resetPrompt = async () => {
-    try {
-      const r = await api.resetCutPrompt()
-      setPromptText(r.prompt)
-      setPromptIsDefault(r.is_default)
-    } catch (err) {
-      console.error('Reset director prompt failed:', err)
-    }
-  }
-
   const copyMarkdown = async () => {
     if (!plan?.markdown) return
     try {
@@ -517,7 +449,7 @@ export function CutplanPage({ onClose }: CutplanPageProps) {
             />
             <div className="mt-2 flex items-center justify-between">
               <button
-                onClick={openPrompt}
+                onClick={onOpenSettings}
                 aria-label={t('roughcut.promptSettings')}
                 title={t('roughcut.promptSettings')}
                 className="inline-flex items-center gap-1.5 rounded-md border border-[--border] px-2.5 py-1.5 text-xs text-[--text-secondary] hover:bg-[--surface-3]"
@@ -606,133 +538,6 @@ export function CutplanPage({ onClose }: CutplanPageProps) {
           </div>
           <div className="mx-auto min-h-0 w-full max-w-5xl flex-1 overflow-y-auto p-6">
             {plan ? <ShotList plan={plan} /> : <p className="text-sm text-[--text-muted]">{t('roughcut.noPlan')}</p>}
-          </div>
-        </div>
-      )}
-
-      {/* Director prompt settings modal */}
-      {promptOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="flex max-h-[85vh] w-full max-w-2xl flex-col rounded-lg border border-[--border] bg-[--surface-1] shadow-xl">
-            <div className="flex items-center justify-between border-b border-[--border] px-5 py-3">
-              <span className="text-sm font-semibold">{t('roughcut.settingsTitle')}</span>
-              <span className={`text-xs ${promptIsDefault ? 'text-[--text-muted]' : 'text-[--primary]'}`}>
-                {promptIsDefault ? t('roughcut.promptDefault') : t('roughcut.promptCustom')}
-              </span>
-            </div>
-            <div className="min-h-0 flex-1 overflow-y-auto p-5">
-              {/* ── Generation options ─────────────────────── */}
-              <p className="mb-3 text-xs font-medium text-[--text-secondary]">{t('roughcut.genOptions')}</p>
-
-              <label className="block text-sm text-[--text-secondary]">{t('roughcut.directorMode')}</label>
-              <select
-                value={directorMode}
-                onChange={(e) => setDirectorMode(e.target.value as 'agent' | 'staged')}
-                aria-label={t('roughcut.directorMode')}
-                className="mt-1 w-full max-w-xs rounded-md border border-[--border] bg-[--surface-2] px-3 py-1.5 text-sm outline-none focus:border-[--primary]"
-              >
-                <option value="agent">{t('roughcut.modeAgent')}</option>
-                <option value="staged">{t('roughcut.modeStaged')}</option>
-              </select>
-              <p className="mt-1 text-xs text-[--text-muted]">{t('roughcut.directorModeDesc')}</p>
-
-              {directorMode === 'agent' && (
-                <>
-                  <label className="mt-3 block text-sm text-[--text-secondary]">{t('roughcut.maxRounds')}</label>
-                  <input
-                    type="number"
-                    min={1}
-                    max={200}
-                    step={1}
-                    value={maxToolRounds}
-                    onChange={(e) => setMaxToolRounds(parseInt(e.target.value, 10) || 1)}
-                    className="mt-1 w-28 rounded-md border border-[--border] bg-[--surface-2] px-3 py-1.5 text-sm outline-none focus:border-[--primary]"
-                  />
-                  <p className="mt-1 text-xs text-[--text-muted]">{t('roughcut.maxRoundsDesc')}</p>
-
-                  <label className="mt-3 block text-sm text-[--text-secondary]">{t('roughcut.leanBudget')}</label>
-                  <input
-                    type="number"
-                    min={1000}
-                    max={200000}
-                    step={1000}
-                    value={leanTokenBudget}
-                    onChange={(e) => setLeanTokenBudget(parseInt(e.target.value, 10) || 1000)}
-                    className="mt-1 w-32 rounded-md border border-[--border] bg-[--surface-2] px-3 py-1.5 text-sm outline-none focus:border-[--primary]"
-                  />
-                  <p className="mt-1 text-xs text-[--text-muted]">{t('roughcut.leanBudgetDesc')}</p>
-                </>
-              )}
-
-              <label className="mt-3 flex items-center gap-2 text-sm text-[--text-primary]">
-                <input
-                  type="checkbox"
-                  checked={criticEnabled}
-                  onChange={(e) => setCriticEnabled(e.target.checked)}
-                  className="h-4 w-4 rounded border-[--border] bg-[--surface-2]"
-                />
-                {t('roughcut.critic')}
-              </label>
-              <p className="mb-3 mt-1 text-xs text-[--text-muted]">{t('roughcut.criticDesc')}</p>
-
-              <label className="block text-sm text-[--text-secondary]">{t('roughcut.visionBudget')}</label>
-              <input
-                type="number"
-                min={0}
-                step={1}
-                value={visionBudget}
-                onChange={(e) => setVisionBudget(parseInt(e.target.value, 10) || 0)}
-                className="mt-1 w-28 rounded-md border border-[--border] bg-[--surface-2] px-3 py-1.5 text-sm outline-none focus:border-[--primary]"
-              />
-              <p className="mt-1 text-xs text-[--text-muted]">{t('roughcut.visionBudgetDesc')}</p>
-
-              <label className="mt-3 block text-sm text-[--text-secondary]">{t('roughcut.stagedBudget')}</label>
-              <input
-                type="number"
-                min={1000}
-                max={200000}
-                step={1000}
-                value={stagedTokenBudget}
-                onChange={(e) => setStagedTokenBudget(parseInt(e.target.value, 10) || 1000)}
-                className="mt-1 w-32 rounded-md border border-[--border] bg-[--surface-2] px-3 py-1.5 text-sm outline-none focus:border-[--primary]"
-              />
-              <p className="mt-1 text-xs text-[--text-muted]">{t('roughcut.stagedBudgetDesc')}</p>
-
-              {/* ── Director prompt ────────────────────────── */}
-              <hr className="my-5 border-[--border]" />
-              <p className="mb-2 text-xs font-medium text-[--text-secondary]">{t('roughcut.promptSection')}</p>
-              <p className="mb-2 text-xs text-[--text-muted]">{t('roughcut.promptHelp')}</p>
-              <textarea
-                value={promptText}
-                onChange={(e) => setPromptText(e.target.value)}
-                rows={12}
-                spellCheck={false}
-                className="w-full resize-y rounded-md border border-[--border] bg-[--surface-2] px-3 py-2 font-mono text-xs leading-relaxed outline-none focus:border-[--primary]"
-              />
-            </div>
-            <div className="flex items-center justify-between border-t border-[--border] px-5 py-3">
-              <button
-                onClick={resetPrompt}
-                disabled={promptIsDefault && promptText === promptDefault}
-                className="rounded-md border border-[--border] px-3 py-1.5 text-sm text-[--text-secondary] hover:bg-[--surface-3] disabled:opacity-40"
-              >
-                {t('roughcut.reset')}
-              </button>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setPromptOpen(false)}
-                  className="rounded-md border border-[--border] px-3 py-1.5 text-sm text-[--text-secondary] hover:bg-[--surface-3]"
-                >
-                  {t('roughcut.cancel')}
-                </button>
-                <button
-                  onClick={savePrompt}
-                  className="rounded-md bg-[--primary] px-4 py-1.5 text-sm font-medium text-white hover:bg-[--primary]/90"
-                >
-                  {promptSaved ? t('roughcut.saved') : t('roughcut.save')}
-                </button>
-              </div>
-            </div>
           </div>
         </div>
       )}

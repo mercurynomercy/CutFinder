@@ -17,6 +17,7 @@ import { JobsQueuePage } from '@/features/jobs-queue'
 import { SettingsPage } from '@/features/settings'
 import { SubtitlesPage } from '@/features/subtitles'
 import { CutplanPage } from '@/features/cutplan'
+import { RoughCutSettingsPage } from '@/features/cutplan-settings'
 import { LauncherPage, type LauncherScreen } from '@/features/launcher'
 import { LogsPage } from '@/features/logs'
 import { ConfirmDialog } from '@/components'
@@ -48,6 +49,7 @@ export default function App() {
   const [showJobs, setShowJobs] = useState(false)
   const [showSubtitles, setShowSubtitles] = useState(false)
   const [showCutplan, setShowCutplan] = useState(false)
+  const [showCutplanSettings, setShowCutplanSettings] = useState(false)
   const [showLauncher, setShowLauncher] = useState(true)
   const [showLogs, setShowLogs] = useState(false)
   const [selectedClipId, setSelectedClipId] = useState<DetailPanelPropsType['clipId']>(null)
@@ -135,6 +137,7 @@ export default function App() {
     setShowJobs(false)
     setShowSubtitles(false)
     setShowCutplan(false)
+    setShowCutplanSettings(false)
     setShowLauncher(true)
   }
 
@@ -384,7 +387,7 @@ export default function App() {
     return (
       <>
         <SettingsPage
-          onSave={() => { setShowSettings(false); refreshClips() }}
+          onSave={handleBackToLauncher}
           onSuggestAllKeyframes={handleSuggestAllKeyframes}
           onCleanupLibrary={handleCleanupLibrary}
           onShowLogs={() => setShowLogs(true)}
@@ -410,7 +413,7 @@ export default function App() {
 
   // Jobs queue view (full-screen, replaces main layout)
   if (showJobs) {
-    return <JobsQueuePage onClose={() => setShowJobs(false)} />
+    return <JobsQueuePage onClose={handleBackToLauncher} />
   }
 
   // Subtitle export view (full-screen, replaces main layout)
@@ -420,7 +423,18 @@ export default function App() {
 
   // Rough-cut director view (full-screen, replaces main layout)
   if (showCutplan) {
-    return <CutplanPage onClose={() => setShowCutplan(false)} />
+    return <CutplanPage onClose={handleBackToLauncher} onOpenSettings={() => { setShowCutplan(false); setShowCutplanSettings(true) }} />
+  }
+
+  // Rough-cut settings view (full-screen, replaces main layout)
+  if (showCutplanSettings) {
+    return (
+      <RoughCutSettingsPage
+        onClose={() => setShowCutplanSettings(false)}
+        theme={theme}
+        onToggleTheme={toggleTheme}
+      />
+    )
   }
 
   // Clip detail view (full-screen, replaces main layout)

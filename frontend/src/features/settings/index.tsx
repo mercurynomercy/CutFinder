@@ -400,15 +400,6 @@ export function SettingsPage({ onSave, onSuggestAllKeyframes, onCleanupLibrary, 
     <div className="flex h-screen w-full flex-col">
       {/* ── Top Bar ─────────────────────────────────────────── */}
       <header className="flex h-12 shrink-0 items-center gap-3 border-b border-[--border] bg-[--surface-1] px-4">
-        <button
-          onClick={onClose}
-          className="flex items-center gap-1.5 rounded-md px-2.5 py-1 text-sm font-medium text-[--text-secondary] transition-colors hover:bg-[--surface-3] hover:text-[--text-primary]"
-        >
-          <svg className="h-4 w-4" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.5} aria-hidden="true">
-            <path d="M10 4L6 8l4 4" />
-          </svg>
-          {t('settings.backToGallery')}
-        </button>
         <span className="flex-1 text-lg font-semibold tracking-tight text-[--text-primary]">{t('settings.title')}</span>
         <button
           onClick={onToggleTheme}
@@ -425,6 +416,15 @@ export function SettingsPage({ onSave, onSuggestAllKeyframes, onCleanupLibrary, 
               <path d="M13.5 9.5A5.5 5.5 0 0 1 6.5 2.5a5.5 5.5 0 1 0 7 7Z" />
             </svg>
           )}
+        </button>
+        <button
+          onClick={onClose}
+          className="flex items-center gap-1.5 rounded-md px-2.5 py-1 text-sm font-medium text-[--text-secondary] transition-colors hover:bg-[--surface-3] hover:text-[--text-primary]"
+        >
+          <svg className="h-4 w-4" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.5} aria-hidden="true">
+            <path d="M10 4L6 8l4 4" />
+          </svg>
+          {t('settings.backToGallery')}
         </button>
       </header>
 

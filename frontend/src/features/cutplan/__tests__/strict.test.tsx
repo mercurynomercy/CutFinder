@@ -15,7 +15,7 @@ describe('strict', () => {
       http.get(`${API}/cut/sessions`, () => HttpResponse.json({ sessions:[{id:1,title:'t',status:'idle',created_at:null,updated_at:null}] })),
       http.get(`${API}/cut/sessions/1`, () => HttpResponse.json({ session:{id:1,title:'t',status:'idle',created_at:null,updated_at:null}, messages:[{role:'assistant',content:'已生成',created_at:null}], plan:PLAN })),
     )
-    render(<StrictMode><CutplanPage onClose={()=>{}} /></StrictMode>)
+    render(<StrictMode><CutplanPage onClose={()=>{}} onOpenSettings={()=>{}} /></StrictMode>)
     expect(await screen.findByText('A-0001.mov')).toBeInTheDocument()
     localStorage.clear()
   })
