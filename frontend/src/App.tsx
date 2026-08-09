@@ -418,7 +418,7 @@ export default function App() {
 
   // Subtitle export view (full-screen, replaces main layout)
   if (showSubtitles) {
-    return <SubtitlesPage onClose={() => setShowSubtitles(false)} />
+    return <SubtitlesPage onClose={handleBackToLauncher} />
   }
 
   // Rough-cut director view (full-screen, replaces main layout)
@@ -430,7 +430,7 @@ export default function App() {
   if (showCutplanSettings) {
     return (
       <RoughCutSettingsPage
-        onClose={() => setShowCutplanSettings(false)}
+        onClose={() => { setShowCutplanSettings(false); setShowCutplan(true) }}
         theme={theme}
         onToggleTheme={toggleTheme}
       />
