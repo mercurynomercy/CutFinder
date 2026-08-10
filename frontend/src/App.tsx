@@ -423,7 +423,7 @@ export default function App() {
 
   // Rough-cut director view (full-screen, replaces main layout)
   if (showCutplan) {
-    return <CutplanPage onClose={handleBackToLauncher} onOpenSettings={() => { setShowCutplan(false); setShowCutplanSettings(true) }} />
+    return <CutplanPage onClose={handleBackToLauncher} onOpenSettings={() => { setShowCutplan(false); setShowCutplanSettings(true) }} theme={theme} onToggleTheme={toggleTheme} />
   }
 
   // Rough-cut settings view (full-screen, replaces main layout)

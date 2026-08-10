@@ -17,6 +17,7 @@ const PLAN = {
       clip_id: 1, roll: 'a', in_s: 0, out_s: 12, content: '开场白',
       rationale: '叙事开场', chapter: '开场', clip_label: 'A-0001.mov',
       clip_path: '/lib/A-0001.mov', thumb_ref: '/api/clips/1/thumbnail',
+      clip_date: '2026-04-25',
     },
   ],
   chapters: ['开场'],
@@ -42,13 +43,13 @@ describe('CutplanPage', () => {
       ),
     )
 
-    render(<CutplanPage onClose={() => {}} onOpenSettings={() => {}} />)
+    render(<CutplanPage onClose={() => {}} onOpenSettings={() => {}} theme="light" onToggleTheme={() => {}} />)
 
     await userEvent.click(await screen.findByText('周末 vlog'))
 
     // Conversation + shot list both render.
     expect(await screen.findByText('好的，这是分镜')).toBeInTheDocument()
-    expect(screen.getByText('开场')).toBeInTheDocument() // chapter heading
+    expect(screen.getByText('2026-04-25')).toBeInTheDocument() // date grouping heading
     expect(screen.getByText('A-0001.mov')).toBeInTheDocument()
     expect(screen.getByText('开场白')).toBeInTheDocument()
   })
@@ -81,7 +82,7 @@ describe('CutplanPage', () => {
       ),
     )
 
-    render(<CutplanPage onClose={() => {}} onOpenSettings={() => {}} />)
+    render(<CutplanPage onClose={() => {}} onOpenSettings={() => {}} theme="light" onToggleTheme={() => {}} />)
 
     const box = await screen.findByPlaceholderText(/Make a 15/)
     await user.type(box, '剪 15 分钟')
@@ -107,7 +108,7 @@ describe('CutplanPage', () => {
       ),
     )
 
-    render(<CutplanPage onClose={() => {}} onOpenSettings={() => {}} />)
+    render(<CutplanPage onClose={() => {}} onOpenSettings={() => {}} theme="light" onToggleTheme={() => {}} />)
 
     // Auto-restored — the shot list shows up with no interaction.
     expect(await screen.findByText('A-0001.mov')).toBeInTheDocument()
@@ -135,10 +136,12 @@ describe('CutplanPage', () => {
       }),
     )
 
-    render(<CutplanPage onClose={() => {}} onOpenSettings={() => {}} />)
+    render(<CutplanPage onClose={() => {}} onOpenSettings={() => {}} theme="light" onToggleTheme={() => {}} />)
 
-    // First load: running → thinking indicator visible.
-    expect(await screen.findByText('Director is working…')).toBeInTheDocument()
+    // First load: running → user message and generation process header visible.
+    expect(await screen.findByText('剪一条')).toBeInTheDocument()
+    // Generation process panel is shown (the header button contains the step count text)
+    expect(await screen.findByText('Generation process (0 steps)', {}, { timeout: 3000 })).toBeInTheDocument()
     // After the resume poll: assistant reply + plan appear.
     expect(await screen.findByText('完成了', {}, { timeout: 4000 })).toBeInTheDocument()
     expect(screen.getByText('A-0001.mov')).toBeInTheDocument()
@@ -156,7 +159,7 @@ describe('CutplanPage', () => {
       }),
     )
 
-    render(<CutplanPage onClose={() => {}} onOpenSettings={() => {}} />)
+    render(<CutplanPage onClose={() => {}} onOpenSettings={() => {}} theme="light" onToggleTheme={() => {}} />)
 
     // Reveal the row, then click its delete button (hidden until hover, but present in DOM).
     await screen.findByText('to delete')
@@ -182,7 +185,7 @@ describe('CutplanPage', () => {
       ),
     )
 
-    render(<CutplanPage onClose={() => {}} onOpenSettings={() => {}} />)
+    render(<CutplanPage onClose={() => {}} onOpenSettings={() => {}} theme="light" onToggleTheme={() => {}} />)
 
     const label = await screen.findByText('A-0001.mov')
     await userEvent.click(label.closest('button')!)
@@ -213,7 +216,7 @@ describe('CutplanPage', () => {
       ),
     )
 
-    render(<CutplanPage onClose={() => {}} onOpenSettings={() => {}} />)
+    render(<CutplanPage onClose={() => {}} onOpenSettings={() => {}} theme="light" onToggleTheme={() => {}} />)
 
     await screen.findByText('photo-0008.JPG')
     // The default test locale is English → 'Photo'; assert we never render the raw 'photo'.
