@@ -166,10 +166,12 @@ class CutDirector:
 
         notes: list[str] = []
         n_days = len(dates)
-        failed, vision_used = self._run_remaining_days(
+        pending, failed, vision_used = self._run_remaining_days(
             request, history, user_text, dates, groups, per_day, cache, merged, vision_used, notes,
             start_idx=1, n_days=n_days, progress=progress, partial=partial, day_cb=day_cb,
         )
+        if pending is not None:
+            return CutDirectorResult(pending.question, None, pending=pending)
 
         if not self._flatten(merged):
             return CutDirectorResult(self._t("generation_failed"), None)
@@ -208,37 +210,39 @@ class CutDirector:
         *,
         on_step: Callable[[str], None] | None = None,
         on_fallback: Callable[[int], None] | None = None,
-    ) -> tuple[list[dict[str, Any]] | None, str, int]:
-        """Generate one day's shots → (shots, note, vision_used).
+    ) -> tuple[list[dict[str, Any]] | None, str, int, PendingClarification | None]:
+        """Generate one day's shots → (shots, note, vision_used, pending).
 
         In agent mode runs the scoped tool loop (:meth:`_run_day`) over a **lean**
-        catalog (no inlined transcripts — the agent fetches台词 via the tool) and
-        falls back to one structured-JSON call (:meth:`_staged_day`) over the
-        **full** catalog when it doesn't converge; *on_fallback* fires on fall back.
+        catalog and falls back to one structured-JSON call (:meth:`_staged_day`)
+        over the **full** catalog when it doesn't converge — *unless* the day
+        paused on ``ask_user``, in which case it must NOT fall back (the
+        conversation is waiting on the user, not stuck).
         """
         day_shots: list[dict[str, Any]] | None = None
         day_note = ""
-        findings: dict[int, str] = {}  # inspect_broll descriptions gathered by the agent
+        findings: dict[int, str] = {}
+        pending: PendingClarification | None = None
         if self._mode == "agent":
             lean = self._build_context(
                 clips, cache, self._lean_token_budget, include_transcripts=False,
             )
-            day_shots, day_note, vision_used, findings = self._run_day(
+            day_shots, day_note, vision_used, findings, pending = self._run_day(
                 request, history, user_text, day, lean, per_day, cache, vision_used,
                 on_step=on_step,
             )
+        if pending is not None:
+            return None, "", vision_used, pending
         if day_shots is None:
             if self._mode == "agent" and on_fallback is not None:
                 on_fallback(len(findings))
             full = self._build_context(
                 clips, cache, self._staged_token_budget, include_transcripts=True,
             )
-            # Reuse the agent's gathered B-roll vision findings so the spent
-            # vision budget isn't wasted when we fall back to staged.
             day_shots, day_note = self._staged_day(
                 request, history, user_text, day, full, per_day, findings=findings,
             )
-        return day_shots, day_note, vision_used
+        return day_shots, day_note, vision_used, None
 
     @staticmethod
     def _normalize_day(
@@ -270,12 +274,15 @@ class CutDirector:
         progress: Callable[[str], None],
         partial: Callable[[CutPlan], None],
         day_cb: Callable[[int, int], None],
-    ) -> tuple[list[str], int]:
+    ) -> tuple[PendingClarification | None, list[str], int]:
         """Generate ``dates``, merging each day's shots into *merged*/*notes* in place.
 
         *start_idx* is the 1-based progress index of ``dates[0]`` (so a resumed
         turn's remaining dates keep counting from where the paused day left
-        off, not from 1). Returns the list of dates that produced nothing.
+        off, not from 1). Returns ``(pending, failed_dates, vision_used)``:
+        ``pending`` is set and ``failed_dates`` is empty if a day paused on
+        ask_user; otherwise ``pending`` is None and ``failed_dates`` lists dates
+        that produced nothing.
         """
         failed: list[str] = []
         for offset, day in enumerate(dates):
@@ -290,10 +297,26 @@ class CutDirector:
                 extra = self._t("inspected_carry", n=n) if n else ""
                 progress(self._t("day_fallback", idx=_i, n=n_days, day=_d, extra=extra))
 
-            day_shots, day_note, vision_used = self._gen_one_day(
+            day_shots, day_note, vision_used, pending = self._gen_one_day(
                 request, history, user_text, day, groups[day], per_day, cache, vision_used,
                 on_step=day_step, on_fallback=on_fallback,
             )
+            if pending is not None:
+                pending = pending.model_copy(update={"resume_state": {
+                    **pending.resume_state,
+                    "remaining_dates": dates[offset + 1:],
+                    "day_idx": idx,
+                    "n_days": n_days,
+                    "vision_used": vision_used,
+                    "notes": list(notes),
+                    "per_day": list(per_day) if per_day is not None else None,
+                    # So a resumed turn's remaining dates see the same history/
+                    # user_text the paused day itself was generated with —
+                    # resume_day (Task 11) must not silently drop these.
+                    "history": [m.model_dump() for m in history],
+                    "user_text": user_text,
+                }})
+                return pending, [], vision_used
             day_dicts = self._normalize_day(day_shots, day)
             if not day_dicts:
                 # No fresh shots this turn. Keep the prior version of the day if we
@@ -316,7 +339,7 @@ class CutDirector:
             partial(self._build_plan(
                 {"shots": self._flatten(merged), "note": " ".join(notes)}, request, cache,
             ))
-        return failed, vision_used
+        return None, failed, vision_used
 
     @staticmethod
     def _salvage_plan(content: str | None) -> list[dict[str, Any]] | None:
@@ -398,9 +421,13 @@ class CutDirector:
             crit_text = self._t(
                 "critic_feedback", user_text=user_text, day=day, issue=issue, action=action,
             )
-            day_shots, day_note, vision_used = self._gen_one_day(
+            day_shots, day_note, vision_used, _pending = self._gen_one_day(
                 request, history, crit_text, day, groups[day], per_day, cache, vision_used,
             )
+            # Critic-triggered redos never pause on ask_user (out of scope per
+            # design). A day that would have paused is simply treated like a
+            # failed redo: keep the original day's plan, since `day_shots` is
+            # None either way.
             day_dicts = self._normalize_day(day_shots, day)
             if not day_dicts:
                 continue  # redo failed → keep the original day
@@ -515,28 +542,45 @@ class CutDirector:
         vision_used: int,
         *,
         on_step: Callable[[str], None] | None = None,
-    ) -> tuple[list[dict[str, Any]] | None, str, int, dict[int, str]]:
-        """Scoped tool loop for one day → (shots, note, vision_used, findings).
+    ) -> tuple[list[dict[str, Any]] | None, str, int, dict[int, str], PendingClarification | None]:
+        """Scoped tool loop for one day → (shots, note, vision_used, findings, pending).
 
         Returns shots ``None`` when the model doesn't converge to emit_plan
         within the round cap (or replies in prose); the caller then falls back
-        to :meth:`_staged_day` for this day. *findings* maps clip_id → the
-        ``inspect_broll`` vision description the agent gathered (it cost vision
-        budget and isn't persisted), so a fallback can reuse that work instead
-        of discarding it.
+        to :meth:`_staged_day` for this day — *unless* ``pending`` is set, in
+        which case the day genuinely paused on ``ask_user`` and must NOT fall
+        back (see :meth:`_gen_one_day`).
 
         *on_step* (if given) receives a short status string each time the worker
         looks at a clip, so the UI can show what it is doing right now.
         """
         step_cb = on_step or (lambda _s: None)
-        findings: dict[int, str] = {}  # clip_id → inspect_broll description (for fallback reuse)
         messages = self._day_messages(
             request, history, user_text, day, context, per_day, agent=True,
         )
-        nudged = False
-        prose_nudged = False  # whether we've already pushed back on a prose reply
-        seen: set[tuple[str, str]] = set()  # (tool, args) already executed this day
-        for round_i in range(self._max_tool_rounds):
+        return self._day_tool_loop(
+            messages, cache, vision_used, {}, set(), False, False, 0, day, step_cb,
+        )
+
+    def _day_tool_loop(
+        self,
+        messages: list[dict[str, Any]],
+        cache: dict[int, ClipDetail],
+        vision_used: int,
+        findings: dict[int, str],
+        seen: set[tuple[str, str]],
+        nudged: bool,
+        prose_nudged: bool,
+        start_round: int,
+        day: str,
+        step_cb: Callable[[str], None],
+    ) -> tuple[list[dict[str, Any]] | None, str, int, dict[int, str], PendingClarification | None]:
+        """The per-day tool-call round loop, resumable from *start_round*.
+
+        Extracted from :meth:`_run_day` so :meth:`resume_day` can re-enter it
+        mid-conversation with deserialized state after an ``ask_user`` pause.
+        """
+        for round_i in range(start_round, self._max_tool_rounds):
             step = self._llm.run(messages, DAY_TOOLS)
             if not step.tool_calls:
                 # Model replied in prose instead of calling a tool. Don't bail on
@@ -547,14 +591,14 @@ class CutDirector:
                 salvaged = self._salvage_plan(step.content)
                 if salvaged is not None:
                     step_cb(self._t("accepted_text_shotlist"))
-                    return salvaged, "", vision_used, findings
+                    return salvaged, "", vision_used, findings, None
                 # Surface the prose so these no-tool rounds aren't invisible —
                 # otherwise it looks like the agent bailed right after the first
                 # clip, when really it replied in text (here's what it said).
                 reply = (step.content or "").strip().replace("\n", " ") or "（空回复）"
                 step_cb(self._t("director_replied_text", reply=reply[:60]))
                 if prose_nudged:
-                    return None, "", vision_used, findings
+                    return None, "", vision_used, findings, None
                 prose_nudged = True
                 messages.append({"role": "assistant", "content": step.content})
                 messages.append({
@@ -584,12 +628,36 @@ class CutDirector:
 
             emitted: list[dict[str, Any]] | None = None
             note = ""
+            pending: PendingClarification | None = None
             for tc in step.tool_calls:
                 if tc.name == "emit_plan":
                     raw_shots = tc.arguments.get("shots")
                     emitted = [s for s in raw_shots if isinstance(s, dict)] if isinstance(raw_shots, list) else []
                     note = str(tc.arguments.get("note") or "")
                     self._append_tool_result(messages, tc.id, "Plan accepted.")
+                    continue
+                if tc.name == "ask_user":
+                    question = str(tc.arguments.get("question") or "") or self._t("day_ask_user_fallback")
+                    raw_opts = tc.arguments.get("options")
+                    options = (
+                        [str(o) for o in raw_opts if isinstance(o, (str, int, float))]
+                        if isinstance(raw_opts, list) else []
+                    )
+                    pending = PendingClarification(
+                        kind="day_ask_user",
+                        question=question,
+                        options=options,
+                        resume_state={
+                            "day": day,
+                            "messages": messages,
+                            "round_i": round_i,
+                            "seen": [list(k) for k in seen],
+                            "nudged": nudged,
+                            "prose_nudged": prose_nudged,
+                            "findings": {str(k): v for k, v in findings.items()},
+                            "tool_call_id": tc.id,
+                        },
+                    )
                     continue
                 # Dedup guard: a hallucinating model can repeat the same call;
                 # short-circuit identical (tool, args) so it can't burn the round
@@ -628,8 +696,11 @@ class CutDirector:
                 else:
                     self._append_tool_result(messages, tc.id, f"Unknown tool: {tc.name}")
 
+            if pending is not None:
+                return None, "", vision_used, findings, pending
+
             if emitted is not None:
-                return emitted, note, vision_used, findings
+                return emitted, note, vision_used, findings, None
 
             # Past the halfway point without a plan → push the model to commit
             # (local tool-callers otherwise keep exploring until the round cap).
@@ -640,7 +711,7 @@ class CutDirector:
                     "content": self._t("nudge_emit_now_day"),
                 })
 
-        return None, "", vision_used, findings
+        return None, "", vision_used, findings, None
 
     @staticmethod
     def _per_day_target(

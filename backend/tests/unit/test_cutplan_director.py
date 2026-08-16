@@ -528,6 +528,27 @@ def test_run_day_dedups_repeated_tool_calls() -> None:
     assert llm.complete_calls == 0
 
 
+def test_run_day_pauses_on_ask_user() -> None:
+    llm = FakeAgentLLM([
+        AgentStep(tool_calls=[_tc("ask_user", {
+            "question": "这天有两条可能的开场，选哪条？", "options": ["A-0004", "A-0011"],
+        }, cid="call-1")]),
+    ])
+    briefs = [ClipBrief(clip_id=1, roll="a", capture_time="2026-04-25T09:00:00")]
+    director = CutDirector(llm, FakeRetriever(briefs, _details()))
+
+    result = director.generate(RoughCutRequest(date_from="2026-04-25"), [], "剪一条")
+
+    assert result.plan is None
+    assert result.pending is not None
+    assert result.pending.kind == "day_ask_user"
+    assert result.pending.question == "这天有两条可能的开场，选哪条？"
+    assert result.pending.options == ["A-0004", "A-0011"]
+    assert result.pending.resume_state["day"] == "2026-04-25"
+    assert result.pending.resume_state["tool_call_id"] == "call-1"
+    assert llm.complete_calls == 0  # paused, not fallen back to staged
+
+
 def test_generate_staged_mode_skips_tool_loop() -> None:
     raw = '{"shots": [{"clip_id": 1, "roll": "a", "in_s": 0, "out_s": 12}]}'
     llm = FakeAgentLLM([], raw=raw)
