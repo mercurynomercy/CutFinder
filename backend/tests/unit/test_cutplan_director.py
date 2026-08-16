@@ -285,6 +285,38 @@ def test_generate_one_call_per_date_with_date_chapters() -> None:
     assert result.plan.total_s == 22.0                 # 12 + 10
 
 
+def test_generate_drops_shot_with_clip_id_from_another_day() -> None:
+    # Regression: a per-day completion that hallucinates a clip_id belonging
+    # to a *different* shooting date must not leak that clip into this day's
+    # chapter — chapter is forced to the day being generated (_normalize_day),
+    # so an unvalidated clip_id shows the wrong footage under the wrong date.
+    llm = ScriptedCompleteLLM([
+        '{"shots": [{"clip_id": 1, "roll": "a", "in_s": 0, "out_s": 12},'
+        ' {"clip_id": 3, "roll": "a", "in_s": 0, "out_s": 10}]}',  # clip 3 is 05-09's, not 04-25's
+        '{"shots": [{"clip_id": 3, "roll": "a", "in_s": 0, "out_s": 10}]}',
+    ])
+    briefs = [
+        ClipBrief(clip_id=1, roll="a", has_transcript=True, capture_time="2026-04-25T09:00:00"),
+        ClipBrief(clip_id=3, roll="a", has_transcript=True, capture_time="2026-05-09T09:00:00"),
+    ]
+    details = {
+        1: ClipDetail(clip_id=1, roll="a", duration_s=60.0, capture_time="2026-04-25T09:00:00",
+                      segments=[Segment(start_s=0, end_s=12, text="第一天")]),
+        3: ClipDetail(clip_id=3, roll="a", duration_s=60.0, capture_time="2026-05-09T09:00:00",
+                      segments=[Segment(start_s=0, end_s=10, text="第二天")]),
+    }
+    director = CutDirector(llm, FakeRetriever(briefs, details))
+    result = director.generate(
+        RoughCutRequest(date_from="2026-04-25", date_to="2026-05-11"), [], "按日期剪",
+    )
+    assert result.plan is not None
+    # Clip 3 must only ever appear under its real shooting date's chapter —
+    # not duplicated into 04-25's chapter too (a dict keyed by clip_id would
+    # hide the duplicate by letting the later, correct entry overwrite it).
+    pairs = sorted((s.clip_id, s.chapter) for s in result.plan.shots)
+    assert pairs == [(1, "2026-04-25"), (3, "2026-05-09")]
+
+
 def test_generate_reports_day_index_and_total() -> None:
     briefs = [
         ClipBrief(clip_id=1, roll="a", capture_time="2026-04-25T09:00:00"),

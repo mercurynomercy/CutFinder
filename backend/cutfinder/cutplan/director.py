@@ -266,19 +266,24 @@ class CutDirector:
             return CutDirectorResult(pending.question, None, pending=pending)
 
         failed: list[str] = []
-        day_dicts = self._normalize_day(day_shots, day)
+        # Fetch the day's own clip pool up front (also needed by the fallback
+        # below) so shots can be validated against it — a hallucinated
+        # clip_id from another shooting date must not leak into this day's
+        # chapter (see _normalize_day).
+        resumed_day_clips = [
+            b for b in self._retriever.search_footage(
+                date_from=request.date_from, date_to=request.date_to,
+            )
+            if (local_day(getattr(b, "capture_time", None)) or no_date) == day
+        ]
+        resumed_day_clips.sort(key=lambda b: (getattr(b, "capture_time", None) or ""))
+        valid_ids = {b.clip_id for b in resumed_day_clips}
+        day_dicts = self._normalize_day(day_shots, day, valid_ids)
         if not day_dicts:
             # The resumed day's tool loop didn't converge to emit_plan (the
             # ask_user-pause case already returned above) — fall back to one
             # staged JSON call for just this day, mirroring _gen_one_day's
             # fallback pattern in generate()/_run_remaining_days.
-            resumed_day_clips = [
-                b for b in self._retriever.search_footage(
-                    date_from=request.date_from, date_to=request.date_to,
-                )
-                if (local_day(getattr(b, "capture_time", None)) or no_date) == day
-            ]
-            resumed_day_clips.sort(key=lambda b: (getattr(b, "capture_time", None) or ""))
             if resumed_day_clips:
                 full = self._build_context(
                     resumed_day_clips, cache, self._staged_token_budget, include_transcripts=True,
@@ -287,7 +292,7 @@ class CutDirector:
                     request, resumed_history, resumed_user_text, day, full, per_day,
                     findings=findings,
                 )
-                day_dicts = self._normalize_day(day_shots, day)
+                day_dicts = self._normalize_day(day_shots, day, valid_ids)
             if not day_dicts:
                 logger.warning(
                     "cutplan: date %s produced no valid shots (%d clips, resumed day)",
@@ -391,12 +396,17 @@ class CutDirector:
 
     @staticmethod
     def _normalize_day(
-        day_shots: list[dict[str, Any]] | None, day: str,
+        day_shots: list[dict[str, Any]] | None, day: str, valid_ids: set[int],
     ) -> list[dict[str, Any]]:
-        """Keep the dict shots for *day*, forcing chapter to the shooting date."""
+        """Keep the dict shots for *day*, forcing chapter to the shooting date.
+
+        Drops any shot whose ``clip_id`` isn't in *valid_ids* (the day's own
+        retrieved clips) — a hallucinated id from another shooting date would
+        otherwise get its footage forced under this day's chapter label.
+        """
         out: list[dict[str, Any]] = []
         for item in day_shots or []:
-            if isinstance(item, dict):
+            if isinstance(item, dict) and _as_int(item.get("clip_id")) in valid_ids:
                 item["chapter"] = day
                 out.append(item)
         return out
@@ -462,7 +472,7 @@ class CutDirector:
                     "user_text": user_text,
                 }})
                 return pending, [], vision_used
-            day_dicts = self._normalize_day(day_shots, day)
+            day_dicts = self._normalize_day(day_shots, day, {b.clip_id for b in groups[day]})
             if not day_dicts:
                 # No fresh shots this turn. Keep the prior version of the day if we
                 # have one — refine must not drop unrelated dates; only report a
@@ -573,7 +583,7 @@ class CutDirector:
             # design). A day that would have paused is simply treated like a
             # failed redo: keep the original day's plan, since `day_shots` is
             # None either way.
-            day_dicts = self._normalize_day(day_shots, day)
+            day_dicts = self._normalize_day(day_shots, day, {b.clip_id for b in groups[day]})
             if not day_dicts:
                 continue  # redo failed → keep the original day
             merged[day] = day_dicts
