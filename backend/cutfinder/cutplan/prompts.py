@@ -268,11 +268,16 @@ _MESSAGES: dict[str, tuple[str, str]] = {
         "get_clip_detail(clip_id) 获取**，再据此把 in/out 落在 segment 边界上。"
         "请**只通过工具推进**：用 get_clip_detail 读取你想用的 A-roll 台词、"
         "必要时用 inspect_broll 现场看 B-roll 画面（尽量少用），"
-        "**最后必须调用 emit_plan 工具**给出这一天的最终分镜表，不要用纯文字回答。",
+        "**最后必须调用 emit_plan 工具**给出这一天的最终分镜表，不要用纯文字回答。"
+        "如果这一天的素材存在你无法从目录信息判断的真正歧义（而不是你自己该做的创作判断），"
+        "可以调用 ask_user 工具向用户提问，但请谨慎使用。",
         "The list above gives only summaries for A-roll. For clips marked [has transcript],\n"
         "**use get_clip_detail(clip_id) to fetch full transcripts**, then set in/out at segment boundaries.\n"
         "**Use tools only**: get_clip_detail for A-roll transcripts, inspect_broll to check B-roll frames (sparingly),\n"
-        "and **finally call emit_plan** to submit today's shot list. Do not reply in plain text.",
+        "and **finally call emit_plan** to submit today's shot list. Do not reply in plain text. "
+        "If the day's footage presents a genuine ambiguity you can't resolve from the catalog "
+        "(not a creative judgment call you should make yourself), you may call ask_user to ask — "
+        "use it sparingly.",
     ),
     "day_prompt_json_tail": (
         "请只输出 JSON，格式：\n"

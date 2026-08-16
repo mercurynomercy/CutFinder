@@ -48,7 +48,7 @@ class CutPlanService:
         if session is None:
             raise ValueError(f"cut session {session_id} not found")
 
-        if session.status == "waiting_for_input" and session.pending is not None:
+        if session.pending is not None:
             return self._resume(session, user_text)
 
         # Persist the user's message before running so a crash still records it.
@@ -68,7 +68,7 @@ class CutPlanService:
             req = stored.model_copy(update=parsed) if parsed else stored
             if not (parsed.keys() & {"date_from", "date_to"}) and (
                 self._store.get_latest_plan(session_id) is None
-            ):
+            ) and "date" not in self._store.get_asked(session_id):
                 req = req.model_copy(update={"date_from": None, "date_to": None})
         self._store.set_session_request(
             session_id, json.dumps(req.model_dump(), ensure_ascii=False),
@@ -133,7 +133,9 @@ class CutPlanService:
             self._store.set_session_status(session_id, "idle")
             return self.handle(session_id, user_text)
 
-        self._store.append_message(session_id, ChatMessage(role="user", content=user_text))
+        existing = self._store.get_messages(session_id)
+        if not (existing and existing[-1].role == "user" and existing[-1].content == user_text):
+            self._store.append_message(session_id, ChatMessage(role="user", content=user_text))
         self._store.set_session_status(session_id, "running")
         req = self._load_request(session_id) or RoughCutRequest()
         prior_plan = self._store.get_latest_plan(session_id)

@@ -265,7 +265,36 @@ class CutDirector:
             }})
             return CutDirectorResult(pending.question, None, pending=pending)
 
+        failed: list[str] = []
         day_dicts = self._normalize_day(day_shots, day)
+        if not day_dicts:
+            # The resumed day's tool loop didn't converge to emit_plan (the
+            # ask_user-pause case already returned above) — fall back to one
+            # staged JSON call for just this day, mirroring _gen_one_day's
+            # fallback pattern in generate()/_run_remaining_days.
+            resumed_day_clips = [
+                b for b in self._retriever.search_footage(
+                    date_from=request.date_from, date_to=request.date_to,
+                )
+                if (local_day(getattr(b, "capture_time", None)) or no_date) == day
+            ]
+            resumed_day_clips.sort(key=lambda b: (getattr(b, "capture_time", None) or ""))
+            if resumed_day_clips:
+                full = self._build_context(
+                    resumed_day_clips, cache, self._staged_token_budget, include_transcripts=True,
+                )
+                day_shots, day_note = self._staged_day(
+                    request, resumed_history, resumed_user_text, day, full, per_day,
+                    findings=findings,
+                )
+                day_dicts = self._normalize_day(day_shots, day)
+            if not day_dicts:
+                logger.warning(
+                    "cutplan: date %s produced no valid shots (%d clips, resumed day)",
+                    day, len(resumed_day_clips),
+                )
+                failed.append(day)
+
         if day_dicts:
             merged[day] = day_dicts
             if day_note:
@@ -275,7 +304,6 @@ class CutDirector:
             ))
 
         remaining = [str(d) for d in resume_state.get("remaining_dates", [])]
-        failed: list[str] = []
         if remaining:
             clips = self._retriever.search_footage(date_from=request.date_from, date_to=request.date_to)
             groups: dict[str, list[Any]] = {}

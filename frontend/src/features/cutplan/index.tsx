@@ -734,7 +734,7 @@ export function CutplanPage({ onClose, onOpenSettings, theme, onToggleTheme }: C
             <div className={`absolute left-0 right-0 bottom-0 h-0.5 overflow-hidden bg-[--surface-3] transition-opacity ${busy ? 'opacity-100' : 'opacity-0'}`}>
               <div
                 className="h-full bg-[--primary] transition-[width] duration-500"
-                style={{ width: busy ? '60%' : '0%' }}
+                style={{ width: dayPct != null ? `${dayPct}%` : (busy ? '60%' : '0%') }}
               />
             </div>
           </div>

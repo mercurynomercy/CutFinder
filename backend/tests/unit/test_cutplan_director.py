@@ -1041,3 +1041,48 @@ def test_resume_day_seeds_from_prior_plan_for_earlier_completed_days() -> None:
     assert result.plan is not None
     assert sorted(result.plan.chapters) == ["2026-04-25", "2026-04-26"]
     assert result.plan.total_s == 15.0  # 10 (seeded from prior_plan) + 5 (resumed day)
+
+
+def test_resume_day_falls_back_to_staged_and_tracks_failure_on_nonconvergence() -> None:
+    """Regression for the final-review's Ruling 5 (Important): a resumed day
+    that doesn't converge to emit_plan must fall back to _staged_day and, if
+    that also produces nothing, be recorded as failed — mirroring generate()'s
+    fallback pattern — rather than silently vanishing with no user-visible
+    indication.
+    """
+    llm = FakeAgentLLM([
+        AgentStep(tool_calls=[_tc("ask_user", {"question": "?", "options": ["x"]}, cid="call-1")]),
+    ], raw="{}")  # staged fallback JSON has no "shots" key → also fails
+    briefs = [
+        ClipBrief(clip_id=1, roll="a", capture_time="2026-04-25T09:00:00"),
+        ClipBrief(clip_id=2, roll="a", capture_time="2026-04-26T09:00:00"),
+    ]
+    director = CutDirector(llm, FakeRetriever(briefs, _details()), max_tool_rounds=3)
+    paused = director.generate(RoughCutRequest(date_from="2026-04-25", date_to="2026-04-26"), [], "剪一条")
+    assert paused.pending is not None
+    assert paused.pending.resume_state["day"] == "2026-04-25"
+    assert paused.pending.resume_state["remaining_dates"] == ["2026-04-26"]
+
+    # The resumed day's tool loop never converges to emit_plan (two
+    # non-tool-call, non-salvageable replies exhaust the round cap).
+    llm._steps.extend([
+        AgentStep(content="嗯…"),
+        AgentStep(content="还是不确定"),
+    ])
+    # The remaining date (2026-04-26) then converges normally via a fresh loop.
+    llm._steps.append(AgentStep(content="ok", tool_calls=[_tc("emit_plan", {"shots": [
+        {"clip_id": 2, "roll": "a", "in_s": 0, "out_s": 5},
+    ]})]))
+
+    result = director.resume_day(
+        RoughCutRequest(date_from="2026-04-25", date_to="2026-04-26"),
+        paused.pending.resume_state, "答案",
+    )
+
+    assert result.plan is not None
+    # Only day 2 made it into the plan — day 1 (resumed) failed both agent
+    # convergence and the staged fallback, so it must not appear as a chapter.
+    assert result.plan.chapters == ["2026-04-26"]
+    assert result.plan.total_s == 5.0
+    # The failed resumed day is surfaced to the user, not silently dropped.
+    assert "2026-04-25" in result.assistant_text

@@ -405,3 +405,84 @@ def test_handle_resumes_day_ask_user_via_resume_day() -> None:
     assert [m.role for m in msgs] == ["assistant", "user", "assistant"]
     assert msgs[1].content == "A-0004"
     assert msgs[2].content == "好的"
+
+
+def test_handle_resumes_via_real_production_sequence() -> None:
+    """Regression for the final-review Finding 1 (Critical): the resume gate
+    must not depend on session.status.
+
+    cut_routes.send_message persists the user message and flips status to
+    "running" *synchronously*, before enqueueing the worker job — so by the
+    time the worker calls handle(), status is already "running", not
+    "waiting_for_input" (every other pause/resume test in this file sets
+    status directly to "waiting_for_input" and so never exercises this path).
+    Gating _resume on session.pending alone (not status) is what makes this
+    work; and since the route already appended the user message, handle()
+    must not duplicate it.
+    """
+    store = MemoryCutSessionStore()
+    s = store.create_session()
+    pending = PendingClarification(
+        kind="day_ask_user", question="选哪条开场？", options=["A-0004", "A-0011"],
+        resume_state={"day": "2026-04-25", "messages": [], "round_i": 0, "tool_call_id": "call-1"},
+    )
+    store.set_session_pending(s.id, pending)
+    store.set_session_status(s.id, "waiting_for_input")
+    store.append_message(s.id, ChatMessage(role="assistant", content="选哪条开场？"))
+
+    # Mirror cut_routes.send_message exactly: append the user message via the
+    # store, then flip status to "running" synchronously — BEFORE handle() runs.
+    store.append_message(s.id, ChatMessage(role="user", content="A-0004"))
+    store.set_session_status(s.id, "running")
+
+    resume_result = CutDirectorResult("好的", _plan())
+    director = FakeDirector(CutDirectorResult("不应该被调用", None), resume_result=resume_result)
+    svc = CutPlanService(store, director)  # type: ignore[arg-type]
+
+    result = svc.handle(s.id, "A-0004")
+
+    assert result is resume_result
+    assert director.calls == []  # generate() must NOT fire — this is a resume
+    assert director.resume_calls  # resume_day fired instead
+    assert director.resume_calls[0][1] == pending.resume_state
+    assert director.resume_calls[0][2] == "A-0004"
+    # The route already appended the user message — handle() must not duplicate it.
+    msgs = store.get_messages(s.id)
+    assert [m.role for m in msgs] == ["assistant", "user", "assistant"]
+    assert msgs[1].content == "A-0004"
+    session = store.get_session(s.id)
+    assert session.status == "idle"
+    assert session.pending is None
+
+
+def test_handle_full_preflight_chain_preserves_date_through_to_generation() -> None:
+    """Regression for the final-review Finding 2 (Critical): a date resolved
+    via pre-flight must survive a later pre-flight pause in the same chain.
+
+    Turn 1 (no date) -> pauses asking for a date. Turn 2 (answers date) ->
+    date resolved and saved, but duration is still missing -> pauses AGAIN
+    asking for duration (no plan generated yet, so the "drop remembered
+    dates" heuristic is still armed). Turn 3 (answers duration) -> must
+    finally reach the director with turn 2's date intact, not wiped.
+    """
+    store = MemoryCutSessionStore()
+    s = store.create_session()
+    director = FakeDirector(CutDirectorResult("生成完成", _plan()))
+    retriever = FakePreflightRetriever([
+        ClipBrief(clip_id=1, roll="a", capture_time="2026-04-25T09:00:00"),
+        ClipBrief(clip_id=2, roll="a", capture_time="2026-04-26T09:00:00"),
+    ])
+    svc = CutPlanService(store, director, retriever=retriever)  # type: ignore[arg-type]
+
+    r1 = svc.handle(s.id, "帮我剪个 vlog")
+    assert r1.pending is not None and r1.pending.kind == "preflight_date"
+
+    r2 = svc.handle(s.id, "2026-04-25")
+    assert r2.pending is not None and r2.pending.kind == "preflight_duration"
+    assert director.calls == []  # still hasn't reached the director
+
+    r3 = svc.handle(s.id, "10 分钟")
+
+    assert r3.pending is None
+    assert director.calls  # finally reached the director
+    assert director.calls[0][0].date_from == "2026-04-25"
