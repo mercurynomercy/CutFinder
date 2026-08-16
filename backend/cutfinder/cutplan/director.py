@@ -239,8 +239,7 @@ class CutDirector:
         findings = {int(k): v for k, v in resume_state.get("findings", {}).items()}
         seen = {tuple(pair) for pair in resume_state.get("seen", [])}
 
-        from ..domain.models import ChatMessage as _ChatMessage
-        resumed_history = [_ChatMessage(**m) for m in resume_state.get("history", [])]
+        resumed_history = [ChatMessage(**m) for m in resume_state.get("history", [])]
         resumed_user_text = str(resume_state.get("user_text") or "")
 
         day_cb(day_idx, n_days)
@@ -256,6 +255,8 @@ class CutDirector:
             pending = pending.model_copy(update={"resume_state": {
                 **pending.resume_state,
                 "remaining_dates": list(resume_state.get("remaining_dates", [])),
+                "day_idx": day_idx,
+                "n_days": n_days,
                 "vision_used": vision_used,
                 "notes": notes,
                 "per_day": list(per_day) if per_day else None,
@@ -303,6 +304,8 @@ class CutDirector:
         plan = self._build_plan(
             {"shots": self._flatten(merged), "note": " ".join(notes)}, request, cache,
         )
+        if not plan.shots:
+            return CutDirectorResult(self._t("no_clips_selected"), None)
         text = self._t("shotlist_generated")
         if failed:
             sep = "、" if self._ui_language == "zh" else ", "

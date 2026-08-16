@@ -452,11 +452,13 @@ class FakeAgentLLM:
         self._steps = steps
         self.raw = raw
         self.run_calls = 0
+        self.run_msgs: list[list[dict[str, Any]]] = []
         self.complete_calls = 0
         self.complete_msgs: list[list[dict[str, Any]]] = []
 
     def run(self, messages: list[dict[str, Any]], tools: list[dict[str, Any]]) -> AgentStep:
         self.run_calls += 1
+        self.run_msgs.append([dict(m) for m in messages])
         self.tools_seen = tools
         return self._steps.pop(0) if self._steps else AgentStep(content="done")
 
@@ -968,6 +970,40 @@ def test_resume_day_continues_to_remaining_dates() -> None:
     assert result.plan is not None
     assert result.plan.chapters == ["2026-04-25", "2026-04-26"]
     assert result.plan.total_s == 15.0
+    # The remaining date (2026-04-26) is generated with a fresh _day_tool_loop
+    # call, so its first run() call is the last one made overall — prove the
+    # deserialized history/user_text from resume_state actually reached it,
+    # rather than an empty placeholder.
+    remaining_day_first_call = llm.run_msgs[-1]
+    assert any("剪一条" in str(m.get("content", "")) for m in remaining_day_first_call)
+
+
+def test_resume_day_handles_second_pause_in_same_day() -> None:
+    llm = FakeAgentLLM([
+        AgentStep(tool_calls=[_tc("ask_user", {"question": "q1", "options": ["a"]}, cid="call-1")]),
+    ])
+    briefs = [ClipBrief(clip_id=1, roll="a", capture_time="2026-04-25T09:00:00")]
+    director = CutDirector(llm, FakeRetriever(briefs, _details()))
+    paused = director.generate(RoughCutRequest(date_from="2026-04-25"), [], "剪一条")
+    assert paused.pending is not None
+
+    llm._steps.append(AgentStep(tool_calls=[_tc("ask_user", {"question": "q2", "options": ["b"]}, cid="call-2")]))
+    paused2 = director.resume_day(
+        RoughCutRequest(date_from="2026-04-25"), paused.pending.resume_state, "答案1",
+    )
+    assert paused2.pending is not None
+    assert paused2.pending.resume_state["day_idx"] == paused.pending.resume_state.get("day_idx", 1)
+    assert paused2.pending.resume_state["n_days"] == 1
+
+    llm._steps.append(AgentStep(content="ok", tool_calls=[_tc("emit_plan", {"shots": [
+        {"clip_id": 1, "roll": "a", "in_s": 0, "out_s": 8},
+    ]})]))
+    result = director.resume_day(
+        RoughCutRequest(date_from="2026-04-25"), paused2.pending.resume_state, "答案2",
+    )
+    assert result.pending is None
+    assert result.plan is not None
+    assert result.plan.total_s == 8.0
 
 
 def test_resume_day_seeds_from_prior_plan_for_earlier_completed_days() -> None:
