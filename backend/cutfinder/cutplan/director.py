@@ -162,52 +162,14 @@ class CutDirector:
         # (possibly narrowed) range **merges** them over the existing timeline
         # instead of replacing the whole thing (task 28 Part A). flatten() then
         # re-orders by date so the merged plan stays a clean timeline.
-        merged: dict[str, list[dict[str, Any]]] = {}
-        if prior_plan is not None:
-            for shot in prior_plan.shots:
-                key = shot.chapter or shot.clip_date or no_date
-                merged.setdefault(key, []).append(self._shot_to_dict(shot))
+        merged: dict[str, list[dict[str, Any]]] = self._seed_merged(prior_plan, no_date)
 
         notes: list[str] = []
-        failed: list[str] = []
         n_days = len(dates)
-        for idx, day in enumerate(dates, 1):
-            day_cb(idx, n_days)
-            progress(self._t("generating_day", idx=idx, n=n_days, day=day, clips=len(groups[day])))
-
-            def day_step(detail: str, _i: int = idx, _d: str = day) -> None:
-                progress(self._t("day_step", idx=_i, n=n_days, day=_d, detail=detail))
-
-            def on_fallback(n: int = 0, _i: int = idx, _d: str = day) -> None:
-                extra = self._t("inspected_carry", n=n) if n else ""
-                progress(self._t("day_fallback", idx=_i, n=n_days, day=_d, extra=extra))
-
-            day_shots, day_note, vision_used = self._gen_one_day(
-                request, history, user_text, day, groups[day], per_day, cache, vision_used,
-                on_step=day_step, on_fallback=on_fallback,
-            )
-            day_dicts = self._normalize_day(day_shots, day)
-            if not day_dicts:
-                # No fresh shots this turn. Keep the prior version of the day if we
-                # have one — refine must not drop unrelated dates; only report a
-                # date as "skipped" when there was nothing to fall back on.
-                if day not in merged:
-                    logger.warning(
-                        "cutplan: date %s produced no valid shots (%d clips)",
-                        day, len(groups[day]),
-                    )
-                    failed.append(day)
-                continue
-            merged[day] = day_dicts  # success → overwrite just this day
-            if day_note:
-                notes.append(day_note)
-            # Surface completed dates immediately: emit the cumulative plan so the
-            # UI can render finished days while the remaining ones generate.
-            total_shots = sum(len(v) for v in merged.values())
-            progress(self._t("day_done", idx=idx, n=n_days, day=day, shots=total_shots))
-            partial(self._build_plan(
-                {"shots": self._flatten(merged), "note": " ".join(notes)}, request, cache,
-            ))
+        failed, vision_used = self._run_remaining_days(
+            request, history, user_text, dates, groups, per_day, cache, merged, vision_used, notes,
+            start_idx=1, n_days=n_days, progress=progress, partial=partial, day_cb=day_cb,
+        )
 
         if not self._flatten(merged):
             return CutDirectorResult(self._t("generation_failed"), None)
@@ -290,6 +252,72 @@ class CutDirector:
                 out.append(item)
         return out
 
+    def _run_remaining_days(
+        self,
+        request: RoughCutRequest,
+        history: list[ChatMessage],
+        user_text: str,
+        dates: list[str],
+        groups: dict[str, list[Any]],
+        per_day: tuple[float, float] | None,
+        cache: dict[int, ClipDetail],
+        merged: dict[str, list[dict[str, Any]]],
+        vision_used: int,
+        notes: list[str],
+        *,
+        start_idx: int,
+        n_days: int,
+        progress: Callable[[str], None],
+        partial: Callable[[CutPlan], None],
+        day_cb: Callable[[int, int], None],
+    ) -> tuple[list[str], int]:
+        """Generate ``dates``, merging each day's shots into *merged*/*notes* in place.
+
+        *start_idx* is the 1-based progress index of ``dates[0]`` (so a resumed
+        turn's remaining dates keep counting from where the paused day left
+        off, not from 1). Returns the list of dates that produced nothing.
+        """
+        failed: list[str] = []
+        for offset, day in enumerate(dates):
+            idx = start_idx + offset
+            day_cb(idx, n_days)
+            progress(self._t("generating_day", idx=idx, n=n_days, day=day, clips=len(groups[day])))
+
+            def day_step(detail: str, _i: int = idx, _d: str = day) -> None:
+                progress(self._t("day_step", idx=_i, n=n_days, day=_d, detail=detail))
+
+            def on_fallback(n: int = 0, _i: int = idx, _d: str = day) -> None:
+                extra = self._t("inspected_carry", n=n) if n else ""
+                progress(self._t("day_fallback", idx=_i, n=n_days, day=_d, extra=extra))
+
+            day_shots, day_note, vision_used = self._gen_one_day(
+                request, history, user_text, day, groups[day], per_day, cache, vision_used,
+                on_step=day_step, on_fallback=on_fallback,
+            )
+            day_dicts = self._normalize_day(day_shots, day)
+            if not day_dicts:
+                # No fresh shots this turn. Keep the prior version of the day if we
+                # have one — refine must not drop unrelated dates; only report a
+                # date as "skipped" when there was nothing to fall back on.
+                if day not in merged:
+                    logger.warning(
+                        "cutplan: date %s produced no valid shots (%d clips)",
+                        day, len(groups[day]),
+                    )
+                    failed.append(day)
+                continue
+            merged[day] = day_dicts  # success → overwrite just this day
+            if day_note:
+                notes.append(day_note)
+            # Surface completed dates immediately: emit the cumulative plan so the
+            # UI can render finished days while the remaining ones generate.
+            total_shots = sum(len(v) for v in merged.values())
+            progress(self._t("day_done", idx=idx, n=n_days, day=day, shots=total_shots))
+            partial(self._build_plan(
+                {"shots": self._flatten(merged), "note": " ".join(notes)}, request, cache,
+            ))
+        return failed, vision_used
+
     @staticmethod
     def _salvage_plan(content: str | None) -> list[dict[str, Any]] | None:
         """Recover a shot list from a prose reply that embeds plan JSON, else None.
@@ -312,6 +340,17 @@ class CutDirector:
         for day in sorted(merged):
             out.extend(merged[day])
         return out
+
+    def _seed_merged(
+        self, prior_plan: CutPlan | None, no_date: str,
+    ) -> dict[str, list[dict[str, Any]]]:
+        """Seed the day→shots merge dict from a prior plan (refine / resume base)."""
+        merged: dict[str, list[dict[str, Any]]] = {}
+        if prior_plan is not None:
+            for shot in prior_plan.shots:
+                key = shot.chapter or shot.clip_date or no_date
+                merged.setdefault(key, []).append(self._shot_to_dict(shot))
+        return merged
 
     @staticmethod
     def _shot_to_dict(shot: Shot) -> dict[str, Any]:
