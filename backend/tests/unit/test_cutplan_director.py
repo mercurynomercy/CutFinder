@@ -436,6 +436,15 @@ def test_generate_fills_clip_date_and_uses_custom_prompt(
 
 # ── per-day mini-agent (mode="agent", task 26) ──────────────────
 
+def test_day_tools_include_ask_user_but_run_tools_do_not() -> None:
+    from cutfinder.cutplan.prompts import DAY_TOOLS, TOOLS
+
+    day_names = {t["function"]["name"] for t in DAY_TOOLS}
+    run_names = {t["function"]["name"] for t in TOOLS}
+    assert day_names == {"get_clip_detail", "inspect_broll", "emit_plan", "ask_user"}
+    assert "ask_user" not in run_names
+
+
 class FakeAgentLLM:
     """run() pops scripted AgentSteps; complete() returns canned JSON (fallback)."""
 
@@ -478,9 +487,9 @@ def test_generate_agent_mode_converges_via_tool_loop() -> None:
     assert result.plan.total_s == 12.0
     assert result.plan.chapters == ["2026-04-25"]
     assert llm.complete_calls == 0  # converged via tools, no staged fall back
-    # Worker is not given search_footage (only detail / inspect / emit).
+    # Worker is not given search_footage (only detail / inspect / emit / ask_user).
     assert {t["function"]["name"] for t in llm.tools_seen} == {
-        "get_clip_detail", "inspect_broll", "emit_plan",
+        "get_clip_detail", "inspect_broll", "emit_plan", "ask_user",
     }
 
 

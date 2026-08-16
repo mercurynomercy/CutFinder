@@ -143,13 +143,41 @@ TOOLS: list[dict[str, Any]] = [
     },
 ]
 
+# ask_user (task 29/B2): only offered to the per-day agent loop, never to the
+# legacy TOOLS list run() uses — a mid-loop pause/resume only exists for the
+# per-day generate() path (see director.py's _day_tool_loop).
+_ASK_USER_TOOL: dict[str, Any] = {
+    "type": "function",
+    "function": {
+        "name": "ask_user",
+        "description": (
+            "Pause and ask the user a short clarifying question, when the footage "
+            "itself presents a genuine ambiguity the catalog can't resolve on its "
+            "own (e.g. two clips that could both be the narrative opener, or "
+            "conflicting instructions). Use sparingly — most editorial choices "
+            "should be made directly, not deferred to the user."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "question": {"type": "string"},
+                "options": {
+                    "type": "array", "items": {"type": "string"},
+                    "description": "2-4 short choices the user can pick from",
+                },
+            },
+            "required": ["question"],
+        },
+    },
+}
+
 # Tools a per-day worker may call (task 26). It does **not** get search_footage:
 # the day's clips are already retrieved deterministically and fed in the prompt,
 # so the worker's value-add is deep-diving transcript (get_clip_detail), looking
 # at B-roll frames (inspect_broll), and finalizing (emit_plan) — not re-searching.
 DAY_TOOLS: list[dict[str, Any]] = [
     t for t in TOOLS if t["function"]["name"] in ("get_clip_detail", "inspect_broll", "emit_plan")
-]
+] + [_ASK_USER_TOOL]
 
 
 # ── bilingual message catalog ────────────────────────────────────
@@ -305,6 +333,10 @@ _MESSAGES: dict[str, tuple[str, str]] = {
         "你已了解足够。现在**必须**调用 emit_plan 给出这一天的最终分镜表，不要再查看素材。",
         "You have enough context. **Call emit_plan now** to finalize today's shot list."
         " Do not inspect more clips.",
+    ),
+    "day_ask_user_fallback": (
+        "需要你补充一些信息才能继续。",
+        "Needs more information from you to continue.",
     ),
     "inspected_findings_header": (
         "导演已现场勘察过以下 B-roll 画面，请优先据此判断其用途（而非仅凭标签）：\n",
