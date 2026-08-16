@@ -166,6 +166,38 @@ describe('CutplanPage', () => {
     expect(await screen.findByText('Generating · 2/5')).toBeInTheDocument()
   })
 
+  it('sets the tab title with day progress while generating, then reverts', async () => {
+    let calls = 0
+    server.use(
+      http.get(`${API}/cut/sessions`, () =>
+        HttpResponse.json({ sessions: [{ id: 11, title: 't', status: 'running', created_at: null, updated_at: null }] }),
+      ),
+      http.get(`${API}/cut/sessions/11`, () => {
+        calls += 1
+        const running = calls <= 2
+        return HttpResponse.json({
+          session: {
+            id: 11, title: 't', status: running ? 'running' : 'idle',
+            day_index: running ? 1 : null, day_total: running ? 2 : null,
+            created_at: null, updated_at: null,
+          },
+          messages: running
+            ? [{ role: 'user', content: '剪一条', created_at: null }]
+            : [{ role: 'user', content: '剪一条', created_at: null }, { role: 'assistant', content: '完成了', created_at: null }],
+          plan: null,
+        })
+      }),
+    )
+
+    render(<CutplanPage onClose={() => {}} onOpenSettings={() => {}} theme="light" onToggleTheme={() => {}} />)
+
+    await waitFor(() => expect(document.title.startsWith('(1/2)')).toBe(true))
+    // The revert only lands after resumePoll's next 1500ms tick confirms the
+    // turn ended, so give this wait the same generous timeout the existing
+    // "resumes when restored" test uses for the same poll interval.
+    await waitFor(() => expect(document.title.startsWith('(1/2)')).toBe(false), { timeout: 4000 })
+  })
+
   it('deletes a conversation', async () => {
     const del = vi.fn()
     server.use(

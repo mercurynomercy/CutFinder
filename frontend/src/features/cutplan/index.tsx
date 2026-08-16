@@ -104,7 +104,9 @@ export function CutplanPage({ onClose, onOpenSettings, theme, onToggleTheme }: C
     setProgressLog((prev) => (!p || prev[prev.length - 1] === p ? prev : [...prev, p]))
   const lastProgress = progressLog[progressLog.length - 1] ?? ''
   const currentStepIndex = progressLog.length
-  const dayPct = dayIndex != null && dayTotal ? Math.round((dayIndex / dayTotal) * 100) : null
+  const dayPct = dayIndex != null && dayTotal != null
+    ? Math.round(dayTotal > 0 ? (dayIndex / dayTotal) * 100 : 0)
+    : null
 
   const persistActive = (id: number | null) => {
     try {
