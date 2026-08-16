@@ -324,10 +324,14 @@ export function CutplanPage({ onClose, onOpenSettings, theme, onToggleTheme }: C
   }
 
   const cancelGeneration = () => {
+    // The backend has no turn-cancel endpoint, so the turn keeps running there.
+    // Detach from it the same way switching sessions does — activeRef is the
+    // guard resumePoll checks before every tick, so this stops the next poll
+    // from repopulating progressLog/plan out from under the cleared panel.
+    activeRef.current = null
     setBusy(false)
     setProgressLog([])
     stopElapsedTimer()
-    // Note: backend continues running, but UI clears the progress panel
   }
 
   // The progress trajectory belongs to the latest turn: while it runs it trails
@@ -337,9 +341,6 @@ export function CutplanPage({ onClose, onOpenSettings, theme, onToggleTheme }: C
   const showProgress = busy || progressLog.length > 0
   const lastIsAssistant = messages.length > 0 && messages[messages.length - 1].role === 'assistant'
   const progressAnchor = !busy && lastIsAssistant ? messages.length - 1 : messages.length
-
-  // Generation progress percentage (for top bar pill and shot panel progress bar)
-  const progressPct = busy && progressLog.length > 0 ? Math.round((progressLog.length / Math.max(progressLog.length, 1)) * 100) : 0
 
   // Generation process panel node
   const progressNode = (
@@ -418,18 +419,17 @@ export function CutplanPage({ onClose, onOpenSettings, theme, onToggleTheme }: C
           </div>
         )}
 
-        {/* Progress bar footer */}
+        {/* Progress bar footer — indeterminate: the director doesn't report a
+            known step total, so this shows activity rather than a fake percent */}
         {busy && (
           <div className="flex items-center gap-2 pt-1">
             <div className="h-[3px] flex-1 overflow-hidden rounded-full bg-[--surface-3]">
-              <div
-                className="h-full rounded-full bg-[--primary] transition-[width] duration-500"
-                style={{ width: `${progressPct}%` }}
-              />
+              <div className="h-full w-1/3 animate-[cf-slide_1.4s_ease-in-out_infinite] rounded-full bg-[--primary]" />
             </div>
             <span className="font-mono text-[10px] text-[--text-muted]">
               {currentStepIndex}
             </span>
+            <style>{`@keyframes cf-slide{0%{transform:translateX(-120%)}100%{transform:translateX(420%)}}`}</style>
           </div>
         )}
       </div>
@@ -445,20 +445,21 @@ export function CutplanPage({ onClose, onOpenSettings, theme, onToggleTheme }: C
         {/* Generation status pill */}
         {busy && (
           <div className="flex h-[26px] items-center gap-1.5 rounded-full bg-[--primary-soft] px-2.5 pl-1 animate-[status-fade-in_200ms_ease]" role="status" aria-live="polite">
-            <span className="h-[15px] w-[15px] shrink-0" aria-hidden="true">
-              <svg viewBox="0 0 16 16" className="h-full w-full -rotate-90">
+            {/* Indeterminate spinner — the director doesn't report a known step
+                total, so this shows activity rather than a fake percent-fill ring */}
+            <span className="h-[15px] w-[15px] shrink-0 animate-spin" aria-hidden="true">
+              <svg viewBox="0 0 16 16" className="h-full w-full">
                 <circle cx="8" cy="8" r="7" fill="none" stroke="var(--primary-soft)" strokeWidth="2.5" />
                 <circle
                   cx="8" cy="8" r="7" fill="none" stroke="var(--primary)" strokeWidth="2.5"
                   strokeLinecap="round"
                   strokeDasharray="44"
-                  strokeDashoffset={String(44 * (1 - progressPct / 100))}
-                  style={{ transition: 'stroke-dashoffset 400ms ease' }}
+                  strokeDashoffset="11"
                 />
               </svg>
             </span>
             <span className="text-[10px] font-semibold text-[--primary] font-variant-numeric-tabular-nums whitespace-nowrap">
-              {t('roughcut.generating', { n: String(currentStepIndex), total: String(Math.max(currentStepIndex, 1)) })}
+              {t('roughcut.generating', { n: String(currentStepIndex) })}
             </span>
           </div>
         )}

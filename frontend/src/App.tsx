@@ -55,7 +55,6 @@ export default function App() {
   const [selectedClipId, setSelectedClipId] = useState<DetailPanelPropsType['clipId']>(null)
   const [activeJobId, setActiveJobId] = useState<JobsPanelProps['activeJobId']>(null)
   const [appliedFilters, setAppliedFilters] = useState<FilterState>({ date: null, roll_type: null, tag: null })
-  const [reanalyzingIds, setReanalyzingIds] = useState<Set<number>>(new Set())
   const [sortBy, setSortBy] = useState<'date-newest' | 'date-oldest'>('date-newest')
   const [collapsedDates, setCollapsedDates] = useState<Set<string>>(new Set())
   const [searchQuery, setSearchQuery] = useState('')
@@ -298,35 +297,6 @@ export default function App() {
     setAppliedFilters({ date: filters.date, roll_type: filters.roll_type, tag: filters.tag })
   }
 
-  // Re-analyze a clip directly from its card: trigger the job, poll until it
-  // finishes, then refresh so the card's summary/tags/marker update in place.
-  const handleReanalyzeClip = async (clipId: number) => {
-    if (reanalyzingIds.has(clipId)) return
-    setReanalyzingIds((prev) => new Set(prev).add(clipId))
-    try {
-      const { job_id } = await api.reanalyzeClip(clipId)
-      const deadline = Date.now() + 5 * 60_000
-      while (Date.now() < deadline) {
-        await new Promise((resolve) => setTimeout(resolve, 1500))
-        try {
-          const job = await api.getJob(job_id)
-          if (['done', 'failed', 'cancelled'].includes(job.status)) break
-        } catch {
-          // transient error — keep polling
-        }
-      }
-      await refreshClips()
-    } catch (err) {
-      console.error('Failed to re-analyze clip:', err)
-    } finally {
-      setReanalyzingIds((prev) => {
-        const next = new Set(prev)
-        next.delete(clipId)
-        return next
-      })
-    }
-  }
-
   // One-click: generate keyframe suggestions for all clips that lack them.
   const handleSuggestAllKeyframes = async () => {
     try {
@@ -367,7 +337,7 @@ export default function App() {
   }
 
   // If loading, show empty gallery with skeleton (handled by Gallery itself)
-  if (loading && clips.length === 0 && !showSettings && !showJobs && !showSubtitles && !showCutplan && selectedClipId === null) {
+  if (loading && clips.length === 0 && !showSettings && !showJobs && !showSubtitles && !showCutplan && !showCutplanSettings && selectedClipId === null) {
     return <Gallery clips={[]} selectedClipId={selectedClipId} onSelect={setSelectedClipId} />
   }
 
@@ -598,8 +568,6 @@ export default function App() {
               clips={sortedClips}
               selectedClipId={selectedClipId}
               onSelect={(clipId) => setSelectedClipId(clipId)}
-              onReanalyze={handleReanalyzeClip}
-              reanalyzingIds={reanalyzingIds}
               onOpenPath={handleOpenPath}
               collapsedDates={collapsedDates}
               onToggleDate={(key) =>

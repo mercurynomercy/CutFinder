@@ -33,10 +33,6 @@ export interface ThumbnailCardProps extends React.HTMLAttributes<HTMLDivElement>
   summary?: string | null
   /** Tag names — shown as small chips under the summary */
   tags?: string[]
-  /** When provided, shows a re-analyze button on the thumbnail (stops propagation). */
-  onReanalyze?: () => void
-  /** Whether this card is currently re-analyzing (spins the icon). */
-  reanalyzing?: boolean
   /** When provided, shows a play/open button that opens the video (stops propagation). */
   onOpen?: () => void
   /** Whether the clip has keyframe suggestions (shows a corner badge). */
@@ -45,7 +41,7 @@ export interface ThumbnailCardProps extends React.HTMLAttributes<HTMLDivElement>
 
 const ThumbnailCard = React.forwardRef<HTMLDivElement, ThumbnailCardProps>(
   (
-    { thumbnailUrl, sourcePath, libraryPath, clipId, rollType, duration, captureTime, isSelected = false, status, summary, tags, onReanalyze, reanalyzing = false, onOpen, hasKeyframes = false, className, ...props },
+    { thumbnailUrl, sourcePath, libraryPath, clipId, rollType, duration, captureTime, isSelected = false, status, summary, tags, onOpen, hasKeyframes = false, className, ...props },
     ref,
   ) => {
     const { t } = useI18n()

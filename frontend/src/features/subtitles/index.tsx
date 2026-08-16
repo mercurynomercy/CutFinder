@@ -102,10 +102,6 @@ export function SubtitlesPage({ onClose }: SubtitlesPageProps) {
   const canExport = Boolean(videoPath) && Boolean(outDir) && formats.length > 0 && phase !== 'running'
 
   const handlePickVideo = async () => {
-    if (videoPath) {
-      setVideoPath(null)
-      return
-    }
     try {
       const { path } = await api.pickFile()
       if (path) setVideoPath(path)
@@ -115,10 +111,6 @@ export function SubtitlesPage({ onClose }: SubtitlesPageProps) {
   }
 
   const handlePickFolder = async () => {
-    if (outDir) {
-      setOutDir(null)
-      return
-    }
     try {
       const { path } = await api.pickFolder()
       if (path) setOutDir(path)
@@ -177,7 +169,7 @@ export function SubtitlesPage({ onClose }: SubtitlesPageProps) {
 
   // Build the readiness status text for the footer.
   const statusText = canExport
-    ? `Ready — will export ${formats.join(' + ')} format`
+    ? t('subtitles.readyStatus', { formats: formats.join(' + ') })
     : ''
 
   return (
@@ -224,7 +216,7 @@ export function SubtitlesPage({ onClose }: SubtitlesPageProps) {
                   : 'bg-[--primary] text-[--primary-fg] hover:bg-[--primary-hover]'
               }`}
             >
-              {videoPath ? '更换视频' : t('subtitles.chooseVideo')}
+              {videoPath ? t('subtitles.changeVideo') : t('subtitles.chooseVideo')}
             </button>
           </div>
 
@@ -247,7 +239,7 @@ export function SubtitlesPage({ onClose }: SubtitlesPageProps) {
                   : 'bg-[--primary] text-[--primary-fg] hover:bg-[--primary-hover]'
               }`}
             >
-              {outDir ? '更换文件夹' : t('subtitles.chooseFolder')}
+              {outDir ? t('subtitles.changeFolder') : t('subtitles.chooseFolder')}
             </button>
           </div>
 

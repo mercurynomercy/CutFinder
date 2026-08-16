@@ -98,12 +98,11 @@ function ExtensionTag({ value, onRemove }: { value: string; onRemove: () => void
 
 // ── Toggle switch ────────────────────────────────────────────────
 
+// `label` is used for the accessible name only — callers embed Toggle inside
+// a Section whose title already shows the same text, so no visible label here.
 function Toggle({ checked, onChange, label }: { checked: boolean; onChange: (v: boolean) => void; label: string }) {
   return (
-    <div className="flex items-center justify-between">
-      <div className="flex-1">
-        <div className="text-sm font-medium text-[--text-primary]">{label}</div>
-      </div>
+    <div className="flex items-center justify-end">
       <button
         type="button"
         role="switch"
@@ -432,7 +431,6 @@ export function SettingsPage({ onSave, onSuggestAllKeyframes, onCleanupLibrary, 
       {/* ── Content ─────────────────────────────────────────── */}
       <div className="flex flex-1 overflow-auto">
         <div className="mx-auto w-full max-w-5xl p-6 pb-24">
-          <h1 className="sr-only">{t('settings.title')}</h1>
 
         {/* Responsive two-column grid — single column on narrow screens */}
         <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">

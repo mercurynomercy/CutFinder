@@ -50,10 +50,6 @@ export interface GalleryProps {
   selectedClipId: number | null
   /** Called when a thumbnail card is clicked; receives the clip id. */
   onSelect: (clipId: number) => void
-  /** Called when a card's re-analyze button is clicked; receives the clip id. */
-  onReanalyze?: (clipId: number) => void
-  /** Set of clip ids currently being re-analyzed (spins their icon). */
-  reanalyzingIds?: Set<number>
   /** Called to open a path: a clip's video file, or a date folder in Finder. */
   onOpenPath?: (path: string) => void
   /** Controlled set of collapsed date-group keys. Omit to let Gallery manage its own. */
@@ -109,7 +105,7 @@ function groupByDate(clips: ClipSummary[]): { key: string; label: string; items:
   return groups
 }
 
-export function Gallery({ clips, selectedClipId, onSelect, onReanalyze, reanalyzingIds, onOpenPath, collapsedDates, onToggleDate }: GalleryProps) {
+export function Gallery({ clips, selectedClipId, onSelect, onOpenPath, collapsedDates, onToggleDate }: GalleryProps) {
   const { t } = useI18n()
   const [internalCollapsed, setInternalCollapsed] = useState<Set<string>>(new Set())
   const collapsed = collapsedDates ?? internalCollapsed
@@ -184,8 +180,6 @@ export function Gallery({ clips, selectedClipId, onSelect, onReanalyze, reanalyz
                 captureTime={clip.capture_time}
                 isSelected={selectedClipId === clip.id}
                 onClick={() => onSelect(clip.id)}
-                onReanalyze={onReanalyze && clip.roll_type !== 'photo' ? () => onReanalyze(clip.id) : undefined}
-                reanalyzing={reanalyzingIds?.has(clip.id)}
                 onOpen={onOpenPath ? () => onOpenPath(clip.library_path || clip.source_path) : undefined}
                 hasKeyframes={clip.has_keyframes}
               />
