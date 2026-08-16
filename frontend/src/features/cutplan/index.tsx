@@ -11,7 +11,7 @@
 
 import { Fragment, useEffect, useRef, useState } from 'react'
 
-import type { CutMessage, CutPlan, CutSession } from '@/api/client'
+import type { CutMessage, CutPending, CutPlan, CutSession } from '@/api/client'
 import { api } from '@/api/client'
 import { useI18n } from '@/i18n'
 import { ConfirmDialog } from '@/components'
@@ -90,6 +90,8 @@ export function CutplanPage({ onClose, onOpenSettings, theme, onToggleTheme }: C
   // Real day-based progress from the backend (day_index/day_total), e.g. "day 2 of 5".
   const [dayIndex, setDayIndex] = useState<number | null>(null)
   const [dayTotal, setDayTotal] = useState<number | null>(null)
+  // Pending clarifying question from the backend (waiting_for_input), if any.
+  const [pending, setPending] = useState<CutPending | null>(null)
 
   const threadRef = useRef<HTMLDivElement>(null)
   const progressRef = useRef<HTMLDivElement>(null)
@@ -172,6 +174,7 @@ export function CutplanPage({ onClose, onOpenSettings, theme, onToggleTheme }: C
         if (detail.session.status !== 'running') {
           setMessages(detail.messages)                  // restore the assistant reply
           setPlan(detail.plan)
+          setPending(detail.session.pending ?? null)
           setBusy(false)
           setProgressOpen(false)                        // collapse the finished log
           setDayIndex(null); setDayTotal(null)
@@ -211,13 +214,14 @@ export function CutplanPage({ onClose, onOpenSettings, theme, onToggleTheme }: C
     setMessages([])
     setBusy(false)
     setProgressLog([])
-    setDayIndex(null); setDayTotal(null)
+    setDayIndex(null); setDayTotal(null); setPending(null)
     stopElapsedTimer()
     try {
       const detail = await api.getCutSession(id)
       if (activeRef.current !== id) return
       setMessages(detail.messages)
       setPlan(detail.plan)
+      setPending(detail.session.status === 'waiting_for_input' ? (detail.session.pending ?? null) : null)
       if (detail.session.status === 'running') {
         pushProgress(detail.session.progress ?? '')
         setBusy(true)
@@ -282,8 +286,8 @@ export function CutplanPage({ onClose, onOpenSettings, theme, onToggleTheme }: C
     await openSession(s.id)
   }
 
-  const send = async () => {
-    const text = input.trim()
+  const send = async (overrideText?: string) => {
+    const text = (overrideText ?? input).trim()
     if (!text || busy) return
 
     let sessionId = activeId
@@ -299,6 +303,7 @@ export function CutplanPage({ onClose, onOpenSettings, theme, onToggleTheme }: C
     // Optimistically show the user's message.
     setMessages((prev) => [...prev, { role: 'user', content: text, created_at: null }])
     setInput('')
+    setPending(null)
     setBusy(true)
     setProgressLog([])
     setDayIndex(null); setDayTotal(null)
@@ -356,7 +361,7 @@ export function CutplanPage({ onClose, onOpenSettings, theme, onToggleTheme }: C
     activeRef.current = null
     setBusy(false)
     setProgressLog([])
-    setDayIndex(null); setDayTotal(null)
+    setDayIndex(null); setDayTotal(null); setPending(null)
     stopElapsedTimer()
   }
 
@@ -623,6 +628,20 @@ export function CutplanPage({ onClose, onOpenSettings, theme, onToggleTheme }: C
                   </Fragment>
                 ))}
                 {showProgress && progressAnchor >= messages.length && progressNode}
+                {pending && !busy && (
+                  <div className="mt-2 flex flex-wrap gap-1.5" data-testid="pending-options">
+                    {pending.options.map((opt) => (
+                      <button
+                        key={opt}
+                        type="button"
+                        onClick={() => send(opt)}
+                        className="h-7 rounded-full bg-[--primary-soft] px-3 text-xs font-medium text-[--primary] transition-colors hover:bg-[--primary] hover:text-[--primary-fg]"
+                      >
+                        {opt}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </>
             )}
           </div>
@@ -673,7 +692,7 @@ export function CutplanPage({ onClose, onOpenSettings, theme, onToggleTheme }: C
                 </div>
               </div>
               <button
-                onClick={send}
+                onClick={() => send()}
                 disabled={busy || !input.trim()}
                 className="flex h-9 shrink-0 items-center justify-center rounded-md bg-[--primary] px-4 text-sm font-semibold text-[--primary-fg] hover:bg-[--primary-hover] disabled:opacity-40 disabled:cursor-not-allowed transition-[background,opacity]"
               >

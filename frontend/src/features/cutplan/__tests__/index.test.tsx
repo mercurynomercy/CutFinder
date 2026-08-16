@@ -274,4 +274,58 @@ describe('CutplanPage', () => {
     expect(screen.getByText('Photo')).toBeInTheDocument()
     expect(screen.queryByText('photo')).not.toBeInTheDocument()
   })
+
+  it('renders clarifying-question option chips and sends the chosen one', async () => {
+    const user = userEvent.setup()
+    const sentTexts: string[] = []
+    let calls = 0
+
+    server.use(
+      http.get(`${API}/cut/sessions`, () =>
+        HttpResponse.json({ sessions: [{ id: 3, title: 't', status: 'waiting_for_input', created_at: null, updated_at: null }] }),
+      ),
+      http.get(`${API}/cut/sessions/3`, () => {
+        calls += 1
+        // First GET (initial load): waiting_for_input with the date-range question.
+        // Second GET (after send, via resumePoll): idle — the turn resolved and
+        // polling should stop immediately.
+        if (calls === 1) {
+          return HttpResponse.json({
+            session: {
+              id: 3, title: 't', status: 'waiting_for_input', created_at: null, updated_at: null,
+              pending: { kind: 'preflight_date', question: '请指定日期范围', options: ['2026-04-25', '2026-04-26'] },
+            },
+            messages: [
+              { role: 'user', content: '帮我剪个 vlog', created_at: null },
+              { role: 'assistant', content: '请指定日期范围', created_at: null },
+            ],
+            plan: null,
+          })
+        }
+        return HttpResponse.json({
+          session: { id: 3, title: 't', status: 'idle', created_at: null, updated_at: null, pending: null },
+          messages: [
+            { role: 'user', content: '帮我剪个 vlog', created_at: null },
+            { role: 'assistant', content: '请指定日期范围', created_at: null },
+            { role: 'user', content: '2026-04-25', created_at: null },
+            { role: 'assistant', content: '好的', created_at: null },
+          ],
+          plan: null,
+        })
+      }),
+      http.post(`${API}/cut/sessions/3/messages`, async ({ request }) => {
+        const body = (await request.json()) as { text: string }
+        sentTexts.push(body.text)
+        return HttpResponse.json({ job_id: 1, session_id: 3 })
+      }),
+    )
+
+    render(<CutplanPage onClose={() => {}} onOpenSettings={() => {}} theme="light" onToggleTheme={() => {}} />)
+
+    await screen.findByText('请指定日期范围')
+    const chip = await screen.findByRole('button', { name: '2026-04-25' })
+    await user.click(chip)
+
+    await waitFor(() => expect(sentTexts).toContain('2026-04-25'))
+  })
 })
