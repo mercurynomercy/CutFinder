@@ -87,6 +87,9 @@ export function CutplanPage({ onClose, onOpenSettings, theme, onToggleTheme }: C
   // Elapsed time tracking for generation
   const [elapsedSeconds, setElapsedSeconds] = useState(0)
   const [generationStarted, setGenerationStarted] = useState(false)
+  // Real day-based progress from the backend (day_index/day_total), e.g. "day 2 of 5".
+  const [dayIndex, setDayIndex] = useState<number | null>(null)
+  const [dayTotal, setDayTotal] = useState<number | null>(null)
 
   const threadRef = useRef<HTMLDivElement>(null)
   const progressRef = useRef<HTMLDivElement>(null)
@@ -101,6 +104,7 @@ export function CutplanPage({ onClose, onOpenSettings, theme, onToggleTheme }: C
     setProgressLog((prev) => (!p || prev[prev.length - 1] === p ? prev : [...prev, p]))
   const lastProgress = progressLog[progressLog.length - 1] ?? ''
   const currentStepIndex = progressLog.length
+  const dayPct = dayIndex != null && dayTotal ? Math.round((dayIndex / dayTotal) * 100) : null
 
   const persistActive = (id: number | null) => {
     try {
@@ -161,11 +165,14 @@ export function CutplanPage({ onClose, onOpenSettings, theme, onToggleTheme }: C
         if (activeRef.current !== id) return
         if (detail.plan) setPlan(detail.plan)          // show completed dates early
         pushProgress(detail.session.progress ?? '')     // live "正在查看…" trajectory
+        setDayIndex(detail.session.day_index ?? null)
+        setDayTotal(detail.session.day_total ?? null)
         if (detail.session.status !== 'running') {
           setMessages(detail.messages)                  // restore the assistant reply
           setPlan(detail.plan)
           setBusy(false)
           setProgressOpen(false)                        // collapse the finished log
+          setDayIndex(null); setDayTotal(null)
           stopElapsedTimer()
           return                                        // keep progressLog for review
         }
@@ -202,6 +209,7 @@ export function CutplanPage({ onClose, onOpenSettings, theme, onToggleTheme }: C
     setMessages([])
     setBusy(false)
     setProgressLog([])
+    setDayIndex(null); setDayTotal(null)
     stopElapsedTimer()
     try {
       const detail = await api.getCutSession(id)
@@ -277,6 +285,7 @@ export function CutplanPage({ onClose, onOpenSettings, theme, onToggleTheme }: C
     setInput('')
     setBusy(true)
     setProgressLog([])
+    setDayIndex(null); setDayTotal(null)
     setProgressOpen(true)
     startElapsedTimer()
     try {
@@ -331,6 +340,7 @@ export function CutplanPage({ onClose, onOpenSettings, theme, onToggleTheme }: C
     activeRef.current = null
     setBusy(false)
     setProgressLog([])
+    setDayIndex(null); setDayTotal(null)
     stopElapsedTimer()
   }
 
@@ -445,21 +455,23 @@ export function CutplanPage({ onClose, onOpenSettings, theme, onToggleTheme }: C
         {/* Generation status pill */}
         {busy && (
           <div className="flex h-[26px] items-center gap-1.5 rounded-full bg-[--primary-soft] px-2.5 pl-1 animate-[status-fade-in_200ms_ease]" role="status" aria-live="polite">
-            {/* Indeterminate spinner — the director doesn't report a known step
-                total, so this shows activity rather than a fake percent-fill ring */}
-            <span className="h-[15px] w-[15px] shrink-0 animate-spin" aria-hidden="true">
-              <svg viewBox="0 0 16 16" className="h-full w-full">
+            <span className="h-[15px] w-[15px] shrink-0" aria-hidden="true">
+              <svg viewBox="0 0 16 16" className="h-full w-full" style={{ transform: 'rotate(-90deg)' }}>
                 <circle cx="8" cy="8" r="7" fill="none" stroke="var(--primary-soft)" strokeWidth="2.5" />
                 <circle
                   cx="8" cy="8" r="7" fill="none" stroke="var(--primary)" strokeWidth="2.5"
                   strokeLinecap="round"
                   strokeDasharray="44"
-                  strokeDashoffset="11"
+                  strokeDashoffset={dayPct != null ? 44 * (1 - dayPct / 100) : 11}
+                  className={dayPct == null ? 'animate-spin' : undefined}
+                  style={dayPct != null ? { transition: 'stroke-dashoffset 400ms ease' } : undefined}
                 />
               </svg>
             </span>
             <span className="text-[10px] font-semibold text-[--primary] font-variant-numeric-tabular-nums whitespace-nowrap">
-              {t('roughcut.generating', { n: String(currentStepIndex) })}
+              {dayIndex != null && dayTotal != null
+                ? t('roughcut.generatingDay', { idx: String(dayIndex), n: String(dayTotal) })
+                : t('roughcut.generating', { n: String(currentStepIndex) })}
             </span>
           </div>
         )}

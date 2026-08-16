@@ -147,6 +147,25 @@ describe('CutplanPage', () => {
     expect(screen.getByText('A-0001.mov')).toBeInTheDocument()
   })
 
+  it('shows a real day-based percentage in the topbar while running', async () => {
+    server.use(
+      http.get(`${API}/cut/sessions`, () =>
+        HttpResponse.json({ sessions: [{ id: 7, title: 't', status: 'running', created_at: null, updated_at: null }] }),
+      ),
+      http.get(`${API}/cut/sessions/7`, () =>
+        HttpResponse.json({
+          session: { id: 7, title: 't', status: 'running', day_index: 2, day_total: 5, created_at: null, updated_at: null },
+          messages: [{ role: 'user', content: '剪一条', created_at: null }],
+          plan: null,
+        }),
+      ),
+    )
+
+    render(<CutplanPage onClose={() => {}} onOpenSettings={() => {}} theme="light" onToggleTheme={() => {}} />)
+
+    expect(await screen.findByText('Generating · 2/5')).toBeInTheDocument()
+  })
+
   it('deletes a conversation', async () => {
     const del = vi.fn()
     server.use(
