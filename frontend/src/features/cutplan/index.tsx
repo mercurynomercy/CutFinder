@@ -371,9 +371,9 @@ export function CutplanPage({ onClose, onOpenSettings, theme, onToggleTheme }: C
   // Generation process panel node
   const progressNode = (
     <div className="text-left">
-      <div className="inline-flex max-w-full flex-col gap-1 rounded-lg border border-[--border] bg-[--surface-1] px-3 py-2 text-sm text-[--text-secondary] shadow-[var(--shadow-2)]">
+      <div className="inline-flex max-w-full flex-col rounded-lg border border-[--border] bg-[--surface-1] text-sm text-[--text-secondary] shadow-[var(--shadow-2)]">
         {/* Header — clickable to toggle steps */}
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between px-4 pt-3 pb-2.5">
           <button
             type="button"
             onClick={() => setProgressOpen((v) => !v)}
@@ -394,7 +394,7 @@ export function CutplanPage({ onClose, onOpenSettings, theme, onToggleTheme }: C
         </div>
 
         {/* Current step line — always visible */}
-        <div className="flex items-baseline gap-2 border-t border-[--border] pt-2">
+        <div className="flex items-baseline gap-2 px-4 pb-2.5">
           <span className="flex-1 min-w-0 truncate text-xs text-[--text-secondary]">
             {busy && progressLog.length > 0 ? lastProgress : (busy ? t('roughcut.thinking') : '完成')}
           </span>
@@ -407,7 +407,7 @@ export function CutplanPage({ onClose, onOpenSettings, theme, onToggleTheme }: C
 
         {/* Steps list — collapsible */}
         {progressOpen && (
-          <div ref={progressRef} className="mt-1 flex max-h-48 flex-col gap-1 overflow-y-auto">
+          <div ref={progressRef} className="flex max-h-48 flex-col gap-1 overflow-y-auto px-4 pb-3">
             {progressLog.length === 0 && busy ? (
               <div className="flex items-center gap-2 text-xs text-[--text-muted]">
                 <ThinkingDots />
@@ -448,7 +448,7 @@ export function CutplanPage({ onClose, onOpenSettings, theme, onToggleTheme }: C
         {/* Progress bar footer — indeterminate: the director doesn't report a
             known step total, so this shows activity rather than a fake percent */}
         {busy && (
-          <div className="flex items-center gap-2 pt-1">
+          <div className="flex items-center gap-2 px-4 pb-3 pt-1">
             <div className="h-[3px] flex-1 overflow-hidden rounded-full bg-[--surface-3]">
               <div className="h-full w-1/3 animate-[cf-slide_1.4s_ease-in-out_infinite] rounded-full bg-[--primary]" />
             </div>
