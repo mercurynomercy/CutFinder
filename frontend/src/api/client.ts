@@ -205,13 +205,20 @@ export interface OmlxTestResult {
 
 // ── Rough-cut director agent (§3.15) ────────────────────────────
 
+export interface CutPending {
+  kind: string
+  question: string
+  options: string[]
+}
+
 export interface CutSession {
   id: number
   title: string
-  status: string // 'idle' | 'running' | 'error'
+  status: string // 'idle' | 'running' | 'error' | 'waiting_for_input'
   progress?: string // live status while a turn runs (e.g. "第 2/6 天 · 查看片段 #123")
   day_index?: number | null
   day_total?: number | null
+  pending?: CutPending | null
   created_at: string | null
   updated_at: string | null
 }

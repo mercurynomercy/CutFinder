@@ -28,11 +28,16 @@ def _build_router(ctx: Any) -> Any:
         return ctx.cut_store
 
     def _session_dict(s: Any) -> dict[str, Any]:
+        pending = getattr(s, "pending", None)
         return {
             "id": s.id, "title": s.title, "status": s.status,
             "progress": getattr(s, "progress", ""),
             "day_index": getattr(s, "day_index", None),
             "day_total": getattr(s, "day_total", None),
+            "pending": (
+                {"kind": pending.kind, "question": pending.question, "options": list(pending.options)}
+                if pending is not None else None
+            ),
             "created_at": s.created_at, "updated_at": s.updated_at,
         }
 
