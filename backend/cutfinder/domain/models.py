@@ -242,6 +242,22 @@ class CutPlan(BaseModel, frozen=True):
     note: str = ""                   # assistant note (e.g. duration warning)
 
 
+class PendingClarification(BaseModel, frozen=True):
+    """A paused turn waiting on the user before the director can continue.
+
+    ``kind`` is one of ``"preflight_date"`` / ``"preflight_duration"`` (asked
+    deterministically before generation starts, no ``resume_state`` needed —
+    the answer is just parsed like a normal next message) or
+    ``"day_ask_user"`` (the director's per-day tool loop paused mid-round;
+    ``resume_state`` carries the serialized conversation to continue it).
+    """
+
+    kind: str
+    question: str
+    options: list[str] = []
+    resume_state: dict[str, Any] = {}
+
+
 class ChatMessage(BaseModel, frozen=True):
     """One persisted message in a rough-cut conversation."""
 
@@ -256,13 +272,14 @@ class CutSession(BaseModel):
 
     id: int | None = None
     title: str = ""
-    status: str = "idle"             # "idle" | "running" | "error"
+    status: str = "idle"             # "idle" | "running" | "error" | "waiting_for_input"
     # Live, human-readable progress while a turn runs (e.g. "第 2/6 天 · 查看片段
     # #123 台词"). Ephemeral — held in memory by the store, not persisted; the
     # polling UI reads it to show what the director is doing right now.
     progress: str = ""
     day_index: int | None = None     # 1-based shooting-day index of the day being generated
     day_total: int | None = None     # total shooting days this turn covers
+    pending: PendingClarification | None = None
     created_at: str | None = None
     updated_at: str | None = None
 

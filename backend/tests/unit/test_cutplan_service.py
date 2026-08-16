@@ -8,8 +8,51 @@ import pytest
 
 from cutfinder.adapters.sqlite_cutplan import MemoryCutSessionStore
 from cutfinder.cutplan.director import CutDirectorResult
-from cutfinder.domain.models import CutPlan, RoughCutRequest, Shot
+from cutfinder.domain.models import CutPlan, PendingClarification, RoughCutRequest, Shot
 from cutfinder.pipeline.cutplan_service import CutPlanService
+
+
+def test_store_pending_round_trips() -> None:
+    store = MemoryCutSessionStore()
+    s = store.create_session()
+    pending = PendingClarification(
+        kind="preflight_date", question="请指定日期范围", options=["2026-04-25", "2026-04-26"],
+    )
+
+    store.set_session_pending(s.id, pending)
+    store.set_session_status(s.id, "waiting_for_input")
+
+    got = store.get_session(s.id)
+    assert got.status == "waiting_for_input"
+    assert got.pending == pending
+
+    store.clear_session_pending(s.id)
+    assert store.get_session(s.id).pending is None
+
+
+def test_store_tracks_already_asked_fields() -> None:
+    store = MemoryCutSessionStore()
+    s = store.create_session()
+
+    assert store.get_asked(s.id) == set()
+    store.mark_asked(s.id, "date")
+    assert store.get_asked(s.id) == {"date"}
+    store.mark_asked(s.id, "duration")
+    assert store.get_asked(s.id) == {"date", "duration"}
+
+
+def test_reset_interrupted_sessions_skips_waiting_for_input() -> None:
+    store = MemoryCutSessionStore()
+    s1 = store.create_session()
+    s2 = store.create_session()
+    store.set_session_status(s1.id, "running")
+    store.set_session_status(s2.id, "waiting_for_input")
+
+    n = store.reset_interrupted_sessions()
+
+    assert n == 1
+    assert store.get_session(s1.id).status == "idle"
+    assert store.get_session(s2.id).status == "waiting_for_input"
 
 
 class FakeDirector:

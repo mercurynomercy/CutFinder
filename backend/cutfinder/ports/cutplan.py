@@ -22,6 +22,7 @@ from ..domain.models import (
     ClipDetail,
     CutPlan,
     CutSession,
+    PendingClarification,
     VisionResult,
 )
 
@@ -124,6 +125,18 @@ class CutSessionStore(Protocol):
 
     def set_session_day_progress(self, session_id: int, day_index: int, day_total: int) -> None:
         """Set the live (day_index, day_total) for a running turn (ephemeral)."""
+
+    def set_session_pending(self, session_id: int, pending: PendingClarification) -> None:
+        """Persist a paused turn's question/options/resume state."""
+
+    def clear_session_pending(self, session_id: int) -> None:
+        """Clear a session's pending clarification (answered or abandoned)."""
+
+    def get_asked(self, session_id: int) -> set[str]:
+        """Return which pre-flight fields ('date'/'duration') have already been asked this session."""
+
+    def mark_asked(self, session_id: int, field: str) -> None:
+        """Record that a pre-flight field has been asked, so it isn't asked twice."""
 
     def set_session_request(self, session_id: int, request_json: str) -> None:
         """Store the latest structured request params (JSON) for a session."""
