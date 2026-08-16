@@ -25,6 +25,7 @@ from ..domain.models import (
     ChatMessage,
     ClipDetail,
     CutPlan,
+    PendingClarification,
     RoughCutRequest,
     Shot,
 )
@@ -54,6 +55,7 @@ class CutDirectorResult:
 
     assistant_text: str
     plan: CutPlan | None
+    pending: PendingClarification | None = None
 
 
 class CutDirector:

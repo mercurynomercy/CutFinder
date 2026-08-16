@@ -260,6 +260,20 @@ _MESSAGES: dict[str, tuple[str, str]] = {
     # system / staged prompt fragments
     "target_duration": ("目标时长 {lo:.0f}–{hi:.0f} 分钟。", "Target duration: {lo:.0f}–{hi:.0f} min."),
     "style_fallback": ("（自行把握）", "(at your discretion)"),
+    # pre-flight clarification (§3.15 B1)
+    "preflight_date_question": (
+        "请指定素材的日期范围。只写月份和日期会按今年推断，建议写完整日期（如 2016/08/31）。",
+        "Please specify the footage's date range. A bare month/day is read as the current year — "
+        "give the full date (e.g. 2016/08/31).",
+    ),
+    "preflight_duration_question": (
+        "请指定视频的目标时长。例如「10 分钟」或「不限长度」。",
+        "Please specify the target duration. For example \"10 minutes\" or \"unlimited\".",
+    ),
+    "duration_opt_5min": ("5 分钟以内", "Under 5 minutes"),
+    "duration_opt_10min": ("10 分钟", "10 minutes"),
+    "duration_opt_15_20min": ("15-20 分钟", "15-20 minutes"),
+    "duration_opt_unlimited": ("不限长度", "Unlimited"),
     # agent loop (per-day)
     "accepted_text_shotlist": (
         "导演直接给出文字分镜，已采纳",

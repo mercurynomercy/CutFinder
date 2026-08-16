@@ -13,8 +13,9 @@ import logging
 from typing import Any
 
 from ..cutplan.director import CutDirector, CutDirectorResult
+from ..cutplan.preflight import check_preflight
 from ..cutplan.request_parse import parse_request_fields
-from ..domain.models import ChatMessage, RoughCutRequest
+from ..domain.models import ChatMessage, CutSession, PendingClarification, RoughCutRequest
 from ..ports.cutplan import CutSessionStore
 
 logger = logging.getLogger(__name__)
@@ -23,9 +24,17 @@ logger = logging.getLogger(__name__)
 class CutPlanService:
     """Handle a single user message in a rough-cut conversation."""
 
-    def __init__(self, store: CutSessionStore, director: CutDirector, *, ui_language: str = "zh") -> None:
+    def __init__(
+        self,
+        store: CutSessionStore,
+        director: CutDirector,
+        *,
+        retriever: Any | None = None,
+        ui_language: str = "zh",
+    ) -> None:
         self._store = store
         self._director = director
+        self._retriever = retriever
         self._ui_language = ui_language
 
     def handle(
@@ -39,35 +48,24 @@ class CutPlanService:
         if session is None:
             raise ValueError(f"cut session {session_id} not found")
 
+        if session.status == "waiting_for_input" and session.pending is not None:
+            return self._resume(session, user_text)
+
         # Persist the user's message before running so a crash still records it.
-        # The API route already persists it synchronously (so it survives a slow
-        # worker / restart); only append here if it isn't already the last
-        # message, to stay correct when the service is used directly (tests).
         existing = self._store.get_messages(session_id)
         if not (existing and existing[-1].role == "user" and existing[-1].content == user_text):
             self._store.append_message(session_id, ChatMessage(role="user", content=user_text))
         self._store.set_session_status(session_id, "running")
 
-        # Auto-title an untitled conversation from its first user message, so the
-        # sidebar shows something other than "未命名" after the opening turn.
         if not (session.title or "").strip():
             self._store.set_session_title(session_id, _derive_title(user_text, lang=self._ui_language))
 
-        # Resolve the request. Precedence: an explicit request object (from a
-        # future structured UI) wins; otherwise parse scoping (date range /
-        # duration / aspect) out of the message itself and merge it over the
-        # session's remembered params, so refine turns keep the original scope.
         if request is not None:
             req = request
         else:
             stored = self._load_request(session_id) or RoughCutRequest()
             parsed = parse_request_fields(user_text)
             req = stored.model_copy(update=parsed) if parsed else stored
-            # A remembered date range is only worth keeping if it actually
-            # produced a cut. When the previous turn ended with no plan (almost
-            # always "no footage in that range"), inheriting its dates makes
-            # every follow-up repeat the same failure — drop them and let this
-            # turn search the whole library instead.
             if not (parsed.keys() & {"date_from", "date_to"}) and (
                 self._store.get_latest_plan(session_id) is None
             ):
@@ -76,22 +74,18 @@ class CutPlanService:
             session_id, json.dumps(req.model_dump(), ensure_ascii=False),
         )
 
-        # History excludes the just-appended user message (passed separately).
-        history = self._store.get_messages(session_id)[:-1]
+        if self._retriever is not None:
+            pending = check_preflight(
+                req, self._retriever, self._store.get_asked(session_id), lang=self._ui_language,
+            )
+            if pending is not None:
+                self._store.mark_asked(session_id, pending.kind.removeprefix("preflight_"))
+                return self._pause(session_id, pending)
 
-        # The latest plan is the merge base: a refine turn regenerates only the
-        # dates in its (possibly narrowed) range and merges them over this plan,
-        # so unrelated dates survive instead of being replaced (task 28 Part A).
+        history = self._store.get_messages(session_id)[:-1]
         prior_plan = self._store.get_latest_plan(session_id)
 
         try:
-            # Deterministic per-date generation: the director either runs a
-            # scoped tool loop per shooting date (agent mode) or one structured
-            # JSON call per date (staged mode), with a per-day fall back. Small
-            # per-day context keeps it reliable on local models (task 26).
-            # The callbacks surface live progress + completed dates to the polling
-            # UI: progress text into the (ephemeral) session field, and the
-            # cumulative plan saved after each day so finished shots show early.
             result = self._director.generate(
                 req, history, user_text,
                 prior_plan=prior_plan,
@@ -103,7 +97,20 @@ class CutPlanService:
             self._store.set_session_status(session_id, "error")
             self._store.clear_session_progress(session_id)
             raise
+        return self._finish(session_id, result)
 
+    def _pause(self, session_id: int, pending: PendingClarification) -> CutDirectorResult:
+        """Persist a paused turn: the question becomes a normal assistant message."""
+        self._store.append_message(session_id, ChatMessage(role="assistant", content=pending.question))
+        self._store.set_session_pending(session_id, pending)
+        self._store.set_session_status(session_id, "waiting_for_input")
+        self._store.clear_session_progress(session_id)
+        return CutDirectorResult(pending.question, None, pending=pending)
+
+    def _finish(self, session_id: int, result: CutDirectorResult) -> CutDirectorResult:
+        """Persist a director result: either another pause, or a completed turn."""
+        if result.pending is not None:
+            return self._pause(session_id, result.pending)
         self._store.append_message(
             session_id, ChatMessage(role="assistant", content=result.assistant_text),
         )
@@ -112,6 +119,21 @@ class CutPlanService:
         self._store.set_session_status(session_id, "idle")
         self._store.clear_session_progress(session_id)
         return result
+
+    def _resume(self, session: CutSession, user_text: str) -> CutDirectorResult:
+        """Continue a paused turn: pre-flight re-enters ``handle`` fresh; a
+        paused day resumes its exact tool-loop conversation (Task 12)."""
+        session_id = session.id
+        assert session_id is not None
+        pending = session.pending
+        assert pending is not None
+        self._store.clear_session_pending(session_id)
+
+        if pending.kind in ("preflight_date", "preflight_duration"):
+            self._store.set_session_status(session_id, "idle")
+            return self.handle(session_id, user_text)
+
+        raise NotImplementedError("day_ask_user resume is implemented in Task 12/13")
 
     def _load_request(self, session_id: int) -> RoughCutRequest | None:
         raw = self._store.get_session_request(session_id)

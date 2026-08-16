@@ -8,7 +8,7 @@ import pytest
 
 from cutfinder.adapters.sqlite_cutplan import MemoryCutSessionStore
 from cutfinder.cutplan.director import CutDirectorResult
-from cutfinder.domain.models import CutPlan, PendingClarification, RoughCutRequest, Shot
+from cutfinder.domain.models import ClipBrief, CutPlan, PendingClarification, RoughCutRequest, Shot
 from cutfinder.pipeline.cutplan_service import CutPlanService
 
 
@@ -277,3 +277,78 @@ def test_handle_unknown_session_raises() -> None:
     svc = CutPlanService(store, FakeDirector(CutDirectorResult("x", None)))  # type: ignore[arg-type]
     with pytest.raises(ValueError):
         svc.handle(999, "go")
+
+
+class FakePreflightRetriever:
+    def __init__(self, briefs: list[Any]) -> None:
+        self._briefs = briefs
+
+    def search_footage(self, **kwargs: Any) -> list[Any]:
+        return self._briefs
+
+    def get_clip_detail(self, clip_id: int) -> Any:
+        return None
+
+
+def test_handle_pauses_for_missing_date_before_calling_director() -> None:
+    store = MemoryCutSessionStore()
+    s = store.create_session()
+    director = FakeDirector(CutDirectorResult("不应该被调用", _plan()))
+    retriever = FakePreflightRetriever([
+        ClipBrief(clip_id=1, roll="a", capture_time="2026-04-25T09:00:00"),
+        ClipBrief(clip_id=2, roll="a", capture_time="2026-04-26T09:00:00"),
+    ])
+    svc = CutPlanService(store, director, retriever=retriever)  # type: ignore[arg-type]
+
+    result = svc.handle(s.id, "帮我剪个 vlog")
+
+    assert director.calls == []  # never reached the (expensive) director
+    assert result.pending is not None
+    assert result.pending.kind == "preflight_date"
+    session = store.get_session(s.id)
+    assert session.status == "waiting_for_input"
+    assert session.pending is not None
+    msgs = store.get_messages(s.id)
+    assert [m.role for m in msgs] == ["user", "assistant"]
+    assert msgs[1].content == result.pending.question
+
+
+def test_handle_resumes_preflight_pause_as_a_normal_turn() -> None:
+    store = MemoryCutSessionStore()
+    s = store.create_session()
+    director = FakeDirector(CutDirectorResult("生成完成", _plan()))
+    retriever = FakePreflightRetriever([
+        ClipBrief(clip_id=1, roll="a", capture_time="2026-04-25T09:00:00"),
+        ClipBrief(clip_id=2, roll="a", capture_time="2026-04-26T09:00:00"),
+    ])
+    svc = CutPlanService(store, director, retriever=retriever)  # type: ignore[arg-type]
+
+    svc.handle(s.id, "帮我剪个 vlog")  # pauses on date
+    assert store.get_session(s.id).status == "waiting_for_input"
+
+    result = svc.handle(s.id, "2026/04/25")  # user answers with a real date
+
+    # Duration is still missing but was never asked this session before the
+    # date pause resolved — the resumed turn re-checks and would pause again
+    # on duration rather than silently reaching the director. Confirm that:
+    assert director.calls == []
+    assert result.plan is None
+    assert result.pending is not None
+    assert result.pending.kind == "preflight_duration"
+    assert store.get_session(s.id).status == "waiting_for_input"
+    pending2 = store.get_session(s.id).pending
+    assert pending2 is not None and pending2.kind == "preflight_duration"
+
+
+def test_handle_skips_preflight_when_no_retriever_wired() -> None:
+    # Backward-compat default: retriever=None means pre-flight is disabled,
+    # matching every pre-existing CutPlanService(store, director) call site.
+    store = MemoryCutSessionStore()
+    s = store.create_session()
+    director = FakeDirector(CutDirectorResult("ok", _plan()))
+    svc = CutPlanService(store, director)  # type: ignore[arg-type]
+
+    result = svc.handle(s.id, "帮我剪个 vlog")
+
+    assert result.pending is None
+    assert director.calls  # director was actually called

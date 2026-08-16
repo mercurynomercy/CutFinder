@@ -234,9 +234,10 @@ def _build_into(ctx: LibraryContext, library_path: Union[str, Path]) -> None:
     n_cut_paused = cut_store.reset_interrupted_sessions()
     if n_cut_paused:
         logger.info("Reset %d interrupted cut session(s) at bind", n_cut_paused)
+    cut_retriever = CatalogFootageRetriever(repository)
     cut_director = CutDirector(
         OmlxAgentClient(config),
-        CatalogFootageRetriever(repository),
+        cut_retriever,
         CatalogBrollInspector(
             repository,
             FfmpegFrameExtractor(default_count=prefs.broll_frame_count),
@@ -251,7 +252,9 @@ def _build_into(ctx: LibraryContext, library_path: Union[str, Path]) -> None:
         staged_token_budget=prefs.cut_staged_token_budget,
         ui_language=prefs.ui_language,
     )
-    cutplan_service = CutPlanService(cut_store, cut_director, ui_language=prefs.ui_language)
+    cutplan_service = CutPlanService(
+        cut_store, cut_director, retriever=cut_retriever, ui_language=prefs.ui_language,
+    )
 
     # When the work queue drains, unload the in-process models (whisper +
     # demucs) so they stop occupying RAM while idle. They reload lazily on
