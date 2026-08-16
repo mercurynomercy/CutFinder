@@ -448,7 +448,7 @@ export function CutplanPage({ onClose, onOpenSettings, theme, onToggleTheme }: C
         {/* Progress bar footer — indeterminate: the director doesn't report a
             known step total, so this shows activity rather than a fake percent */}
         {busy && (
-          <div className="flex items-center gap-2 px-4 pb-3 pt-1">
+          <div className="flex items-center gap-2 px-4 pb-3 pt-2">
             <div className="h-[3px] flex-1 overflow-hidden rounded-full bg-[--surface-3]">
               <div className="h-full w-1/3 animate-[cf-slide_1.4s_ease-in-out_infinite] rounded-full bg-[--primary]" />
             </div>
