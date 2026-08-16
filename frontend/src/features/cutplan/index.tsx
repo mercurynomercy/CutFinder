@@ -260,6 +260,20 @@ export function CutplanPage({ onClose, onOpenSettings, theme, onToggleTheme }: C
     }
   }, [progressLog, busy, progressOpen])
 
+  // Update the tab title with day progress while generating, so it's visible
+  // even when the user has switched away from this tab.
+  useEffect(() => {
+    const base = document.title.replace(/^\(\d+\/\d+\)\s*/, '')
+    if (busy && dayIndex != null && dayTotal != null) {
+      document.title = `(${dayIndex}/${dayTotal}) ${base}`
+    } else {
+      document.title = base
+    }
+    return () => {
+      document.title = document.title.replace(/^\(\d+\/\d+\)\s*/, '')
+    }
+  }, [busy, dayIndex, dayTotal])
+
   const newSession = async () => {
     const s = await api.createCutSession('')
     await loadSessions()
