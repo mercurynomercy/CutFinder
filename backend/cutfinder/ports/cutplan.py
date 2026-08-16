@@ -122,6 +122,9 @@ class CutSessionStore(Protocol):
     def clear_session_progress(self, session_id: int) -> None:
         """Drop a session's live progress text when the turn ends."""
 
+    def set_session_day_progress(self, session_id: int, day_index: int, day_total: int) -> None:
+        """Set the live (day_index, day_total) for a running turn (ephemeral)."""
+
     def set_session_request(self, session_id: int, request_json: str) -> None:
         """Store the latest structured request params (JSON) for a session."""
 

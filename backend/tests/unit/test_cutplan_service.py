@@ -24,12 +24,14 @@ class FakeDirector:
         result: CutDirectorResult,
         progress_steps: list[str] | None = None,
         partial_plans: list[CutPlan] | None = None,
+        day_steps: list[tuple[int, int]] | None = None,
     ) -> None:
         self.result = result
         self.calls: list[tuple[RoughCutRequest, list[Any], str]] = []
         self.prior_plans: list[CutPlan | None] = []
         self._progress_steps = progress_steps or []
         self._partial_plans = partial_plans or []
+        self._day_steps = day_steps or []
 
     def generate(
         self,
@@ -40,6 +42,7 @@ class FakeDirector:
         prior_plan: CutPlan | None = None,
         on_progress: Any = None,
         on_partial: Any = None,
+        on_day: Any = None,
     ) -> CutDirectorResult:
         self.calls.append((request, list(history), user_text))
         self.prior_plans.append(prior_plan)
@@ -49,6 +52,9 @@ class FakeDirector:
         for p in self._partial_plans:
             if on_partial:
                 on_partial(p)
+        for idx, n in self._day_steps:
+            if on_day:
+                on_day(idx, n)
         return self.result
 
 
@@ -92,6 +98,20 @@ def test_handle_saves_partial_plan_and_clears_progress() -> None:
 
     assert store.get_latest_plan(s.id).total_s == 5.0   # partial plan persisted
     assert store.get_session(s.id).progress == ""        # progress cleared at end
+
+
+def test_handle_forwards_day_progress_to_store() -> None:
+    store = MemoryCutSessionStore()
+    s = store.create_session()
+    director = FakeDirector(CutDirectorResult("ok", _plan()), day_steps=[(1, 3), (2, 3)])
+    svc = CutPlanService(store, director)  # type: ignore[arg-type]
+
+    svc.handle(s.id, "剪一条", RoughCutRequest())
+
+    # Progress is cleared once the turn finishes (same lifecycle as `progress`).
+    session = store.get_session(s.id)
+    assert session.day_index is None
+    assert session.day_total is None
 
 
 def test_refine_reuses_stored_request() -> None:

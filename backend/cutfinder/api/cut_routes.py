@@ -31,6 +31,8 @@ def _build_router(ctx: Any) -> Any:
         return {
             "id": s.id, "title": s.title, "status": s.status,
             "progress": getattr(s, "progress", ""),
+            "day_index": getattr(s, "day_index", None),
+            "day_total": getattr(s, "day_total", None),
             "created_at": s.created_at, "updated_at": s.updated_at,
         }
 

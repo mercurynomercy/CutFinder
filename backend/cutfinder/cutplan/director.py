@@ -109,6 +109,7 @@ class CutDirector:
         prior_plan: CutPlan | None = None,
         on_progress: Callable[[str], None] | None = None,
         on_partial: Callable[[CutPlan], None] | None = None,
+        on_day: Callable[[int, int], None] | None = None,
     ) -> CutDirectorResult:
         """Deterministic retrieval + one LLM call **per shooting date** → shot list.
 
@@ -126,6 +127,7 @@ class CutDirector:
 
         progress = on_progress or (lambda _s: None)
         partial = on_partial or (lambda _p: None)
+        day_cb = on_day or (lambda _i, _n: None)
         lang = self._ui_language
 
         progress(self._t("searching_footage"))
@@ -168,6 +170,7 @@ class CutDirector:
         failed: list[str] = []
         n_days = len(dates)
         for idx, day in enumerate(dates, 1):
+            day_cb(idx, n_days)
             progress(self._t("generating_day", idx=idx, n=n_days, day=day, clips=len(groups[day])))
 
             def day_step(detail: str, _i: int = idx, _d: str = day) -> None:

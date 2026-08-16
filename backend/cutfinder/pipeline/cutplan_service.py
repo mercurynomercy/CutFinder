@@ -97,6 +97,7 @@ class CutPlanService:
                 prior_plan=prior_plan,
                 on_progress=lambda text: self._store.set_session_progress(session_id, text),
                 on_partial=lambda plan: self._store.save_plan(session_id, plan),
+                on_day=lambda idx, n: self._store.set_session_day_progress(session_id, idx, n),
             )
         except Exception:
             self._store.set_session_status(session_id, "error")

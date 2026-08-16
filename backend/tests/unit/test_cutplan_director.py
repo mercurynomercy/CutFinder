@@ -285,6 +285,28 @@ def test_generate_one_call_per_date_with_date_chapters() -> None:
     assert result.plan.total_s == 22.0                 # 12 + 10
 
 
+def test_generate_reports_day_index_and_total() -> None:
+    briefs = [
+        ClipBrief(clip_id=1, roll="a", capture_time="2026-04-25T09:00:00"),
+        ClipBrief(clip_id=2, roll="a", capture_time="2026-04-26T09:00:00"),
+    ]
+    llm = FakeAgentLLM([
+        AgentStep(content="ok", tool_calls=[_tc("emit_plan", {"shots": [
+            {"clip_id": 1, "roll": "a", "in_s": 0, "out_s": 5},
+        ]})]),
+        AgentStep(content="ok", tool_calls=[_tc("emit_plan", {"shots": [
+            {"clip_id": 2, "roll": "a", "in_s": 0, "out_s": 5},
+        ]})]),
+    ])
+    director = CutDirector(llm, FakeRetriever(briefs, _details()))
+    seen: list[tuple[int, int]] = []
+    director.generate(
+        RoughCutRequest(), [], "剪一条",
+        on_day=lambda idx, n: seen.append((idx, n)),
+    )
+    assert seen == [(1, 2), (2, 2)]
+
+
 def test_generate_groups_days_by_local_capture_date() -> None:
     """Regression: day chapters follow the *local* shooting date, not the UTC one.
 

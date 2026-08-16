@@ -62,6 +62,17 @@ def test_get_session_returns_messages_and_plan() -> None:
     assert "## 开场" in body["plan"]["markdown"]
 
 
+def test_get_session_includes_day_progress_fields() -> None:
+    store = MemoryCutSessionStore()
+    s = store.create_session()
+    store.set_session_day_progress(s.id, 2, 5)
+    client = _client(store)
+
+    body = client.get(f"/api/cut/sessions/{s.id}").json()
+    assert body["session"]["day_index"] == 2
+    assert body["session"]["day_total"] == 5
+
+
 def test_get_session_404() -> None:
     client = _client(MemoryCutSessionStore())
     assert client.get("/api/cut/sessions/999").status_code == 404

@@ -261,6 +261,8 @@ class CutSession(BaseModel):
     # #123 台词"). Ephemeral — held in memory by the store, not persisted; the
     # polling UI reads it to show what the director is doing right now.
     progress: str = ""
+    day_index: int | None = None     # 1-based shooting-day index of the day being generated
+    day_total: int | None = None     # total shooting days this turn covers
     created_at: str | None = None
     updated_at: str | None = None
 
