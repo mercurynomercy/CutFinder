@@ -106,8 +106,18 @@ def test_handle_forwards_day_progress_to_store() -> None:
     director = FakeDirector(CutDirectorResult("ok", _plan()), day_steps=[(1, 3), (2, 3)])
     svc = CutPlanService(store, director)  # type: ignore[arg-type]
 
+    calls: list[tuple[int, int]] = []
+    orig = store.set_session_day_progress
+
+    def spy(session_id: int, day_index: int, day_total: int) -> None:
+        calls.append((day_index, day_total))
+        orig(session_id, day_index, day_total)
+
+    store.set_session_day_progress = spy  # type: ignore[method-assign]
+
     svc.handle(s.id, "剪一条", RoughCutRequest())
 
+    assert calls == [(1, 3), (2, 3)]
     # Progress is cleared once the turn finishes (same lifecycle as `progress`).
     session = store.get_session(s.id)
     assert session.day_index is None
