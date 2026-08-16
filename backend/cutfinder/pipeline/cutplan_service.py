@@ -122,7 +122,7 @@ class CutPlanService:
 
     def _resume(self, session: CutSession, user_text: str) -> CutDirectorResult:
         """Continue a paused turn: pre-flight re-enters ``handle`` fresh; a
-        paused day resumes its exact tool-loop conversation (Task 12)."""
+        paused day resumes its exact tool-loop conversation via ``resume_day``."""
         session_id = session.id
         assert session_id is not None
         pending = session.pending
@@ -133,7 +133,22 @@ class CutPlanService:
             self._store.set_session_status(session_id, "idle")
             return self.handle(session_id, user_text)
 
-        raise NotImplementedError("day_ask_user resume is implemented in Task 12/13")
+        self._store.append_message(session_id, ChatMessage(role="user", content=user_text))
+        self._store.set_session_status(session_id, "running")
+        req = self._load_request(session_id) or RoughCutRequest()
+        prior_plan = self._store.get_latest_plan(session_id)
+        try:
+            result = self._director.resume_day(
+                req, pending.resume_state, user_text, prior_plan=prior_plan,
+                on_progress=lambda text: self._store.set_session_progress(session_id, text),
+                on_partial=lambda plan: self._store.save_plan(session_id, plan),
+                on_day=lambda idx, n: self._store.set_session_day_progress(session_id, idx, n),
+            )
+        except Exception:
+            self._store.set_session_status(session_id, "error")
+            self._store.clear_session_progress(session_id)
+            raise
+        return self._finish(session_id, result)
 
     def _load_request(self, session_id: int) -> RoughCutRequest | None:
         raw = self._store.get_session_request(session_id)

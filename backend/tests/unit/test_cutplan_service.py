@@ -8,7 +8,14 @@ import pytest
 
 from cutfinder.adapters.sqlite_cutplan import MemoryCutSessionStore
 from cutfinder.cutplan.director import CutDirectorResult
-from cutfinder.domain.models import ClipBrief, CutPlan, PendingClarification, RoughCutRequest, Shot
+from cutfinder.domain.models import (
+    ChatMessage,
+    ClipBrief,
+    CutPlan,
+    PendingClarification,
+    RoughCutRequest,
+    Shot,
+)
 from cutfinder.pipeline.cutplan_service import CutPlanService
 
 
@@ -68,6 +75,7 @@ class FakeDirector:
         progress_steps: list[str] | None = None,
         partial_plans: list[CutPlan] | None = None,
         day_steps: list[tuple[int, int]] | None = None,
+        resume_result: CutDirectorResult | None = None,
     ) -> None:
         self.result = result
         self.calls: list[tuple[RoughCutRequest, list[Any], str]] = []
@@ -75,6 +83,8 @@ class FakeDirector:
         self._progress_steps = progress_steps or []
         self._partial_plans = partial_plans or []
         self._day_steps = day_steps or []
+        self._resume_result = resume_result
+        self.resume_calls: list[tuple[RoughCutRequest, dict[str, Any], str, CutPlan | None]] = []
 
     def generate(
         self,
@@ -99,6 +109,21 @@ class FakeDirector:
             if on_day:
                 on_day(idx, n)
         return self.result
+
+    def resume_day(
+        self,
+        request: RoughCutRequest,
+        resume_state: dict[str, Any],
+        answer_text: str,
+        *,
+        prior_plan: CutPlan | None = None,
+        on_progress: Any = None,
+        on_partial: Any = None,
+        on_day: Any = None,
+    ) -> CutDirectorResult:
+        self.resume_calls.append((request, resume_state, answer_text, prior_plan))
+        assert self._resume_result is not None
+        return self._resume_result
 
 
 def _plan() -> CutPlan:
@@ -352,3 +377,31 @@ def test_handle_skips_preflight_when_no_retriever_wired() -> None:
 
     assert result.pending is None
     assert director.calls  # director was actually called
+
+
+def test_handle_resumes_day_ask_user_via_resume_day() -> None:
+    store = MemoryCutSessionStore()
+    s = store.create_session()
+    pending = PendingClarification(
+        kind="day_ask_user", question="选哪条开场？", options=["A-0004", "A-0011"],
+        resume_state={"day": "2026-04-25", "messages": [], "round_i": 0, "tool_call_id": "call-1"},
+    )
+    store.set_session_pending(s.id, pending)
+    store.set_session_status(s.id, "waiting_for_input")
+    store.append_message(s.id, ChatMessage(role="assistant", content="选哪条开场？"))
+    resume_result = CutDirectorResult("好的", _plan())
+    director = FakeDirector(CutDirectorResult("不应该被调用", None), resume_result=resume_result)
+    svc = CutPlanService(store, director)  # type: ignore[arg-type]
+
+    result = svc.handle(s.id, "A-0004")
+
+    assert result is resume_result
+    assert director.resume_calls[0][1] == pending.resume_state
+    assert director.resume_calls[0][2] == "A-0004"
+    session = store.get_session(s.id)
+    assert session.status == "idle"
+    assert session.pending is None
+    msgs = store.get_messages(s.id)
+    assert [m.role for m in msgs] == ["assistant", "user", "assistant"]
+    assert msgs[1].content == "A-0004"
+    assert msgs[2].content == "好的"
