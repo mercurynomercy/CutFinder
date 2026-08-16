@@ -328,4 +328,31 @@ describe('CutplanPage', () => {
 
     await waitFor(() => expect(sentTexts).toContain('2026-04-25'))
   })
+
+  it('renders a day_ask_user pause the same way as a pre-flight question', async () => {
+    server.use(
+      http.get(`${API}/cut/sessions`, () =>
+        HttpResponse.json({ sessions: [{ id: 9, title: 't', status: 'waiting_for_input', created_at: null, updated_at: null }] }),
+      ),
+      http.get(`${API}/cut/sessions/9`, () =>
+        HttpResponse.json({
+          session: {
+            id: 9, title: 't', status: 'waiting_for_input', created_at: null, updated_at: null,
+            pending: { kind: 'day_ask_user', question: '这天有两条可能的开场，选哪条？', options: ['A-0004', 'A-0011'] },
+          },
+          messages: [
+            { role: 'user', content: '剪一条', created_at: null },
+            { role: 'assistant', content: '这天有两条可能的开场，选哪条？', created_at: null },
+          ],
+          plan: null,
+        }),
+      ),
+    )
+
+    render(<CutplanPage onClose={() => {}} onOpenSettings={() => {}} theme="light" onToggleTheme={() => {}} />)
+
+    await screen.findByText('这天有两条可能的开场，选哪条？')
+    expect(await screen.findByRole('button', { name: 'A-0004' })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'A-0011' })).toBeInTheDocument()
+  })
 })
