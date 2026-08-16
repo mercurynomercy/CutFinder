@@ -195,6 +195,120 @@ class CutDirector:
             text += self._t("dates_skipped", dates=sep.join(failed))
         return CutDirectorResult(text, plan)
 
+    def resume_day(
+        self,
+        request: RoughCutRequest,
+        resume_state: dict[str, Any],
+        answer_text: str,
+        *,
+        prior_plan: CutPlan | None = None,
+        on_progress: Callable[[str], None] | None = None,
+        on_partial: Callable[[CutPlan], None] | None = None,
+        on_day: Callable[[int, int], None] | None = None,
+    ) -> CutDirectorResult:
+        """Continue a turn paused by ``ask_user`` mid-day, then finish the turn.
+
+        *resume_state* is the dict captured in :meth:`_day_tool_loop` when the
+        day paused (see Task 10), plus the turn-level bookkeeping
+        :meth:`_run_remaining_days` adds on top (``remaining_dates``,
+        ``day_idx``, ``n_days``, ``vision_used``, ``notes``, ``per_day``).
+        *prior_plan* seeds already-completed earlier days exactly like a
+        refine turn does in :meth:`generate` — the paused day's own earlier
+        days were already checkpointed via ``on_partial`` before the pause,
+        so they don't need to travel through *resume_state* too.
+        """
+        progress = on_progress or (lambda _s: None)
+        partial = on_partial or (lambda _p: None)
+        day_cb = on_day or (lambda _i, _n: None)
+        no_date = self._t("no_date")
+
+        day = str(resume_state["day"])
+        messages: list[dict[str, Any]] = list(resume_state["messages"])
+        messages.append({
+            "role": "tool",
+            "tool_call_id": resume_state["tool_call_id"],
+            "content": answer_text,
+        })
+        cache: dict[int, ClipDetail] = {}
+        vision_used = int(resume_state["vision_used"])
+        notes: list[str] = list(resume_state["notes"])
+        n_days = int(resume_state["n_days"])
+        day_idx = int(resume_state["day_idx"])
+        per_day_raw = resume_state.get("per_day")
+        per_day = (float(per_day_raw[0]), float(per_day_raw[1])) if per_day_raw else None
+        findings = {int(k): v for k, v in resume_state.get("findings", {}).items()}
+        seen = {tuple(pair) for pair in resume_state.get("seen", [])}
+
+        from ..domain.models import ChatMessage as _ChatMessage
+        resumed_history = [_ChatMessage(**m) for m in resume_state.get("history", [])]
+        resumed_user_text = str(resume_state.get("user_text") or "")
+
+        day_cb(day_idx, n_days)
+        day_shots, day_note, vision_used, findings, pending = self._day_tool_loop(
+            messages, cache, vision_used, findings, seen,
+            bool(resume_state.get("nudged")), bool(resume_state.get("prose_nudged")),
+            int(resume_state["round_i"]) + 1, day,
+            lambda _s: None,  # per-clip step text isn't surfaced on resume (no on_step wired yet)
+        )
+
+        merged = self._seed_merged(prior_plan, no_date)
+        if pending is not None:
+            pending = pending.model_copy(update={"resume_state": {
+                **pending.resume_state,
+                "remaining_dates": list(resume_state.get("remaining_dates", [])),
+                "vision_used": vision_used,
+                "notes": notes,
+                "per_day": list(per_day) if per_day else None,
+                "history": resume_state.get("history", []),
+                "user_text": resumed_user_text,
+            }})
+            return CutDirectorResult(pending.question, None, pending=pending)
+
+        day_dicts = self._normalize_day(day_shots, day)
+        if day_dicts:
+            merged[day] = day_dicts
+            if day_note:
+                notes.append(day_note)
+            partial(self._build_plan(
+                {"shots": self._flatten(merged), "note": " ".join(notes)}, request, cache,
+            ))
+
+        remaining = [str(d) for d in resume_state.get("remaining_dates", [])]
+        failed: list[str] = []
+        if remaining:
+            clips = self._retriever.search_footage(date_from=request.date_from, date_to=request.date_to)
+            groups: dict[str, list[Any]] = {}
+            for b in clips:
+                d = local_day(getattr(b, "capture_time", None)) or no_date
+                groups.setdefault(d, []).append(b)
+            for day_clips in groups.values():
+                day_clips.sort(key=lambda b: (getattr(b, "capture_time", None) or ""))
+            groups = {d: groups[d] for d in remaining if d in groups}
+            missing = [d for d in remaining if d not in groups]
+            failed.extend(missing)
+            if groups:
+                pending2, failed2, vision_used = self._run_remaining_days(
+                    request, resumed_history, resumed_user_text, list(groups.keys()), groups,
+                    per_day, cache, merged, vision_used, notes,
+                    start_idx=day_idx + 1, n_days=n_days, progress=progress, partial=partial,
+                    day_cb=day_cb,
+                )
+                if pending2 is not None:
+                    return CutDirectorResult(pending2.question, None, pending=pending2)
+                failed.extend(failed2)
+
+        if not self._flatten(merged):
+            return CutDirectorResult(self._t("generation_failed"), None)
+
+        plan = self._build_plan(
+            {"shots": self._flatten(merged), "note": " ".join(notes)}, request, cache,
+        )
+        text = self._t("shotlist_generated")
+        if failed:
+            sep = "、" if self._ui_language == "zh" else ", "
+            text += self._t("dates_skipped", dates=sep.join(failed))
+        return CutDirectorResult(text, plan)
+
     # ── per-day generation + merge helpers (task 26/28) ──────────────
 
     def _gen_one_day(

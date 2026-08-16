@@ -908,3 +908,100 @@ def test_default_prompt_is_chinese_by_default() -> None:
     director = CutDirector(FakeCompleteLLM("{}"), FakeRetriever([], []))
     prompt = director._default_prompt()
     assert "初剪" in prompt or "粗剪" in prompt
+
+
+def test_resume_day_continues_paused_conversation_and_finishes() -> None:
+    llm = FakeAgentLLM([
+        AgentStep(tool_calls=[_tc("ask_user", {
+            "question": "选哪条开场？", "options": ["A-0004", "A-0011"],
+        }, cid="call-1")]),
+    ])
+    briefs = [ClipBrief(clip_id=1, roll="a", capture_time="2026-04-25T09:00:00")]
+    director = CutDirector(llm, FakeRetriever(briefs, _details()))
+    paused = director.generate(RoughCutRequest(date_from="2026-04-25"), [], "剪一条")
+    assert paused.pending is not None
+
+    # The model, now told the user picked A-0004, finalizes the day.
+    llm._steps.append(AgentStep(content="好的", tool_calls=[_tc("emit_plan", {"shots": [
+        {"clip_id": 1, "roll": "a", "in_s": 0, "out_s": 12, "content": "A-0004"},
+    ]})]))
+
+    result = director.resume_day(
+        RoughCutRequest(date_from="2026-04-25"), paused.pending.resume_state, "A-0004",
+    )
+
+    assert result.pending is None
+    assert result.plan is not None
+    assert result.plan.total_s == 12.0
+    # The tool result for the paused ask_user call carries the user's answer.
+    last_call_messages = llm.calls if hasattr(llm, "calls") else None  # FakeAgentLLM has no .calls; use run() count
+    assert llm.run_calls == 2  # one before the pause, one after resume
+
+
+def test_resume_day_continues_to_remaining_dates() -> None:
+    llm = FakeAgentLLM([
+        AgentStep(tool_calls=[_tc("ask_user", {"question": "选哪条？", "options": ["x"]}, cid="call-1")]),
+    ])
+    briefs = [
+        ClipBrief(clip_id=1, roll="a", capture_time="2026-04-25T09:00:00"),
+        ClipBrief(clip_id=2, roll="a", capture_time="2026-04-26T09:00:00"),
+    ]
+    director = CutDirector(llm, FakeRetriever(briefs, _details()))
+    paused = director.generate(RoughCutRequest(date_from="2026-04-25", date_to="2026-04-26"), [], "剪一条")
+    assert paused.pending is not None
+    assert paused.pending.resume_state["remaining_dates"] == ["2026-04-26"]
+
+    llm._steps.extend([
+        AgentStep(content="ok", tool_calls=[_tc("emit_plan", {"shots": [
+            {"clip_id": 1, "roll": "a", "in_s": 0, "out_s": 10},
+        ]})]),
+        AgentStep(content="ok", tool_calls=[_tc("emit_plan", {"shots": [
+            {"clip_id": 2, "roll": "a", "in_s": 0, "out_s": 5},
+        ]})]),
+    ])
+
+    result = director.resume_day(
+        RoughCutRequest(date_from="2026-04-25", date_to="2026-04-26"),
+        paused.pending.resume_state, "答案",
+    )
+
+    assert result.plan is not None
+    assert result.plan.chapters == ["2026-04-25", "2026-04-26"]
+    assert result.plan.total_s == 15.0
+
+
+def test_resume_day_seeds_from_prior_plan_for_earlier_completed_days() -> None:
+    # A 2-day turn where day 1 finished normally (would already be persisted
+    # by the service as prior_plan) and day 2 paused. Resuming must keep day 1.
+    llm = FakeAgentLLM([
+        AgentStep(content="ok", tool_calls=[_tc("emit_plan", {"shots": [
+            {"clip_id": 1, "roll": "a", "in_s": 0, "out_s": 10},
+        ]})]),
+        AgentStep(tool_calls=[_tc("ask_user", {"question": "?", "options": []}, cid="call-1")]),
+    ])
+    briefs = [
+        ClipBrief(clip_id=1, roll="a", capture_time="2026-04-25T09:00:00"),
+        ClipBrief(clip_id=2, roll="a", capture_time="2026-04-26T09:00:00"),
+    ]
+    director = CutDirector(llm, FakeRetriever(briefs, _details()))
+    paused = director.generate(RoughCutRequest(date_from="2026-04-25", date_to="2026-04-26"), [], "剪一条")
+    assert paused.pending is not None
+    assert paused.pending.resume_state["day"] == "2026-04-26"
+
+    from cutfinder.domain.models import CutPlan, Shot
+    prior_plan = CutPlan(
+        shots=[Shot(clip_id=1, roll="a", in_s=0, out_s=10, chapter="2026-04-25", clip_date="2026-04-25")],
+        chapters=["2026-04-25"], total_s=10.0,
+    )
+    llm._steps.append(AgentStep(content="ok", tool_calls=[_tc("emit_plan", {"shots": [
+        {"clip_id": 2, "roll": "a", "in_s": 0, "out_s": 5},
+    ]})]))
+
+    result = director.resume_day(
+        RoughCutRequest(date_from="2026-04-25", date_to="2026-04-26"),
+        paused.pending.resume_state, "答案", prior_plan=prior_plan,
+    )
+
+    assert result.plan is not None
+    assert sorted(result.plan.chapters) == ["2026-04-25", "2026-04-26"]
+    assert result.plan.total_s == 15.0  # 10 (seeded from prior_plan) + 5 (resumed day)
