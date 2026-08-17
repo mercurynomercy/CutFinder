@@ -255,4 +255,15 @@ describe('CutplanPage', () => {
     expect(screen.getByText('Photo')).toBeInTheDocument()
     expect(screen.queryByText('photo')).not.toBeInTheDocument()
   })
+
+  it('centers the empty-conversation hint in the thread pane instead of leaving a bare gap above it', async () => {
+    server.use(http.get(`${API}/cut/sessions`, () => HttpResponse.json({ sessions: [] })))
+
+    render(<CutplanPage onClose={() => {}} />)
+
+    const hint = await screen.findByText(
+      'Describe the cut you want — date range (full year-month-day, e.g. 2026/04/25), length, style, rhythm.',
+    )
+    expect(hint.parentElement).toHaveClass('items-center', 'justify-center')
+  })
 })
