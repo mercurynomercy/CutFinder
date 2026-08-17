@@ -14,7 +14,7 @@ This archive is the source of truth for turning the design into production code.
 - HTML screens detected: 9
 - Stylesheets detected: 0
 - Script/component files detected: 0
-- Supporting assets detected: 34
+- Supporting assets detected: 32
 
 ## Responsive contract
 Validate the implementation across this 2025–2026 viewport matrix:
@@ -93,8 +93,6 @@ For responsive web exports, treat these as a modern breakpoint system for one ad
 - `image-12.png`
 - `image-13.png`
 - `image-14.png`
-- `image-15.png`
-- `image-16.png`
 - `image-2.png`
 - `image-3.png`
 - `image-4.png`

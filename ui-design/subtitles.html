@@ -322,6 +322,22 @@ input { font-family: inherit; }
 .progress-bar.visible {
   display: flex;
 }
+
+/* ── Model Download Hint ── */
+.model-download-hint {
+  display: none;
+  align-items: flex-start; gap: 8px;
+  padding: 10px 12px;
+  background: var(--primary-soft);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  line-height: 1.6;
+  margin-bottom: 4px;
+}
+.model-download-hint.visible { display: flex; }
+.model-download-hint svg { flex-shrink: 0; margin-top: 1px; color: var(--primary); }
+.model-download-hint strong { color: var(--text-primary); font-weight: 600; }
 .progress-track {
   height: 4px;
   background: var(--surface-3);
@@ -481,6 +497,10 @@ input { font-family: inherit; }
 
   <!-- ── Footer ── -->
   <div class="footer" data-od-id="export-footer">
+    <div class="model-download-hint" id="model-download-hint" data-od-id="model-download-hint">
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M8 2v8m0 0l-3-3m3 3l3-3M3 12.5h10"/></svg>
+      <span><strong>Qwen3-ASR</strong> 语音模型尚未下载到本地，导出前需要先完成一次性下载（约 1.2 GB）。</span>
+    </div>
     <div class="progress-bar" id="progress-bar">
       <div class="progress-track">
         <div class="progress-fill" id="progress-fill"></div>
@@ -636,24 +656,18 @@ input { font-family: inherit; }
   var progressFill = document.getElementById('progress-fill');
   var progressLabel = document.getElementById('progress-label');
   var progressPercent = document.getElementById('progress-percent');
+  var modelHint = document.getElementById('model-download-hint');
+  // Simulates the speech engine's model not yet being on disk for a first-time export.
+  var modelNeedsDownload = true;
 
-  exportBtn.addEventListener('click', function() {
-    if (!selectedVideo || !selectedFolder) return;
-
+  function runExport() {
     var formats = [];
     if (formatItc.checked) formats.push('iTT');
     if (formatSrt.checked) formats.push('SRT');
-    var duration = minDuration.value || '0';
 
-    // Show progress bar
-    exportBtn.disabled = true;
-    exportBtn.style.display = 'none';
-    cancelBtn.style.display = 'none';
-    progressBar.classList.add('visible');
     progressLabel.textContent = '正在导出 ' + selectedVideo.name + '…';
     progressPercent.textContent = '0%';
     progressFill.style.width = '0%';
-    exportStatus.textContent = '';
 
     // Simulate progress
     var progress = 0;
@@ -682,6 +696,44 @@ input { font-family: inherit; }
         exportStatus.textContent = '导出完成：' + formats.join(', ') + ' → ' + selectedFolder;
       }, 1500);
     }, 3000);
+  }
+
+  function runModelDownload(onDone) {
+    modelHint.classList.add('visible');
+    progressBar.classList.add('visible');
+    progressLabel.textContent = '正在下载语音模型 Qwen3-ASR…';
+    progressPercent.textContent = '0%';
+    progressFill.style.width = '0%';
+
+    var progress = 0;
+    var interval = setInterval(function() {
+      progress += Math.random() * 10 + 4;
+      if (progress > 100) progress = 100;
+      progressFill.style.width = progress.toFixed(1) + '%';
+      progressPercent.textContent = Math.round(progress) + '%';
+      if (progress >= 100) {
+        clearInterval(interval);
+        modelHint.classList.remove('visible');
+        modelNeedsDownload = false;
+        setTimeout(onDone, 300);
+      }
+    }, 220);
+  }
+
+  exportBtn.addEventListener('click', function() {
+    if (!selectedVideo || !selectedFolder) return;
+
+    exportBtn.disabled = true;
+    exportBtn.style.display = 'none';
+    cancelBtn.style.display = 'none';
+    exportStatus.textContent = '';
+
+    if (modelNeedsDownload) {
+      runModelDownload(runExport);
+    } else {
+      progressBar.classList.add('visible');
+      runExport();
+    }
   });
 
   // ── Cancel ──

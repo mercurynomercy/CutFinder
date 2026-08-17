@@ -194,6 +194,18 @@ input, select { font-family: inherit; }
   box-shadow: 0 0 0 2px var(--primary-soft);
 }
 .form-input-mono { font-family: var(--font-mono); font-size: var(--text-xs); }
+.form-input.has-error {
+  border-color: var(--error);
+}
+.form-input.has-error:focus {
+  box-shadow: 0 0 0 2px rgba(220, 38, 38, 0.15);
+}
+.form-error {
+  display: flex; align-items: center; gap: 4px;
+  font-size: var(--text-xs); color: var(--error);
+  margin-top: 6px; line-height: 1.5;
+}
+.form-error svg { flex-shrink: 0; }
 select.form-input {
   appearance: none;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12' fill='none' stroke='%236B7280' stroke-width='1.5'%3E%3Cpath d='M3 5l3 3 3-3'/%3E%3C/svg%3E");
@@ -249,15 +261,142 @@ select.form-input {
 .folder-btn-remove:hover { color: var(--text-primary); }
 
 /* ── Connection Status ── */
+.connection-status-row {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 12px;
+}
 .connection-status {
   display: flex; align-items: center; gap: 6px;
   font-size: var(--text-sm); color: var(--success);
-  margin-bottom: 12px;
 }
+.connection-status.status-error { color: var(--error); }
+.connection-status.status-testing { color: var(--text-secondary); }
 .connection-dot {
   width: 8px; height: 8px; border-radius: 50%;
   background: var(--success);
 }
+.status-error .connection-dot { background: var(--error); }
+.status-testing .connection-dot {
+  background: var(--text-muted);
+  animation: pulse-dot 1.2s ease-in-out infinite;
+}
+@keyframes pulse-dot { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+.test-connection-btn {
+  height: 28px; padding: 0 10px;
+  font-size: var(--text-xs); font-weight: 500;
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  transition: background 150ms, color 150ms;
+  white-space: nowrap;
+}
+.test-connection-btn:hover { background: var(--surface-3); color: var(--text-primary); }
+.test-connection-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+.test-connection-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--bg-canvas), 0 0 0 4px var(--primary);
+}
+
+/* ── Tool / Secondary Button (系统工具) ── */
+.tool-btn {
+  height: 32px; padding: 0 14px;
+  display: flex; align-items: center; gap: 6px;
+  font-size: var(--text-sm); font-weight: 500;
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  border-radius: var(--radius-sm);
+  transition: background 150ms, color 150ms;
+  white-space: nowrap;
+}
+.tool-btn:hover { background: var(--surface-3); color: var(--text-primary); }
+.tool-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--bg-canvas), 0 0 0 4px var(--primary);
+}
+.tool-btn-row { display: flex; flex-wrap: wrap; gap: 8px; }
+
+/* ── Confirm Dialog ── */
+.confirm-overlay {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.4);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 1000;
+}
+.confirm-overlay[hidden] { display: none; }
+.confirm-dialog {
+  width: 400px; max-width: calc(100vw - 32px);
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-2);
+  padding: 20px;
+}
+.confirm-title { font-size: var(--text-md); font-weight: 600; margin-bottom: 8px; }
+.confirm-message { font-size: var(--text-sm); color: var(--text-secondary); line-height: 1.6; margin-bottom: 12px; }
+.confirm-path {
+  font-family: var(--font-mono); font-size: var(--text-xs);
+  color: var(--text-primary);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  word-break: break-all;
+  margin-bottom: 18px;
+}
+.confirm-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.confirm-btn {
+  height: 32px; padding: 0 14px;
+  font-size: var(--text-sm); font-weight: 500;
+  border-radius: var(--radius-sm);
+  transition: background 150ms;
+}
+.confirm-btn-cancel {
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+}
+.confirm-btn-cancel:hover { background: var(--surface-3); }
+.confirm-btn-cancel:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--bg-canvas), 0 0 0 4px var(--primary);
+}
+.confirm-btn-confirm {
+  background: var(--primary); color: var(--primary-fg);
+}
+.confirm-btn-confirm:hover { background: var(--primary-hover); }
+.confirm-btn-confirm:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--bg-canvas), 0 0 0 4px var(--primary);
+}
+
+/* ── Toast ── */
+.toast-stack {
+  position: fixed; bottom: 56px; right: 20px;
+  display: flex; flex-direction: column; gap: 8px;
+  z-index: 900;
+}
+.toast {
+  display: flex; align-items: flex-start; gap: 8px;
+  width: 320px; padding: 10px 12px;
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--text-muted);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-2);
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+  animation: toast-in 200ms ease;
+}
+@keyframes toast-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+.toast-success { border-left-color: var(--success); }
+.toast-error { border-left-color: var(--error); }
+.toast-icon { flex-shrink: 0; margin-top: 1px; }
+.toast-success .toast-icon { color: var(--success); }
+.toast-error .toast-icon { color: var(--error); }
+.toast-info .toast-icon { color: var(--primary); }
+.toast-text { flex: 1; line-height: 1.5; }
 
 /* ── Toggle ── */
 .toggle-row {
@@ -411,8 +550,8 @@ select.form-input {
         <h2 class="section-title">素材库路径</h2>
         <p class="section-desc">组织后的素材副本、缩略图和目录数据库会存储在这里。切换到其他目录会改用那个库（每个库各自独立，当前库不会被修改）。</p>
         <div class="folder-row" data-od-id="library-path-input">
-          <input type="text" class="form-input" value="/Users/jianhengpan/CNEProcessRaw" aria-label="素材库路径">
-          <button class="folder-btn" aria-label="选择文件夹">
+          <input type="text" class="form-input" id="library-path-value" value="/Users/jianhengpan/CNEProcessRaw" aria-label="素材库路径" readonly>
+          <button class="folder-btn" id="library-path-select" aria-label="选择文件夹">
             <svg class="icon-md" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
               <path d="M1.5 4.5v7a1.5 1.5 0 0 0 1.5 1.5h10a1.5 1.5 0 0 0 1.5-1.5v-5a1.5 1.5 0 0 0-1.5-1.5h-5.5L7 3.5H3A1.5 1.5 0 0 0 1.5 5v-.5z"/>
             </svg>
@@ -425,9 +564,12 @@ select.form-input {
       <div class="settings-section" data-od-id="section-omlx">
         <h2 class="section-title">OMLX 连接</h2>
         <p class="section-desc">本地 OMLX 推理服务的地址和密钥（全机共用，存储在 ~/.cutfinder/config.json，无需 .env 文件）。这里保存的值优先生效，会覆盖 .env / 环境变量。</p>
-        <div class="connection-status" data-od-id="omlx-status">
-          <span class="connection-dot"></span>
-          已连接
+        <div class="connection-status-row">
+          <div class="connection-status" id="omlx-status" data-od-id="omlx-status">
+            <span class="connection-dot"></span>
+            <span id="omlx-status-text">已连接</span>
+          </div>
+          <button class="test-connection-btn" id="test-connection-btn" data-od-id="test-connection-btn">测试连接</button>
         </div>
         <div class="form-group">
           <label class="form-label" for="omlx-base-url">Base URL</label>
@@ -530,7 +672,11 @@ select.form-input {
         <h2 class="section-title">VAD 阈值（0–1）</h2>
         <p class="section-desc">语音检测灵敏度阈值，越高越严格（只标记有明显人声的片段为 A-roll）</p>
         <div class="form-group">
-          <input type="number" class="form-input" value="0.35" min="0" max="1" step="0.01" style="width:100px" aria-label="VAD 阈值">
+          <input type="number" class="form-input" id="vad-threshold" value="0.35" min="0" max="1" step="0.01" style="width:100px" aria-label="VAD 阈值">
+          <p class="form-error" id="vad-threshold-error" style="display:none">
+            <svg class="icon-sm" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="8" cy="8" r="6.5"/><path d="M8 5v4M8 11h.01"/></svg>
+            请输入 0–1 之间的数值
+          </p>
         </div>
       </div>
 
@@ -588,10 +734,22 @@ select.form-input {
       <!-- 系统工具 -->
       <div class="settings-section" data-od-id="section-tools">
         <h2 class="section-title">系统工具</h2>
-        <p class="section-desc">查看应用日志和诊断信息</p>
-        <div style="display:flex;gap:8px;">
-          <a href="logs.html" class="setting-card-btn" style="height:32px;padding:0 14px;font-size:var(--text-sm);">
-            <svg class="icon-sm" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true" style="margin-right:4px">
+        <p class="section-desc">批量维护操作和诊断信息</p>
+        <div class="tool-btn-row">
+          <button class="tool-btn" id="suggest-all-keyframes-btn" data-od-id="suggest-all-keyframes-btn">
+            <svg class="icon-sm" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+              <path d="M1.5 8a6.5 6.5 0 0 1 11.45-4.15M14.5 8a6.5 6.5 0 0 1-11.45 4.15"/><path d="M12 1v3h-3M4 15v-3h3"/>
+            </svg>
+            建议全部关键帧
+          </button>
+          <button class="tool-btn" id="cleanup-library-btn" data-od-id="cleanup-library-btn">
+            <svg class="icon-sm" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+              <path d="M3 4h10M6 4V2.5A0.5 0.5 0 0 1 6.5 2h3a0.5 0.5 0 0 1 0.5 0.5V4M4 4l0.6 9a1 1 0 0 0 1 0.9h4.8a1 1 0 0 0 1-0.9L12 4"/>
+            </svg>
+            清理已删除文件
+          </button>
+          <a href="logs.html" class="tool-btn" data-od-id="view-logs-btn">
+            <svg class="icon-sm" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
               <path d="M3 3h10v10H3z"/><path d="M5 6h6M5 8h6M5 10h3"/>
             </svg>
             查看日志
@@ -607,6 +765,22 @@ select.form-input {
 <div class="save-bar">
   <button class="save-btn" data-od-id="save-btn">保存设置</button>
 </div>
+
+<!-- ── Confirm Dialog (shared pattern — replaces window.confirm, blocked in WKWebView) ── -->
+<div class="confirm-overlay" id="confirmOverlay" hidden data-od-id="confirm-dialog">
+  <div class="confirm-dialog" role="alertdialog" aria-labelledby="confirmTitle" aria-describedby="confirmMessage">
+    <div class="confirm-title" id="confirmTitle">切换素材库？</div>
+    <div class="confirm-message" id="confirmMessage">CutFinder 将改用以下目录作为素材库。每个库各自独立，当前库不会被修改。</div>
+    <div class="confirm-path" id="confirmPath">/Users/jianhengpan/CNEProcessRaw2</div>
+    <div class="confirm-actions">
+      <button class="confirm-btn confirm-btn-cancel" id="confirmCancel">取消</button>
+      <button class="confirm-btn confirm-btn-confirm" id="confirmOk">切换</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Toast Stack ── -->
+<div class="toast-stack" id="toastStack" data-od-id="toast-stack"></div>
 
 <script>
 // ── Theme Toggle ──
@@ -626,6 +800,102 @@ select.form-input {
     document.documentElement.setAttribute('data-theme', next);
     localStorage.setItem('cutfinder-theme', next);
     updateIcons(!isDark);
+  });
+})();
+
+// ── Toast ──
+function showToast(type, text) {
+  var stack = document.getElementById('toastStack');
+  var icons = {
+    success: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="8" cy="8" r="6.5"/><path d="M5.5 8.2l1.8 1.8 3.2-3.6"/></svg>',
+    error: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="8" cy="8" r="6.5"/><path d="M8 5v4M8 11h.01"/></svg>',
+    info: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="8" cy="8" r="6.5"/><path d="M8 7v4M8 5h.01"/></svg>'
+  };
+  var toast = document.createElement('div');
+  toast.className = 'toast toast-' + type;
+  toast.innerHTML = '<span class="toast-icon">' + icons[type] + '</span><span class="toast-text">' + text + '</span>';
+  stack.appendChild(toast);
+  setTimeout(function() {
+    toast.style.transition = 'opacity 200ms';
+    toast.style.opacity = '0';
+    setTimeout(function() { toast.remove(); }, 200);
+  }, 5000);
+}
+
+// ── Confirm Dialog (reusable) ──
+function showConfirm(title, message, path, onConfirm) {
+  var overlay = document.getElementById('confirmOverlay');
+  document.getElementById('confirmTitle').textContent = title;
+  document.getElementById('confirmMessage').textContent = message;
+  var pathEl = document.getElementById('confirmPath');
+  if (path) { pathEl.textContent = path; pathEl.style.display = ''; } else { pathEl.style.display = 'none'; }
+  overlay.hidden = false;
+  var okBtn = document.getElementById('confirmOk');
+  var cancelBtn = document.getElementById('confirmCancel');
+  function close() {
+    overlay.hidden = true;
+    okBtn.removeEventListener('click', onOk);
+    cancelBtn.removeEventListener('click', close);
+    overlay.removeEventListener('click', onBackdrop);
+  }
+  function onOk() { close(); onConfirm(); }
+  function onBackdrop(e) { if (e.target === overlay) close(); }
+  okBtn.addEventListener('click', onOk);
+  cancelBtn.addEventListener('click', close);
+  overlay.addEventListener('click', onBackdrop);
+}
+
+// ── Library Switch Flow ──
+(function() {
+  var input = document.getElementById('library-path-value');
+  var selectBtn = document.getElementById('library-path-select');
+  selectBtn.addEventListener('click', function() {
+    var candidate = '/Users/jianhengpan/CNEProcessRaw2';
+    showConfirm('切换素材库？', 'CutFinder 将改用以下目录作为素材库。每个库各自独立，当前库不会被修改。', candidate, function() {
+      input.value = candidate;
+      showToast('success', '已切换素材库');
+    });
+  });
+})();
+
+// ── Test Connection ──
+(function() {
+  var btn = document.getElementById('test-connection-btn');
+  var status = document.getElementById('omlx-status');
+  var statusText = document.getElementById('omlx-status-text');
+  btn.addEventListener('click', function() {
+    btn.disabled = true;
+    status.className = 'connection-status status-testing';
+    statusText.textContent = '正在测试…';
+    setTimeout(function() {
+      status.className = 'connection-status';
+      statusText.textContent = '已连接 — 文本模型、视觉模型均可用';
+      btn.disabled = false;
+    }, 1200);
+  });
+})();
+
+// ── VAD Threshold Validation ──
+(function() {
+  var input = document.getElementById('vad-threshold');
+  var error = document.getElementById('vad-threshold-error');
+  input.addEventListener('input', function() {
+    var val = parseFloat(input.value);
+    var invalid = isNaN(val) || val < 0 || val > 1;
+    input.classList.toggle('has-error', invalid);
+    error.style.display = invalid ? '' : 'none';
+  });
+})();
+
+// ── System Tools ──
+(function() {
+  document.getElementById('suggest-all-keyframes-btn').addEventListener('click', function() {
+    showToast('info', '已为素材库中的所有片段排队生成关键帧建议');
+  });
+  document.getElementById('cleanup-library-btn').addEventListener('click', function() {
+    showConfirm('清理已删除文件？', '将从素材库中移除指向已不存在源文件的记录（缩略图、标签、转录一并删除）。此操作不可撤销。', null, function() {
+      showToast('success', '已清理 3 个失效记录');
+    });
   });
 })();
 </script>

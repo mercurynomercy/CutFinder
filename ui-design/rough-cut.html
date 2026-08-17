@@ -205,12 +205,12 @@ input, textarea { font-family: inherit; }
 
 .conversation-list { flex: 1; padding: 4px 8px; }
 .conversation-item {
-  padding: 8px 10px;
+  display: flex; align-items: center; gap: 6px;
+  padding: 8px 6px 8px 10px;
   border-radius: var(--radius-sm);
   font-size: var(--text-sm);
   color: var(--text-secondary);
   cursor: pointer;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   transition: background 150ms;
 }
 .conversation-item:hover { background: var(--surface-3); color: var(--text-primary); }
@@ -221,6 +221,79 @@ input, textarea { font-family: inherit; }
 .conversation-item:focus-visible {
   outline: none;
   box-shadow: 0 0 0 2px var(--primary-soft);
+}
+.conversation-item-label {
+  flex: 1; min-width: 0;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.conversation-item-delete {
+  flex-shrink: 0;
+  width: 22px; height: 22px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 4px;
+  color: var(--text-muted);
+  opacity: 0;
+  transition: opacity 150ms, background 150ms, color 150ms;
+}
+.conversation-item:hover .conversation-item-delete,
+.conversation-item-delete:focus-visible { opacity: 1; }
+.conversation-item-delete:hover { background: rgba(220, 38, 38, 0.12); color: var(--error); }
+.conversation-item-delete:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--primary-soft);
+}
+
+/* ── Confirm Dialog ── */
+.confirm-overlay {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.4);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 1000;
+}
+.confirm-overlay[hidden] { display: none; }
+.confirm-dialog {
+  width: 360px; max-width: calc(100vw - 32px);
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-2);
+  padding: 20px;
+}
+.confirm-title { font-size: var(--text-md); font-weight: 600; margin-bottom: 8px; }
+.confirm-message { font-size: var(--text-sm); color: var(--text-secondary); line-height: 1.6; margin-bottom: 18px; }
+.confirm-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.confirm-btn {
+  height: 32px; padding: 0 14px;
+  font-size: var(--text-sm); font-weight: 500;
+  border-radius: var(--radius-sm);
+  transition: background 150ms;
+}
+.confirm-btn-cancel {
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+}
+.confirm-btn-cancel:hover { background: var(--surface-3); }
+.confirm-btn-cancel:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--bg-canvas), 0 0 0 4px var(--primary);
+}
+.confirm-btn-danger {
+  background: var(--error); color: #FFFFFF;
+}
+.confirm-btn-danger:hover { opacity: 0.88; }
+.confirm-btn-danger:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--bg-canvas), 0 0 0 4px var(--error);
+}
+
+/* ── Fullscreen shot-list ── */
+.main.shot-fullscreen .sidebar,
+.main.shot-fullscreen .chat-panel {
+  display: none;
+}
+.shot-fullscreen-btn.active {
+  background: var(--primary-soft); color: var(--primary); border-color: transparent;
 }
 
 /* ── Column 2: Chat ── */
@@ -345,6 +418,13 @@ input, textarea { font-family: inherit; }
   font-family: var(--font-mono);
   color: var(--text-muted);
   flex-shrink: 0;
+}
+.genprocess-current .day-badge {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  color: var(--primary);
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .genprocess-steps {
@@ -676,7 +756,7 @@ input, textarea { font-family: inherit; }
   </header>
 
   <!-- ── Main 3-Column ── -->
-  <div class="main">
+  <div class="main" id="mainLayout">
     <!-- Column 1: Conversation Sidebar -->
     <aside class="sidebar" data-od-id="conversation-sidebar">
       <div class="sidebar-header">
@@ -694,13 +774,22 @@ input, textarea { font-family: inherit; }
       </div>
       <div class="conversation-list">
         <div class="conversation-item active" data-od-id="conv-active" tabindex="0">
-          用8/31帮我剪一个vlog 10分…
+          <span class="conversation-item-label">用8/31帮我剪一个vlog 10分…</span>
+          <button class="conversation-item-delete" aria-label="删除对话" data-action="delete-conversation">
+            <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M3 4h10M6 4V2.5A0.5 0.5 0 0 1 6.5 2h3a0.5 0.5 0 0 1 0.5 0.5V4M4 4l0.6 9a1 1 0 0 0 1 0.9h4.8a1 1 0 0 0 1-0.9L12 4"/></svg>
+          </button>
         </div>
         <div class="conversation-item unnamed" tabindex="0">
-          未命名
+          <span class="conversation-item-label">未命名</span>
+          <button class="conversation-item-delete" aria-label="删除对话" data-action="delete-conversation">
+            <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M3 4h10M6 4V2.5A0.5 0.5 0 0 1 6.5 2h3a0.5 0.5 0 0 1 0.5 0.5V4M4 4l0.6 9a1 1 0 0 0 1 0.9h4.8a1 1 0 0 0 1-0.9L12 4"/></svg>
+          </button>
         </div>
         <div class="conversation-item" tabindex="0">
-          用8/31 到8/31 帮我剪一个vl…
+          <span class="conversation-item-label">用8/31 到8/31 帮我剪一个vl…</span>
+          <button class="conversation-item-delete" aria-label="删除对话" data-action="delete-conversation">
+            <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M3 4h10M6 4V2.5A0.5 0.5 0 0 1 6.5 2h3a0.5 0.5 0 0 1 0.5 0.5V4M4 4l0.6 9a1 1 0 0 0 1 0.9h4.8a1 1 0 0 0 1-0.9L12 4"/></svg>
+          </button>
         </div>
       </div>
     </aside>
@@ -748,7 +837,7 @@ input, textarea { font-family: inherit; }
       <div class="shot-header">
         <span class="shot-title">分镜表</span>
         <div class="shot-actions">
-          <button class="shot-action-btn" aria-label="展开分镜表">
+          <button class="shot-action-btn shot-fullscreen-btn" id="fullscreenBtn" aria-label="全屏显示分镜表" aria-pressed="false" data-od-id="fullscreen-btn">
             <svg class="icon-sm" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
               <path d="M10 2h4v4M14 2L8 8M2 6v8a1 1 0 0 0 1 1h8"/>
             </svg>
@@ -937,6 +1026,18 @@ input, textarea { font-family: inherit; }
         </div>
 
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Confirm Dialog (shared pattern — replaces window.confirm, blocked in WKWebView) ── -->
+<div class="confirm-overlay" id="confirmOverlay" hidden data-od-id="confirm-dialog">
+  <div class="confirm-dialog" role="alertdialog" aria-labelledby="confirmTitle" aria-describedby="confirmMessage">
+    <div class="confirm-title" id="confirmTitle">删除对话？</div>
+    <div class="confirm-message" id="confirmMessage">将永久删除这个对话及其分镜表。此操作不可撤销。</div>
+    <div class="confirm-actions">
+      <button class="confirm-btn confirm-btn-cancel" id="confirmCancel">取消</button>
+      <button class="confirm-btn confirm-btn-danger" id="confirmOk">删除</button>
     </div>
   </div>
 </div>
@@ -1183,20 +1284,22 @@ var ClarifyEngine = (function() {
     document.title = '(' + index + '/' + total + ') ' + pageTitle;
   }
 
-  // Simulated step sequence for a generation request
+  // Simulated step sequence for a generation request (multi-day: director works through
+  // the date range one day at a time, so the UI surfaces "day X of Y" progress)
   var mockSteps = [
     { text: '正在检索素材…', duration: 1200 },
-    { text: '正在生成第 1/1 天（2016-08-30）· 今天 45 个片段', duration: 1500 },
-    { text: '查看片段 A-0004.MP4 的台词', duration: 800 },
-    { text: '查看片段 A-0011.MP4 的台词', duration: 800 },
-    { text: '查看片段 A-0015.MP4 的台词', duration: 800 },
-    { text: '查看片段 A-0016.MP4 的台词', duration: 800 },
-    { text: '查看片段 A-0027.MP4 的台词', duration: 800 },
-    { text: '查看片段 B-0001.MP4 的台词', duration: 800 },
-    { text: '查看片段 B-0007.MP4 的台词', duration: 800 },
-    { text: '查看片段 B-0009.MP4 的台词', duration: 800 },
-    { text: '正在编排剪辑序列…', duration: 1000 },
-    { text: '正在生成分镜表…', duration: 800 },
+    { text: '正在生成第 1/2 天（2016-08-30）· 今天 45 个片段', duration: 1500, day: [1, 2] },
+    { text: '查看片段 A-0004.MP4 的台词', duration: 800, day: [1, 2] },
+    { text: '查看片段 A-0011.MP4 的台词', duration: 800, day: [1, 2] },
+    { text: '查看片段 A-0015.MP4 的台词', duration: 800, day: [1, 2] },
+    { text: '查看片段 A-0016.MP4 的台词', duration: 800, day: [1, 2] },
+    { text: '正在生成第 2/2 天（2016-08-31）· 今天 45 个片段', duration: 1500, day: [2, 2] },
+    { text: '查看片段 A-0027.MP4 的台词', duration: 800, day: [2, 2] },
+    { text: '查看片段 B-0001.MP4 的台词', duration: 800, day: [2, 2] },
+    { text: '查看片段 B-0007.MP4 的台词', duration: 800, day: [2, 2] },
+    { text: '查看片段 B-0009.MP4 的台词', duration: 800, day: [2, 2] },
+    { text: '正在编排剪辑序列…', duration: 1000, day: [2, 2] },
+    { text: '正在生成分镜表…', duration: 800, day: [2, 2] },
   ];
 
   function showInProgress() {
@@ -1218,6 +1321,7 @@ var ClarifyEngine = (function() {
           '<button type="button" class="genprocess-cancel" data-action="genprocess-cancel">取消</button>' +
         '</div>' +
         '<div class="genprocess-current" id="genprocess-current">' +
+          '<span class="day-badge" id="genprocess-day" hidden></span>' +
           '<span class="step-text" id="genprocess-current-text"></span>' +
           '<span class="elapsed" id="genprocess-elapsed">0s</span>' +
         '</div>' +
@@ -1311,6 +1415,15 @@ var ClarifyEngine = (function() {
       // Always-visible current-step line + topbar pill + tab title
       var currentTextEl = document.getElementById('genprocess-current-text');
       if (currentTextEl) currentTextEl.textContent = step.text;
+      var dayEl = document.getElementById('genprocess-day');
+      if (dayEl) {
+        if (step.day) {
+          dayEl.textContent = '第 ' + step.day[0] + '/' + step.day[1] + ' 天';
+          dayEl.hidden = false;
+        } else {
+          dayEl.hidden = true;
+        }
+      }
       updateTopbarStatus(true, genStepIndex + 1, totalSteps);
 
       genStepIndex++;
@@ -1407,10 +1520,62 @@ var ClarifyEngine = (function() {
 (function() {
   var items = document.querySelectorAll('.conversation-item');
   items.forEach(function(item) {
-    item.addEventListener('click', function() {
+    item.addEventListener('click', function(e) {
+      if (e.target.closest('[data-action="delete-conversation"]')) return;
       items.forEach(function(i) { i.classList.remove('active'); });
       this.classList.add('active');
     });
+  });
+})();
+
+// ── Delete Conversation (with confirm dialog) ──
+(function() {
+  var overlay = document.getElementById('confirmOverlay');
+  var okBtn = document.getElementById('confirmOk');
+  var cancelBtn = document.getElementById('confirmCancel');
+  var pendingItem = null;
+
+  function openConfirm(item) {
+    pendingItem = item;
+    overlay.hidden = false;
+  }
+  function closeConfirm() {
+    overlay.hidden = true;
+    pendingItem = null;
+  }
+
+  document.querySelectorAll('[data-action="delete-conversation"]').forEach(function(btn) {
+    btn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      openConfirm(btn.closest('.conversation-item'));
+    });
+  });
+
+  okBtn.addEventListener('click', function() {
+    if (pendingItem) {
+      var wasActive = pendingItem.classList.contains('active');
+      pendingItem.remove();
+      if (wasActive) {
+        var first = document.querySelector('.conversation-item');
+        if (first) first.classList.add('active');
+      }
+    }
+    closeConfirm();
+  });
+  cancelBtn.addEventListener('click', closeConfirm);
+  overlay.addEventListener('click', function(e) { if (e.target === overlay) closeConfirm(); });
+  document.addEventListener('keydown', function(e) { if (e.key === 'Escape' && !overlay.hidden) closeConfirm(); });
+})();
+
+// ── Fullscreen Shot List ──
+(function() {
+  var btn = document.getElementById('fullscreenBtn');
+  var main = document.getElementById('mainLayout');
+  btn.addEventListener('click', function() {
+    var isFull = main.classList.toggle('shot-fullscreen');
+    btn.classList.toggle('active', isFull);
+    btn.setAttribute('aria-pressed', String(isFull));
+    btn.setAttribute('aria-label', isFull ? '退出全屏' : '全屏显示分镜表');
   });
 })();
 </script>

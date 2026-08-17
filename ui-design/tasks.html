@@ -191,6 +191,15 @@ tbody tr:hover { background: var(--surface-2); }
 .task-type-cut {
   background: rgba(15, 118, 110, 0.1); color: var(--roll-b);
 }
+.task-type-reanalyze {
+  background: rgba(190, 24, 93, 0.1); color: #BE185D;
+}
+[data-theme="dark"] .task-type-reanalyze {
+  background: rgba(244, 114, 182, 0.15); color: #F472B6;
+}
+.task-type-subtitle {
+  background: var(--surface-3); color: var(--text-secondary);
+}
 
 /* Status */
 .task-status {
@@ -201,6 +210,18 @@ tbody tr:hover { background: var(--surface-2); }
 .task-status-processing { color: var(--processing); }
 .task-status-pending { color: var(--text-muted); }
 .task-status-failed { color: var(--error); }
+.task-status-paused { color: var(--warning); }
+.task-status-sub {
+  display: block;
+  font-size: var(--text-xs); font-weight: 400;
+  color: var(--text-muted);
+  margin-top: 1px;
+}
+.task-status-sub.has-error {
+  color: var(--error);
+  max-width: 220px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  cursor: help;
+}
 
 /* Progress */
 .task-progress-cell { min-width: 140px; }
@@ -245,6 +266,94 @@ tbody tr:hover { background: var(--surface-2); }
 .task-action:focus-visible {
   outline: none;
   box-shadow: 0 0 0 2px var(--bg-canvas), 0 0 0 4px var(--error);
+}
+.task-actions-cell { display: flex; align-items: center; gap: 6px; }
+.task-action-secondary {
+  height: 26px; padding: 0 10px;
+  font-size: var(--text-xs); font-weight: 500;
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  transition: background 150ms, color 150ms;
+  white-space: nowrap;
+}
+.task-action-secondary:hover { background: var(--surface-3); color: var(--text-primary); }
+.task-action-secondary:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--bg-canvas), 0 0 0 4px var(--primary);
+}
+
+/* ── Global paused banner ── */
+.queue-banner {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 14px;
+  margin-bottom: 16px;
+  background: rgba(180, 83, 9, 0.08);
+  border: 1px solid var(--warning);
+  border-radius: var(--radius-md);
+  color: var(--warning);
+  font-size: var(--text-sm);
+}
+[data-theme="dark"] .queue-banner { background: rgba(245, 158, 11, 0.1); }
+.queue-banner svg { flex-shrink: 0; }
+.queue-banner-text { flex: 1; font-weight: 500; }
+.queue-banner-resume {
+  height: 28px; padding: 0 12px;
+  font-size: var(--text-xs); font-weight: 600;
+  border-radius: var(--radius-sm);
+  background: var(--warning); color: #FFFFFF;
+  transition: opacity 150ms;
+  white-space: nowrap;
+}
+.queue-banner-resume:hover { opacity: 0.85; }
+.queue-banner-resume:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--bg-canvas), 0 0 0 4px var(--warning);
+}
+
+/* ── Confirm Dialog ── */
+.confirm-overlay {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.4);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 1000;
+}
+.confirm-overlay[hidden] { display: none; }
+.confirm-dialog {
+  width: 360px; max-width: calc(100vw - 32px);
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-2);
+  padding: 20px;
+}
+.confirm-title { font-size: var(--text-md); font-weight: 600; margin-bottom: 8px; }
+.confirm-message { font-size: var(--text-sm); color: var(--text-secondary); line-height: 1.6; margin-bottom: 18px; }
+.confirm-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.confirm-btn {
+  height: 32px; padding: 0 14px;
+  font-size: var(--text-sm); font-weight: 500;
+  border-radius: var(--radius-sm);
+  transition: background 150ms;
+}
+.confirm-btn-cancel {
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+}
+.confirm-btn-cancel:hover { background: var(--surface-3); }
+.confirm-btn-cancel:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--bg-canvas), 0 0 0 4px var(--primary);
+}
+.confirm-btn-confirm {
+  background: var(--warning); color: #FFFFFF;
+}
+.confirm-btn-confirm:hover { opacity: 0.88; }
+.confirm-btn-confirm:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--bg-canvas), 0 0 0 4px var(--warning);
 }
 
 /* ── Scrollbar ── */
@@ -302,6 +411,16 @@ tbody tr:hover { background: var(--surface-2); }
     </div>
   </div>
 
+  <!-- Global paused banner (shown when the whole worker queue is paused) -->
+  <div class="queue-banner" id="queueBanner" data-od-id="queue-banner">
+    <svg class="icon-md" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+      <rect x="4" y="3" width="3" height="10" rx="0.5"/>
+      <rect x="9" y="3" width="3" height="10" rx="0.5"/>
+    </svg>
+    <span class="queue-banner-text">处理队列已暂停 — 新任务不会自动开始</span>
+    <button class="queue-banner-resume" id="queueBannerResume" data-od-id="queue-banner-resume">继续处理</button>
+  </div>
+
   <div class="table-container" data-od-id="task-table">
     <table>
       <thead>
@@ -311,14 +430,65 @@ tbody tr:hover { background: var(--surface-2); }
           <th style="width:100px">状态</th>
           <th>进度</th>
           <th style="width:160px">开始时间</th>
-          <th style="width:80px">操作</th>
+          <th style="width:180px">操作</th>
         </tr>
       </thead>
       <tbody>
+        <!-- Task #10: failed, retryable -->
+        <tr data-od-id="task-10">
+          <td><span class="task-id">#10</span></td>
+          <td><span class="task-type task-type-keyframe">关键帧</span></td>
+          <td>
+            <span class="task-status task-status-failed">失败</span>
+            <span class="task-status-sub has-error" title="OMLX 请求超时 (http://localhost:1235/v1)：连接在 30000ms 后无响应">3 项失败 · OMLX 请求超时…</span>
+          </td>
+          <td class="task-progress-cell">
+            <div class="task-progress-bar">
+              <div class="task-progress-fill" style="width:82%;background:var(--error)"></div>
+            </div>
+            <span class="task-progress-label">37/45</span>
+          </td>
+          <td><span class="task-time">2026-08-03 09:12:44</span></td>
+          <td class="task-actions-cell">
+            <button class="task-action-secondary" data-od-id="retry-task-10" aria-label="重试任务 #10 的失败项">重试失败</button>
+            <button class="task-action" aria-label="删除任务 #10">删除</button>
+          </td>
+        </tr>
+        <!-- Task #9: paused, resumable -->
+        <tr data-od-id="task-9">
+          <td><span class="task-id">#9</span></td>
+          <td><span class="task-type task-type-scan">扫描</span></td>
+          <td><span class="task-status task-status-paused">已暂停</span></td>
+          <td class="task-progress-cell">
+            <div class="task-progress-bar">
+              <div class="task-progress-fill" style="width:58%;background:var(--warning)"></div>
+            </div>
+            <span class="task-progress-label">26/45</span>
+          </td>
+          <td><span class="task-time">2026-08-03 09:10:02</span></td>
+          <td class="task-actions-cell">
+            <button class="task-action-secondary" data-od-id="resume-task-9" aria-label="继续任务 #9">继续</button>
+            <button class="task-action" aria-label="删除任务 #9">删除</button>
+          </td>
+        </tr>
+        <!-- Task #8: subtitle export -->
+        <tr data-od-id="task-8">
+          <td><span class="task-id">#8</span></td>
+          <td><span class="task-type task-type-subtitle">字幕</span></td>
+          <td><span class="task-status task-status-completed">已完成</span></td>
+          <td class="task-progress-cell">
+            <div class="task-progress-bar">
+              <div class="task-progress-fill task-progress-fill-complete" style="width:100%"></div>
+            </div>
+            <span class="task-progress-label">1/1</span>
+          </td>
+          <td><span class="task-time">2026-08-02 16:40:11</span></td>
+          <td class="task-actions-cell"><button class="task-action" aria-label="删除任务 #8">删除</button></td>
+        </tr>
         <!-- Task #7 -->
         <tr data-od-id="task-7">
           <td><span class="task-id">#7</span></td>
-          <td><span class="task-type task-type-cut">初剪</span></td>
+          <td><span class="task-type task-type-reanalyze">重新分析</span></td>
           <td><span class="task-status task-status-completed">已完成</span></td>
           <td class="task-progress-cell">
             <div class="task-progress-bar">
@@ -327,7 +497,7 @@ tbody tr:hover { background: var(--surface-2); }
             <span class="task-progress-label">1/1</span>
           </td>
           <td><span class="task-time">2026-08-02 15:24:08</span></td>
-          <td><button class="task-action" aria-label="删除任务 #7">删除</button></td>
+          <td class="task-actions-cell"><button class="task-action" aria-label="删除任务 #7">删除</button></td>
         </tr>
         <!-- Task #6 -->
         <tr data-od-id="task-6">
@@ -418,6 +588,18 @@ tbody tr:hover { background: var(--surface-2); }
   </div>
 </main>
 
+<!-- ── Confirm Dialog (shared pattern — replaces window.confirm, blocked in WKWebView) ── -->
+<div class="confirm-overlay" id="confirmOverlay" hidden data-od-id="confirm-dialog">
+  <div class="confirm-dialog" role="alertdialog" aria-labelledby="confirmTitle" aria-describedby="confirmMessage">
+    <div class="confirm-title" id="confirmTitle">继续处理队列？</div>
+    <div class="confirm-message" id="confirmMessage">队列中的任务将从暂停处继续执行。</div>
+    <div class="confirm-actions">
+      <button class="confirm-btn confirm-btn-cancel" id="confirmCancel">取消</button>
+      <button class="confirm-btn confirm-btn-confirm" id="confirmOk">继续</button>
+    </div>
+  </div>
+</div>
+
 <script>
 // ── Theme Toggle ──
 (function() {
@@ -436,6 +618,68 @@ tbody tr:hover { background: var(--surface-2); }
     document.documentElement.setAttribute('data-theme', next);
     localStorage.setItem('cutfinder-theme', next);
     updateIcons(!isDark);
+  });
+})();
+
+// ── Confirm Dialog (reusable) ──
+function showConfirm(title, message, onConfirm) {
+  var overlay = document.getElementById('confirmOverlay');
+  document.getElementById('confirmTitle').textContent = title;
+  document.getElementById('confirmMessage').textContent = message;
+  overlay.hidden = false;
+  var okBtn = document.getElementById('confirmOk');
+  var cancelBtn = document.getElementById('confirmCancel');
+  function close() {
+    overlay.hidden = true;
+    okBtn.removeEventListener('click', onOk);
+    cancelBtn.removeEventListener('click', close);
+    overlay.removeEventListener('click', onBackdrop);
+    document.removeEventListener('keydown', onEsc);
+  }
+  function onOk() { close(); onConfirm(); }
+  function onBackdrop(e) { if (e.target === overlay) close(); }
+  function onEsc(e) { if (e.key === 'Escape') close(); }
+  okBtn.addEventListener('click', onOk);
+  cancelBtn.addEventListener('click', close);
+  overlay.addEventListener('click', onBackdrop);
+  document.addEventListener('keydown', onEsc);
+}
+
+// ── Global paused banner: resume queue ──
+(function() {
+  var banner = document.getElementById('queueBanner');
+  var resumeBtn = document.getElementById('queueBannerResume');
+  resumeBtn.addEventListener('click', function() {
+    showConfirm('继续处理队列？', '暂停期间新任务不会自动开始。继续后，队列将从中断处恢复处理。', function() {
+      banner.style.display = 'none';
+    });
+  });
+})();
+
+// ── Per-row resume (excludes reanalyze — not recoverable) ──
+(function() {
+  document.querySelectorAll('[data-od-id^="resume-task-"]').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      var row = btn.closest('tr');
+      var statusEl = row.querySelector('.task-status');
+      showConfirm('继续此任务？', '任务将从暂停的进度处继续。', function() {
+        statusEl.textContent = '处理中';
+        statusEl.className = 'task-status task-status-processing';
+        btn.remove();
+      });
+    });
+  });
+})();
+
+// ── Per-row retry failed items ──
+(function() {
+  document.querySelectorAll('[data-od-id^="retry-task-"]').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      var row = btn.closest('tr');
+      var statusCell = row.querySelector('td:nth-child(3)');
+      statusCell.innerHTML = '<span class="task-status task-status-processing">处理中</span>';
+      btn.remove();
+    });
   });
 })();
 </script>

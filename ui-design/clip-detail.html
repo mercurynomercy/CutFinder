@@ -192,6 +192,10 @@ input, textarea { font-family: inherit; }
   display: flex; align-items: center; justify-content: space-between;
   margin-top: 8px; gap: 12px;
 }
+.preview-source-group {
+  display: flex; align-items: center; gap: 6px;
+  min-width: 0;
+}
 .preview-source {
   font-family: var(--font-mono);
   font-size: var(--text-xs);
@@ -200,10 +204,32 @@ input, textarea { font-family: inherit; }
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.preview-date {
-  font-size: var(--text-sm); color: var(--text-muted);
+.preview-reveal-btn {
+  flex-shrink: 0;
+  width: 22px; height: 22px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 4px;
+  color: var(--text-muted);
+  transition: background 150ms, color 150ms;
+}
+.preview-reveal-btn:hover { background: var(--surface-3); color: var(--text-primary); }
+.preview-reveal-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--primary-soft);
+}
+.preview-date-group {
   text-align: right; flex-shrink: 0;
 }
+.preview-date {
+  font-size: var(--text-sm); color: var(--text-muted);
+}
+.preview-date-source {
+  display: flex; align-items: center; justify-content: flex-end; gap: 3px;
+  font-size: var(--text-xs); color: var(--text-muted);
+  margin-top: 2px;
+  cursor: help;
+}
+.preview-date-source svg { flex-shrink: 0; opacity: 0.7; }
 
 /* ── Right: Detail Drawer ── */
 .detail-drawer {
@@ -302,9 +328,14 @@ input, textarea { font-family: inherit; }
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   margin-bottom: 8px;
-  transition: box-shadow 150ms;
+  cursor: pointer;
+  transition: box-shadow 150ms, border-color 150ms;
 }
-.cut-card:hover { box-shadow: var(--shadow-1); }
+.cut-card:hover { box-shadow: var(--shadow-1); border-color: var(--border-strong); }
+.cut-card:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--bg-canvas), 0 0 0 4px var(--primary);
+}
 .cut-thumb {
   width: 80px; height: 45px; flex-shrink: 0;
   border-radius: var(--radius-sm);
@@ -506,8 +537,21 @@ input, textarea { font-family: inherit; }
           <span class="preview-more">+5</span>
         </div>
         <div class="preview-meta-row">
-          <span class="preview-source" title="/Users/jianhengpan/CNE/GH010237.MP4">/Users/jianhengpan/CNE/GH010237.MP4</span>
-          <span class="preview-date">2016/08/31</span>
+          <div class="preview-source-group">
+            <span class="preview-source" title="/Users/jianhengpan/CNE/GH010237.MP4">/Users/jianhengpan/CNE/GH010237.MP4</span>
+            <button class="preview-reveal-btn" aria-label="在 Finder 中显示" data-od-id="reveal-in-finder-btn" title="在 Finder 中显示">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+                <path d="M1.5 4.5v7a1.5 1.5 0 0 0 1.5 1.5h10a1.5 1.5 0 0 0 1.5-1.5v-5a1.5 1.5 0 0 0-1.5-1.5h-5.5L7 3.5H3A1.5 1.5 0 0 0 1.5 5v-.5z"/>
+              </svg>
+            </button>
+          </div>
+          <div class="preview-date-group">
+            <span class="preview-date">2016/08/31</span>
+            <div class="preview-date-source" data-od-id="date-source-indicator" title="该文件缺少拍摄日期元数据，日期由文件创建时间推断，可能与实际拍摄时间存在偏差">
+              <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="8" cy="8" r="6.5"/><path d="M8 7v4M8 5h.01"/></svg>
+              从文件推断的拍摄日期
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -577,7 +621,7 @@ input, textarea { font-family: inherit; }
           </div>
         </div>
 
-        <div class="cut-card">
+        <div class="cut-card" tabindex="0" role="button" aria-label="在预览中打开该片段">
           <div class="cut-thumb">
             <div class="cut-thumb-placeholder">
               <svg class="icon-sm" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1" aria-hidden="true">
@@ -591,7 +635,7 @@ input, textarea { font-family: inherit; }
           </div>
         </div>
 
-        <div class="cut-card">
+        <div class="cut-card" tabindex="0" role="button" aria-label="在预览中打开该片段">
           <div class="cut-thumb">
             <div class="cut-thumb-placeholder">
               <svg class="icon-sm" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1" aria-hidden="true">
@@ -605,7 +649,7 @@ input, textarea { font-family: inherit; }
           </div>
         </div>
 
-        <div class="cut-card">
+        <div class="cut-card" tabindex="0" role="button" aria-label="在预览中打开该片段">
           <div class="cut-thumb">
             <div class="cut-thumb-placeholder">
               <svg class="icon-sm" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1" aria-hidden="true">
@@ -796,6 +840,33 @@ input, textarea { font-family: inherit; }
   addBtn.addEventListener('click', addTag);
   input.addEventListener('keydown', function(e) {
     if (e.key === 'Enter') { e.preventDefault(); addTag(); }
+  });
+})();
+
+// ── Reveal in Finder ──
+(function() {
+  var btn = document.querySelector('[data-od-id="reveal-in-finder-btn"]');
+  if (!btn) return;
+  btn.addEventListener('click', function() {
+    btn.style.color = 'var(--primary)';
+    setTimeout(function() { btn.style.color = ''; }, 400);
+  });
+})();
+
+// ── Suggested Cuts: click to open source video in the preview ──
+(function() {
+  var previewVideo = document.querySelector('.preview-video');
+  function openInPreview(card) {
+    var time = card.querySelector('.cut-time');
+    previewVideo.style.boxShadow = 'inset 0 0 0 2px var(--primary)';
+    setTimeout(function() { previewVideo.style.boxShadow = ''; }, 500);
+    if (time) previewVideo.setAttribute('data-playing-range', time.textContent);
+  }
+  document.querySelectorAll('.cut-card').forEach(function(card) {
+    card.addEventListener('click', function() { openInPreview(card); });
+    card.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openInPreview(card); }
+    });
   });
 })();
 

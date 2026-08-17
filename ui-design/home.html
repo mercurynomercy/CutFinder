@@ -346,6 +346,19 @@ input, select { font-family: inherit; }
   outline: none;
   box-shadow: 0 0 0 2px var(--bg-canvas), 0 0 0 4px var(--primary);
 }
+.toolbar-expand-btn {
+  height: 28px; padding: 0 8px;
+  display: flex; align-items: center; gap: 4px;
+  font-size: var(--text-xs); font-weight: 500;
+  color: var(--text-secondary);
+  border-radius: var(--radius-sm);
+  transition: background 150ms;
+}
+.toolbar-expand-btn:hover { background: var(--surface-3); }
+.toolbar-expand-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--bg-canvas), 0 0 0 4px var(--primary);
+}
 .toolbar-stats {
   font-size: var(--text-sm); color: var(--text-secondary);
 }
@@ -376,14 +389,35 @@ input, select { font-family: inherit; }
   color: var(--text-secondary);
   border-bottom: 1px solid var(--border);
   margin-bottom: 12px;
+  cursor: pointer; user-select: none;
 }
 .date-header svg { color: var(--text-muted); }
+.date-header-chevron { transition: transform 150ms; flex-shrink: 0; }
+.date-group.collapsed .date-header-chevron { transform: rotate(-90deg); }
+.date-header-label { flex: 1; }
+.date-header-reveal {
+  flex-shrink: 0;
+  width: 24px; height: 24px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 4px;
+  color: var(--text-muted);
+  opacity: 0;
+  transition: opacity 150ms, background 150ms, color 150ms;
+}
+.date-header:hover .date-header-reveal,
+.date-header-reveal:focus-visible { opacity: 1; }
+.date-header-reveal:hover { background: var(--surface-3); color: var(--text-primary); }
+.date-header-reveal:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--primary-soft);
+}
 
 .video-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
   gap: 16px;
 }
+.date-group.collapsed .video-grid { display: none; }
 
 /* Video Card */
 .video-card {
@@ -462,6 +496,26 @@ input, select { font-family: inherit; }
   color: #FFFFFF;
   border-radius: 4px;
   letter-spacing: 0.01em;
+}
+.reveal-badge {
+  position: absolute; top: 6px; right: 6px;
+  width: 22px; height: 22px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 4px;
+  background: rgba(0,0,0,0.55);
+  color: #FFFFFF;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  opacity: 0;
+  transition: opacity 150ms, background 150ms;
+  z-index: 2;
+}
+.video-card:hover .reveal-badge,
+.reveal-badge:focus-visible { opacity: 1; }
+.reveal-badge:hover { background: rgba(0,0,0,0.75); }
+.reveal-badge:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--primary);
 }
 .video-info { padding: 8px 10px; }
 .video-filename {
@@ -690,8 +744,14 @@ input, select { font-family: inherit; }
           </svg>
         </button>
         <span class="toolbar-stats" data-od-id="clip-count">
-          <strong>45</strong> 个片段
+          <strong>47</strong> 个片段
         </span>
+        <button class="toolbar-expand-btn" id="expandAllBtn" data-od-id="expand-all-btn">
+          <svg class="icon-sm" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+            <path d="M10 2h4v4M14 2L8 8M2 6v8a1 1 0 0 0 1 1h8"/>
+          </svg>
+          <span id="expandAllLabel">全部收起</span>
+        </button>
         <span class="toolbar-spacer"></span>
         <button class="toolbar-sort" data-od-id="sort-btn">
           <svg class="icon-sm" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
@@ -704,11 +764,21 @@ input, select { font-family: inherit; }
       <!-- Gallery -->
       <div class="gallery" data-od-id="gallery">
         <div class="date-group" data-od-id="date-group-2016-08-31">
-          <div class="date-header">
-            <svg class="icon-sm" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
-              <path d="M2 4h12M5 2v2M9 2v2M2 8h12M2 12h8"/>
+          <div class="date-header" data-action="toggle-date-group">
+            <svg class="icon-sm date-header-chevron" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <path d="M6 4l4 4-4 4"/>
             </svg>
-            2016/08/31 · 45 个片段
+            <span class="date-header-label">
+              <svg class="icon-sm" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true" style="vertical-align:-3px;margin-right:2px">
+                <path d="M2 4h12M5 2v2M9 2v2M2 8h12M2 12h8"/>
+              </svg>
+              2016/08/31 · 45 个片段
+            </span>
+            <button class="date-header-reveal" aria-label="在 Finder 中显示该日期文件夹" title="在 Finder 中显示" data-action="reveal-folder">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+                <path d="M1.5 4.5v7a1.5 1.5 0 0 0 1.5 1.5h10a1.5 1.5 0 0 0 1.5-1.5v-5a1.5 1.5 0 0 0-1.5-1.5h-5.5L7 3.5H3A1.5 1.5 0 0 0 1.5 5v-.5z"/>
+              </svg>
+            </button>
           </div>
           <div class="video-grid" data-od-id="video-grid">
 
@@ -721,6 +791,11 @@ input, select { font-family: inherit; }
                     <rect x="2" y="2" width="12" height="12" rx="2"/><circle cx="6.5" cy="6" r="1.2"/><path d="M2 11l3.5-3L8 10.5 10.5 8.5 14 11"/>
                   </svg>
                 </div>
+                <button class="reveal-badge" aria-label="在 Finder 中显示" title="在 Finder 中显示" data-action="reveal-in-finder">
+                  <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+                    <path d="M1.5 4.5v7a1.5 1.5 0 0 0 1.5 1.5h10a1.5 1.5 0 0 0 1.5-1.5v-5a1.5 1.5 0 0 0-1.5-1.5h-5.5L7 3.5H3A1.5 1.5 0 0 0 1.5 5v-.5z"/>
+                  </svg>
+                </button>
                 <span class="type-badge type-badge-a">
                   <svg viewBox="0 0 12 12" fill="currentColor" aria-hidden="true"><path d="M6 1a1.5 1.5 0 0 0-1.5 1.5v2.5L3 6v3a1 1 0 0 0 1 1h4a1 1 0 0 0 1-1V6L7.5 5V2.5A1.5 1.5 0 0 0 6 1Z"/></svg>
                   A-roll
@@ -748,6 +823,11 @@ input, select { font-family: inherit; }
                     <rect x="2" y="2" width="12" height="12" rx="2"/><circle cx="6.5" cy="6" r="1.2"/><path d="M2 11l3.5-3L8 10.5 10.5 8.5 14 11"/>
                   </svg>
                 </div>
+                <button class="reveal-badge" aria-label="在 Finder 中显示" title="在 Finder 中显示" data-action="reveal-in-finder">
+                  <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+                    <path d="M1.5 4.5v7a1.5 1.5 0 0 0 1.5 1.5h10a1.5 1.5 0 0 0 1.5-1.5v-5a1.5 1.5 0 0 0-1.5-1.5h-5.5L7 3.5H3A1.5 1.5 0 0 0 1.5 5v-.5z"/>
+                  </svg>
+                </button>
                 <span class="type-badge type-badge-a">
                   <svg viewBox="0 0 12 12" fill="currentColor" aria-hidden="true"><path d="M6 1a1.5 1.5 0 0 0-1.5 1.5v2.5L3 6v3a1 1 0 0 0 1 1h4a1 1 0 0 0 1-1V6L7.5 5V2.5A1.5 1.5 0 0 0 6 1Z"/></svg>
                   A-roll
@@ -775,6 +855,11 @@ input, select { font-family: inherit; }
                     <rect x="2" y="2" width="12" height="12" rx="2"/><circle cx="6.5" cy="6" r="1.2"/><path d="M2 11l3.5-3L8 10.5 10.5 8.5 14 11"/>
                   </svg>
                 </div>
+                <button class="reveal-badge" aria-label="在 Finder 中显示" title="在 Finder 中显示" data-action="reveal-in-finder">
+                  <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+                    <path d="M1.5 4.5v7a1.5 1.5 0 0 0 1.5 1.5h10a1.5 1.5 0 0 0 1.5-1.5v-5a1.5 1.5 0 0 0-1.5-1.5h-5.5L7 3.5H3A1.5 1.5 0 0 0 1.5 5v-.5z"/>
+                  </svg>
+                </button>
                 <span class="type-badge type-badge-a">
                   <svg viewBox="0 0 12 12" fill="currentColor" aria-hidden="true"><path d="M6 1a1.5 1.5 0 0 0-1.5 1.5v2.5L3 6v3a1 1 0 0 0 1 1h4a1 1 0 0 0 1-1V6L7.5 5V2.5A1.5 1.5 0 0 0 6 1Z"/></svg>
                   A-roll
@@ -802,6 +887,11 @@ input, select { font-family: inherit; }
                     <rect x="2" y="2" width="12" height="12" rx="2"/><circle cx="6.5" cy="6" r="1.2"/><path d="M2 11l3.5-3L8 10.5 10.5 8.5 14 11"/>
                   </svg>
                 </div>
+                <button class="reveal-badge" aria-label="在 Finder 中显示" title="在 Finder 中显示" data-action="reveal-in-finder">
+                  <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+                    <path d="M1.5 4.5v7a1.5 1.5 0 0 0 1.5 1.5h10a1.5 1.5 0 0 0 1.5-1.5v-5a1.5 1.5 0 0 0-1.5-1.5h-5.5L7 3.5H3A1.5 1.5 0 0 0 1.5 5v-.5z"/>
+                  </svg>
+                </button>
                 <span class="type-badge type-badge-a">
                   <svg viewBox="0 0 12 12" fill="currentColor" aria-hidden="true"><path d="M6 1a1.5 1.5 0 0 0-1.5 1.5v2.5L3 6v3a1 1 0 0 0 1 1h4a1 1 0 0 0 1-1V6L7.5 5V2.5A1.5 1.5 0 0 0 6 1Z"/></svg>
                   A-roll
@@ -829,6 +919,11 @@ input, select { font-family: inherit; }
                     <rect x="2" y="2" width="12" height="12" rx="2"/><circle cx="6.5" cy="6" r="1.2"/><path d="M2 11l3.5-3L8 10.5 10.5 8.5 14 11"/>
                   </svg>
                 </div>
+                <button class="reveal-badge" aria-label="在 Finder 中显示" title="在 Finder 中显示" data-action="reveal-in-finder">
+                  <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+                    <path d="M1.5 4.5v7a1.5 1.5 0 0 0 1.5 1.5h10a1.5 1.5 0 0 0 1.5-1.5v-5a1.5 1.5 0 0 0-1.5-1.5h-5.5L7 3.5H3A1.5 1.5 0 0 0 1.5 5v-.5z"/>
+                  </svg>
+                </button>
                 <span class="type-badge type-badge-a">
                   <svg viewBox="0 0 12 12" fill="currentColor" aria-hidden="true"><path d="M6 1a1.5 1.5 0 0 0-1.5 1.5v2.5L3 6v3a1 1 0 0 0 1 1h4a1 1 0 0 0 1-1V6L7.5 5V2.5A1.5 1.5 0 0 0 6 1Z"/></svg>
                   A-roll
@@ -856,6 +951,11 @@ input, select { font-family: inherit; }
                     <rect x="2" y="2" width="12" height="12" rx="2"/><circle cx="6.5" cy="6" r="1.2"/><path d="M2 11l3.5-3L8 10.5 10.5 8.5 14 11"/>
                   </svg>
                 </div>
+                <button class="reveal-badge" aria-label="在 Finder 中显示" title="在 Finder 中显示" data-action="reveal-in-finder">
+                  <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+                    <path d="M1.5 4.5v7a1.5 1.5 0 0 0 1.5 1.5h10a1.5 1.5 0 0 0 1.5-1.5v-5a1.5 1.5 0 0 0-1.5-1.5h-5.5L7 3.5H3A1.5 1.5 0 0 0 1.5 5v-.5z"/>
+                  </svg>
+                </button>
                 <span class="type-badge type-badge-b">
                   <svg viewBox="0 0 12 12" fill="currentColor" aria-hidden="true"><rect x="1.5" y="2" width="9" height="8" rx="1"/></svg>
                   B-roll
@@ -883,6 +983,11 @@ input, select { font-family: inherit; }
                     <rect x="2" y="2" width="12" height="12" rx="2"/><circle cx="6.5" cy="6" r="1.2"/><path d="M2 11l3.5-3L8 10.5 10.5 8.5 14 11"/>
                   </svg>
                 </div>
+                <button class="reveal-badge" aria-label="在 Finder 中显示" title="在 Finder 中显示" data-action="reveal-in-finder">
+                  <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+                    <path d="M1.5 4.5v7a1.5 1.5 0 0 0 1.5 1.5h10a1.5 1.5 0 0 0 1.5-1.5v-5a1.5 1.5 0 0 0-1.5-1.5h-5.5L7 3.5H3A1.5 1.5 0 0 0 1.5 5v-.5z"/>
+                  </svg>
+                </button>
                 <span class="type-badge type-badge-b">
                   <svg viewBox="0 0 12 12" fill="currentColor" aria-hidden="true"><rect x="1.5" y="2" width="9" height="8" rx="1"/></svg>
                   B-roll
@@ -910,6 +1015,11 @@ input, select { font-family: inherit; }
                     <rect x="2" y="2" width="12" height="12" rx="2"/><circle cx="6.5" cy="6" r="1.2"/><path d="M2 11l3.5-3L8 10.5 10.5 8.5 14 11"/>
                   </svg>
                 </div>
+                <button class="reveal-badge" aria-label="在 Finder 中显示" title="在 Finder 中显示" data-action="reveal-in-finder">
+                  <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+                    <path d="M1.5 4.5v7a1.5 1.5 0 0 0 1.5 1.5h10a1.5 1.5 0 0 0 1.5-1.5v-5a1.5 1.5 0 0 0-1.5-1.5h-5.5L7 3.5H3A1.5 1.5 0 0 0 1.5 5v-.5z"/>
+                  </svg>
+                </button>
                 <span class="type-badge type-badge-a">
                   <svg viewBox="0 0 12 12" fill="currentColor" aria-hidden="true"><path d="M6 1a1.5 1.5 0 0 0-1.5 1.5v2.5L3 6v3a1 1 0 0 0 1 1h4a1 1 0 0 0 1-1V6L7.5 5V2.5A1.5 1.5 0 0 0 6 1Z"/></svg>
                   A-roll
@@ -924,6 +1034,92 @@ input, select { font-family: inherit; }
                   <span class="video-tag">互动游戏</span>
                   <span class="video-tag">休闲娱乐</span>
                   <span class="video-more-tags">+4</span>
+                </div>
+              </div>
+            </article>
+
+          </div>
+        </div>
+
+        <div class="date-group" data-od-id="date-group-2016-08-30">
+          <div class="date-header" data-action="toggle-date-group">
+            <svg class="icon-sm date-header-chevron" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <path d="M6 4l4 4-4 4"/>
+            </svg>
+            <span class="date-header-label">
+              <svg class="icon-sm" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true" style="vertical-align:-3px;margin-right:2px">
+                <path d="M2 4h12M5 2v2M9 2v2M2 8h12M2 12h8"/>
+              </svg>
+              2016/08/30 · 2 个片段
+            </span>
+            <button class="date-header-reveal" aria-label="在 Finder 中显示该日期文件夹" title="在 Finder 中显示" data-action="reveal-folder">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+                <path d="M1.5 4.5v7a1.5 1.5 0 0 0 1.5 1.5h10a1.5 1.5 0 0 0 1.5-1.5v-5a1.5 1.5 0 0 0-1.5-1.5h-5.5L7 3.5H3A1.5 1.5 0 0 0 1.5 5v-.5z"/>
+              </svg>
+            </button>
+          </div>
+          <div class="video-grid" data-od-id="video-grid-2016-08-30">
+
+            <!-- Card 9 -->
+            <article class="video-card" data-od-id="card-a0011" data-video-name="A-0011.MP4" tabindex="0">
+              <a href="clip-detail.html" class="card-link" aria-label="查看 A-0011.MP4 详情"></a>
+              <div class="video-thumb">
+                <div class="video-thumb-placeholder">
+                  <svg class="icon-lg" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1" aria-hidden="true">
+                    <rect x="2" y="2" width="12" height="12" rx="2"/><circle cx="6.5" cy="6" r="1.2"/><path d="M2 11l3.5-3L8 10.5 10.5 8.5 14 11"/>
+                  </svg>
+                </div>
+                <button class="reveal-badge" aria-label="在 Finder 中显示" title="在 Finder 中显示" data-action="reveal-in-finder">
+                  <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+                    <path d="M1.5 4.5v7a1.5 1.5 0 0 0 1.5 1.5h10a1.5 1.5 0 0 0 1.5-1.5v-5a1.5 1.5 0 0 0-1.5-1.5h-5.5L7 3.5H3A1.5 1.5 0 0 0 1.5 5v-.5z"/>
+                  </svg>
+                </button>
+                <span class="type-badge type-badge-a">
+                  <svg viewBox="0 0 12 12" fill="currentColor" aria-hidden="true"><path d="M6 1a1.5 1.5 0 0 0-1.5 1.5v2.5L3 6v3a1 1 0 0 0 1 1h4a1 1 0 0 0 1-1V6L7.5 5V2.5A1.5 1.5 0 0 0 6 1Z"/></svg>
+                  A-roll
+                </span>
+                <span class="duration-badge">0:33</span>
+              </div>
+              <div class="video-info">
+                <div class="video-filename">A-0011.MP4</div>
+                <div class="video-desc">吃可颂早餐，开启一天行程…</div>
+                <div class="video-tags">
+                  <span class="video-tag">早餐日常</span>
+                  <span class="video-tag">CNE</span>
+                  <span class="video-tag">出发前</span>
+                  <span class="video-more-tags">+2</span>
+                </div>
+              </div>
+            </article>
+
+            <!-- Card 10 -->
+            <article class="video-card" data-od-id="card-b0009" data-video-name="B-0009.MP4" tabindex="0">
+              <a href="clip-detail.html" class="card-link" aria-label="查看 B-0009.MP4 详情"></a>
+              <div class="video-thumb">
+                <div class="video-thumb-placeholder">
+                  <svg class="icon-lg" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1" aria-hidden="true">
+                    <rect x="2" y="2" width="12" height="12" rx="2"/><circle cx="6.5" cy="6" r="1.2"/><path d="M2 11l3.5-3L8 10.5 10.5 8.5 14 11"/>
+                  </svg>
+                </div>
+                <button class="reveal-badge" aria-label="在 Finder 中显示" title="在 Finder 中显示" data-action="reveal-in-finder">
+                  <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+                    <path d="M1.5 4.5v7a1.5 1.5 0 0 0 1.5 1.5h10a1.5 1.5 0 0 0 1.5-1.5v-5a1.5 1.5 0 0 0-1.5-1.5h-5.5L7 3.5H3A1.5 1.5 0 0 0 1.5 5v-.5z"/>
+                  </svg>
+                </button>
+                <span class="type-badge type-badge-b">
+                  <svg viewBox="0 0 12 12" fill="currentColor" aria-hidden="true"><rect x="1.5" y="2" width="9" height="8" rx="1"/></svg>
+                  B-roll
+                </span>
+                <span class="duration-badge">0:15</span>
+              </div>
+              <div class="video-info">
+                <div class="video-filename">B-0009.MP4</div>
+                <div class="video-desc">游乐园入口及彩色设施空镜…</div>
+                <div class="video-tags">
+                  <span class="video-tag">游乐园</span>
+                  <span class="video-tag">入口</span>
+                  <span class="video-tag">空镜</span>
+                  <span class="video-more-tags">+1</span>
                 </div>
               </div>
             </article>
@@ -986,6 +1182,46 @@ input, select { font-family: inherit; }
       tabs.forEach(function(t) { t.classList.remove('active'); t.setAttribute('aria-pressed', 'false'); });
       tab.classList.add('active');
       tab.setAttribute('aria-pressed', 'true');
+    });
+  });
+})();
+
+// ── Date Group Collapse / Expand (individual + all) ──
+(function() {
+  var groups = document.querySelectorAll('.date-group');
+  var expandAllBtn = document.getElementById('expandAllBtn');
+  var expandAllLabel = document.getElementById('expandAllLabel');
+
+  function syncExpandAllLabel() {
+    var anyExpanded = Array.prototype.some.call(groups, function(g) { return !g.classList.contains('collapsed'); });
+    expandAllLabel.textContent = anyExpanded ? '全部收起' : '全部展开';
+  }
+
+  groups.forEach(function(group) {
+    var header = group.querySelector('.date-header');
+    header.addEventListener('click', function(e) {
+      if (e.target.closest('[data-action="reveal-folder"]')) return;
+      group.classList.toggle('collapsed');
+      syncExpandAllLabel();
+    });
+  });
+
+  expandAllBtn.addEventListener('click', function() {
+    var anyExpanded = Array.prototype.some.call(groups, function(g) { return !g.classList.contains('collapsed'); });
+    groups.forEach(function(g) { g.classList.toggle('collapsed', anyExpanded); });
+    syncExpandAllLabel();
+  });
+})();
+
+// ── Reveal in Finder (cards + date-group folders) ──
+(function() {
+  document.querySelectorAll('[data-action="reveal-in-finder"], [data-action="reveal-folder"]').forEach(function(btn) {
+    btn.addEventListener('click', function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      btn.style.color = '#FFFFFF';
+      btn.style.background = 'var(--primary)';
+      setTimeout(function() { btn.style.color = ''; btn.style.background = ''; }, 400);
     });
   });
 })();
