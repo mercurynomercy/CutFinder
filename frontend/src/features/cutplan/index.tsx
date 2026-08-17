@@ -608,7 +608,9 @@ export function CutplanPage({ onClose, onOpenSettings, theme, onToggleTheme }: C
         <div className="flex w-[420px] shrink-0 flex-col bg-[--bg-canvas] border-r border-[--border]">
           <div ref={threadRef} className="min-h-0 flex-1 overflow-y-auto p-4">
             {messages.length === 0 && !showProgress ? (
-              <p className="text-sm text-[--text-muted]">{t('roughcut.emptyConvo')}</p>
+              <div className="flex h-full items-center justify-center">
+                <p className="max-w-xs text-center text-sm text-[--text-muted]">{t('roughcut.emptyConvo')}</p>
+              </div>
             ) : (
               <>
                 {messages.map((m, i) => (

@@ -735,12 +735,12 @@ class TestKeyframes:
 def test_job_error_roundtrips(repo):
     job = repo.create_job(total=1, kind="cutplan")
 
-    repo.update_job(job.id, status="failed", error="OMLX returned HTTP 401: Invalid API key")
+    repo.update_job(job.id, status="failed", error="OpenAI-compatible server returned HTTP 401: Invalid API key")
 
     got = repo.get_job(job.id)
     assert got.status == "failed"
-    assert got.error == "OMLX returned HTTP 401: Invalid API key"
-    assert repo.list_jobs()[0].error == "OMLX returned HTTP 401: Invalid API key"
+    assert got.error == "OpenAI-compatible server returned HTTP 401: Invalid API key"
+    assert repo.list_jobs()[0].error == "OpenAI-compatible server returned HTTP 401: Invalid API key"
 
 
 def test_job_error_defaults_none(repo):

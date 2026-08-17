@@ -44,10 +44,10 @@ def _build_router(
     async def get_settings() -> dict[str, Any]:
         """Return current configuration as one unified ``prefs`` view.
 
-        Per-library prefs and the machine-global keys (OMLX endpoint/key, model
-        names) are merged into a single object — there is no separate ``env``
-        grouping; both are stored in config.json (the env keys machine-globally,
-        the prefs per library). The OMLX secret is masked.
+        Per-library prefs and the machine-global keys (OpenAI-compatible
+        endpoint/key, model names) are merged into a single object — there is
+        no separate ``env`` grouping; both are stored in config.json (the env
+        keys machine-globally, the prefs per library). The secret is masked.
         """
         library_path = get_library_fn()
         if not library_path:
@@ -61,8 +61,8 @@ def _build_router(
         # Merge machine-global keys into the prefs view; mask the secret key.
         prefs = {
             **config.prefs.model_dump(),
-            "OMLX_BASE_URL": config.env.OMLX_BASE_URL,
-            "OMLX_API_KEY": _MASKED if config.env.OMLX_API_KEY else "",
+            "OPENAI_BASE_URL": config.env.OPENAI_BASE_URL,
+            "OPENAI_API_KEY": _MASKED if config.env.OPENAI_API_KEY else "",
             "TEXT_MODEL": config.env.TEXT_MODEL,
             "VISION_MODEL": config.env.VISION_MODEL,
         }
@@ -76,10 +76,11 @@ def _build_router(
         """Apply a partial settings update.
 
         Per-library prefs are persisted via :func:`cutfinder.config.save_prefs`;
-        machine-global keys (OMLX endpoint/key, model names) are persisted via
-        :func:`cutfinder.config.save_global_settings` so they apply across all
-        libraries. Only fields present in the request body are touched. A masked
-        ``OMLX_API_KEY`` is ignored so the stored secret is never clobbered.
+        machine-global keys (OpenAI-compatible endpoint/key, model names) are
+        persisted via :func:`cutfinder.config.save_global_settings` so they
+        apply across all libraries. Only fields present in the request body
+        are touched. A masked ``OPENAI_API_KEY`` is ignored so the stored
+        secret is never clobbered.
         """
         library_path = get_library_fn()
         if not library_path:
@@ -89,7 +90,7 @@ def _build_router(
         global_updates = {
             k: v
             for k, v in body.items()
-            if k in _GLOBAL_KEYS and not (k == "OMLX_API_KEY" and v == _MASKED)
+            if k in _GLOBAL_KEYS and not (k == "OPENAI_API_KEY" and v == _MASKED)
         }
         if global_updates:
             try:
@@ -132,7 +133,7 @@ def _build_router(
             raise HTTPException(status_code=503, detail=f"Save error: {exc}") from exc
 
         # Rebuild the live pipeline so the new settings (models, language, VAD,
-        # OMLX endpoint/key, …) take effect without a restart. The values are
+        # OpenAI-compatible endpoint/key, …) take effect without a restart. The values are
         # snapshotted into the adapters at build time, so a save alone is inert.
         # Best-effort: the settings are already persisted; a failed reload only
         # means a restart is needed for them to apply.
@@ -144,16 +145,16 @@ def _build_router(
 
         return {"status": "ok", "message": "Settings updated"}
 
-    @router.post("/settings/omlx/test", summary="Probe the OMLX connection")
-    async def test_omlx_connection(body: dict[str, Any]) -> dict[str, Any]:
-        """Validate the OMLX endpoint/key/models.
+    @router.post("/settings/openai/test", summary="Probe the OpenAI-compatible server connection")
+    async def test_openai_connection(body: dict[str, Any]) -> dict[str, Any]:
+        """Validate the OpenAI-compatible server's endpoint/key/models.
 
         Any body field left empty (or the masked key) falls back to the stored
         config, so this verifies either a just-typed key or the saved one.
         Always returns HTTP 200 — the outcome is in the body so the frontend can
         tell a bad key ({"ok": false}) apart from a route/server error.
         """
-        from cutfinder.adapters.omlx_check import check_omlx
+        from cutfinder.adapters.openai_check import check_openai_compat
 
         library_path = get_library_fn()
         if not library_path:
@@ -169,8 +170,8 @@ def _build_router(
                 return stored
             return str(v)
 
-        base_url = _pick("OMLX_BASE_URL", config.env.OMLX_BASE_URL)
-        api_key = _pick("OMLX_API_KEY", config.env.OMLX_API_KEY)
+        base_url = _pick("OPENAI_BASE_URL", config.env.OPENAI_BASE_URL)
+        api_key = _pick("OPENAI_API_KEY", config.env.OPENAI_API_KEY)
         text_model = _pick("TEXT_MODEL", config.env.TEXT_MODEL)
         vision_model = _pick("VISION_MODEL", config.env.VISION_MODEL)
 
@@ -180,8 +181,8 @@ def _build_router(
             return {"ok": False, "error": "未配置 Base URL"}
 
         try:
-            models = await asyncio.to_thread(check_omlx, base_url, api_key)
-        except Exception as exc:  # noqa: BLE001 — surface OMLX error verbatim
+            models = await asyncio.to_thread(check_openai_compat, base_url, api_key)
+        except Exception as exc:  # noqa: BLE001 — surface the server's error verbatim
             return {"ok": False, "error": str(exc)}
 
         expected = [m for m in (text_model, vision_model) if m]

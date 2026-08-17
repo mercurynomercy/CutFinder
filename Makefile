@@ -1,12 +1,12 @@
 # CutFinder — development Makefile.
-# Targets: setup, dev, models, check-omlx, test, test-integration, e2e
+# Targets: setup, dev, models, check-openai, test, test-integration, e2e
 
 PYTHON  := python3
 UV      := uv
 VITE    := npx vite
 NODE    ?= node
 
-.PHONY: setup dev models check-omlx test test-integration e2e clean frontend backend app
+.PHONY: setup dev models check-openai test test-integration e2e clean frontend backend app
 
 # ── 1. setup — install everything needed to develop and run ───────
 setup: \
@@ -44,8 +44,9 @@ frontend-deps:
 	cd frontend && npm install
 
 # ── 2. dev — start both backend and frontend servers in one command ─
-# Configure OMLX in the Settings UI (stored in ~/.cutfinder/config.json) or via
-# OS env vars (OMLX_BASE_URL / OMLX_API_KEY); no .env file is read.
+# Configure your OpenAI-compatible server (e.g. OMLX, LM Studio, Ollama) in the
+# Settings UI (stored in ~/.cutfinder/config.json) or via OS env vars
+# (OPENAI_BASE_URL / OPENAI_API_KEY); no .env file is read.
 dev: uv-sync frontend-deps
 	@bash scripts/dev.sh
 
@@ -53,11 +54,11 @@ dev: uv-sync frontend-deps
 models: uv-sync
 	cd backend && $(UV) run python ../scripts/download_whisper.py; $(UV) run python ../scripts/download_demucs.py
 
-# ── 4. check-omlx — verify OMLX endpoint & models are ready ────
-check-omlx: uv-sync
-	cd backend && $(UV) run python ../scripts/check_omlx.py
+# ── 4. check-openai — verify the OpenAI-compatible server's endpoint & models are ready ─
+check-openai: uv-sync
+	cd backend && $(UV) run python ../scripts/check_openai_compat.py
 
-# ── 5. test — full suite (incl. integration; needs ffmpeg/OMLX) ─
+# ── 5. test — full suite (incl. integration; needs ffmpeg / an OpenAI-compatible server) ─
 test: uv-sync
 	cd backend && $(UV) run pytest
 
@@ -65,7 +66,7 @@ test: uv-sync
 test-unit: uv-sync
 	cd backend && $(UV) run pytest tests/unit
 
-# ── 6. test-integration — real ffmpeg / OMLX (manual run) ──────
+# ── 6. test-integration — real ffmpeg / OpenAI-compatible server (manual run) ──
 test-integration: uv-sync
 	cd backend && $(UV) run pytest -m integration
 

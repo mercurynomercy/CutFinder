@@ -1,7 +1,7 @@
 """Scanner — scan source folders, deduplicate by fingerprint, produce clip candidates.
 
 This module is a **pure-logic** component: it never touches external services
-(ffmpeg, OMLX, etc.).  The only I/O dependency is the file system (for walking
+(ffmpeg, the OpenAI-compatible server, etc.).  The only I/O dependency is the file system (for walking
 directories and reading small chunks for fingerprinting) plus a injected
 :class:`~cutfinder.ports.repository.CatalogRepository` to check whether clips have
 already been processed.

@@ -128,9 +128,9 @@ export interface SettingsPrefs {
   cut_lean_token_budget?: number
   cut_staged_token_budget?: number
   // Machine-global keys are merged into this one view (no separate "env" group);
-  // the OMLX secret comes back masked. Optional so test fixtures can omit them.
-  OMLX_BASE_URL?: string
-  OMLX_API_KEY?: string
+  // the secret comes back masked. Optional so test fixtures can omit them.
+  OPENAI_BASE_URL?: string
+  OPENAI_API_KEY?: string
   TEXT_MODEL?: string
   VISION_MODEL?: string
 }
@@ -183,9 +183,9 @@ export interface UpdateSettingsBody {
   cut_lean_token_budget?: number
   cut_staged_token_budget?: number
   // Machine-global keys (persisted to ~/.cutfinder/config.json, shared across
-  // libraries). Omit OMLX_API_KEY to leave the stored secret unchanged.
-  OMLX_BASE_URL?: string
-  OMLX_API_KEY?: string
+  // libraries). Omit OPENAI_API_KEY to leave the stored secret unchanged.
+  OPENAI_BASE_URL?: string
+  OPENAI_API_KEY?: string
   TEXT_MODEL?: string
   VISION_MODEL?: string
 }
@@ -196,7 +196,7 @@ export interface ClipFilter {
   tag?: string | null
 }
 
-export interface OmlxTestResult {
+export interface OpenAITestResult {
   ok: boolean
   models?: string[]
   missing?: string[]
@@ -423,14 +423,14 @@ export const api = {
     return _fetch('/api/settings', { method: 'PUT', body: JSON.stringify(body) })
   },
 
-  /** POST /api/settings/omlx/test — probe the OMLX endpoint/key/models. */
-  testOmlxConnection(body: {
-    OMLX_BASE_URL?: string
-    OMLX_API_KEY?: string
+  /** POST /api/settings/openai/test — probe the OpenAI-compatible server's endpoint/key/models. */
+  testOpenAIConnection(body: {
+    OPENAI_BASE_URL?: string
+    OPENAI_API_KEY?: string
     TEXT_MODEL?: string
     VISION_MODEL?: string
-  }): Promise<OmlxTestResult> {
-    return _fetch('/api/settings/omlx/test', { method: 'POST', body: JSON.stringify(body) })
+  }): Promise<OpenAITestResult> {
+    return _fetch('/api/settings/openai/test', { method: 'POST', body: JSON.stringify(body) })
   },
 
   /** GET /api/library — the active library path (or null). */

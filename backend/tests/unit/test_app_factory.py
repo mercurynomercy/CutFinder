@@ -31,10 +31,10 @@ def _isolate_global_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> N
 
 
 @pytest.fixture
-def omlx_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Provide the OMLX env vars EnvSettings requires (no network used)."""
-    monkeypatch.setenv("OMLX_BASE_URL", "http://localhost:8000/v1")
-    monkeypatch.setenv("OMLX_API_KEY", "test-key")
+def openai_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Provide the OpenAI-compatible server env vars EnvSettings requires (no network used)."""
+    monkeypatch.setenv("OPENAI_BASE_URL", "http://localhost:8000/v1")
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
 
 
 def test_create_app_no_library_returns_503_for_catalog(
@@ -48,7 +48,7 @@ def test_create_app_no_library_returns_503_for_catalog(
 
 
 def test_create_app_with_library_wires_repository(
-    tmp_path: Path, omlx_env: None
+    tmp_path: Path, openai_env: None
 ) -> None:
     """A real library path wires the SQLite repository (clips → 200)."""
     client = TestClient(create_app(tmp_path))
@@ -61,7 +61,7 @@ def test_create_app_with_library_wires_repository(
 
 
 def test_create_app_with_library_serves_settings(
-    tmp_path: Path, omlx_env: None
+    tmp_path: Path, openai_env: None
 ) -> None:
     """Settings GET returns the full prefs contract; PUT validates + persists."""
     client = TestClient(create_app(tmp_path))
@@ -96,15 +96,15 @@ def test_create_app_with_library_serves_settings(
         "cut_lean_token_budget",
         "cut_staged_token_budget",
         # Machine-global keys are merged into the one prefs view (no "env" group).
-        "OMLX_BASE_URL",
-        "OMLX_API_KEY",
+        "OPENAI_BASE_URL",
+        "OPENAI_API_KEY",
         "TEXT_MODEL",
         "VISION_MODEL",
     }
-    # The OMLX secret is masked, never returned in the clear; there is no
+    # The secret is masked, never returned in the clear; there is no
     # separate "env" grouping anymore.
     assert "env" not in resp.json()
-    assert prefs["OMLX_API_KEY"] == "***MASKED***"
+    assert prefs["OPENAI_API_KEY"] == "***MASKED***"
 
     # Off by default.
     assert prefs["vocal_separation"] is False
@@ -119,7 +119,7 @@ def test_create_app_with_library_serves_settings(
     assert client.get("/api/settings").json()["prefs"]["vocal_separation"] is True
 
 
-def test_create_app_with_library_starts_worker(tmp_path: Path, omlx_env: None) -> None:
+def test_create_app_with_library_starts_worker(tmp_path: Path, openai_env: None) -> None:
     """The full app (with library) starts/stops its worker queue cleanly.
 
     Using TestClient as a context manager fires startup/shutdown events; this
@@ -129,7 +129,7 @@ def test_create_app_with_library_starts_worker(tmp_path: Path, omlx_env: None) -
         assert client.get("/api/clips").status_code == 200
 
 
-def test_vocal_separator_wiring(tmp_path: Path, omlx_env: None) -> None:
+def test_vocal_separator_wiring(tmp_path: Path, openai_env: None) -> None:
     """Subtitle export always gets a separator; the pipeline only when on.
 
     Builds the real adapter graph via ``_build_into`` and introspects each
@@ -155,7 +155,7 @@ def test_vocal_separator_wiring(tmp_path: Path, omlx_env: None) -> None:
 
 
 def test_set_library_binds_at_runtime(
-    tmp_path: Path, omlx_env: None, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, openai_env: None, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """POST /api/library binds a library at runtime without restart."""
     monkeypatch.delenv("CUTFINDER_LIBRARY", raising=False)
@@ -179,7 +179,7 @@ def test_set_library_binds_at_runtime(
         assert client.post("/api/library", json={}).status_code == 422
 
 
-def test_library_orphans_reconcile_flow(tmp_path: Path, omlx_env: None) -> None:
+def test_library_orphans_reconcile_flow(tmp_path: Path, openai_env: None) -> None:
     """GET /library/orphans flags clips whose copy vanished; POST deletes them."""
     import datetime as _dt
 

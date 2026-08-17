@@ -242,12 +242,12 @@ export const handlers = [
   }),
 
   // GET /api/settings — get current settings. Machine-global keys (model names,
-  // OMLX endpoint) are merged into the one `prefs` view now — no `env` group.
+  // OpenAI-compatible endpoint) are merged into the one `prefs` view now — no `env` group.
   http.get('http://localhost:5080/api/settings', () => {
     return HttpResponse.json({
       prefs: {
         ...makeSettingsPrefs(),
-        OMLX_BASE_URL: 'http://localhost:8000/v1',
+        OPENAI_BASE_URL: 'http://localhost:8000/v1',
         TEXT_MODEL: 'Qwen3.6-35B-A3B',
         VISION_MODEL: 'Qwen3-VL-8B',
       },

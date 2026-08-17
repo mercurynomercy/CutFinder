@@ -1,7 +1,7 @@
 """FakeSummarizer — return a preset SummaryResult for unit testing.
 
-Useful in tests that exercise the pipeline without calling OMLX
-(no real network requests).
+Useful in tests that exercise the pipeline without calling the
+OpenAI-compatible server (no real network requests).
 
 Examples
 --------

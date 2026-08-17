@@ -1,18 +1,18 @@
-"""OmlxVisionTagger — B-roll visual tagging via OMLX (vision model).
+"""OpenAIVisionTagger — B-roll visual tagging via a local OpenAI-compatible server (vision model).
 
-Reads frame image paths, encodes as base64 data URIs, sends to the local
-OMLX server's ``/chat/completions`` endpoint with multi-frame visual messages,
+Reads frame image paths, encodes as base64 data URIs, sends to the
+configured server's ``/chat/completions`` endpoint with multi-frame visual messages,
 and parses structured JSON output into a :class:`VisionResult`.
 
 Edge cases handled:
   * Empty ``frame_paths`` → returns empty VisionResult (no network call).
-  * OMLX unavailable (connection error) → raises ``RuntimeError`` with detail.
+  * Server unavailable (connection error) → raises ``RuntimeError`` with detail.
   * Malformed LLM response (missing keys) → falls back to empty strings/lists; retries.
 
 Examples
 --------
->>> config = AppConfig(env=EnvSettings(OMLX_BASE_URL="http://localhost:8000/v1", OMLX_API_KEY="key"), prefs=Prefs())
->>> tagger = OmlxVisionTagger(config)  # doctest: +SKIP
+>>> config = AppConfig(env=EnvSettings(OPENAI_BASE_URL="http://localhost:8000/v1", OPENAI_API_KEY="key"), prefs=Prefs())
+>>> tagger = OpenAIVisionTagger(config)  # doctest: +SKIP
 >>> result = tagger.describe([Path("frame1.png"), Path("frame2.png")])  # doctest: +SKIP
 >>> print(result.description)
 """
@@ -26,81 +26,28 @@ from typing import Any
 from ..config import AppConfig
 from ..domain.models import CutSuggestion, VisionResult
 from ..ports.ai import VisionTagger
+from .vision_prompts import (
+    KEYFRAMES_PROMPT_ZH,
+    KEYFRAMES_PROMPTS,
+    VISION_PROMPT_ZH,
+    VISION_PROMPTS,
+)
 
-# Bound OMLX HTTP calls so a hung model server can't block the worker forever.
+# Bound HTTP calls to the OpenAI-compatible server so a hung model server can't block the worker forever.
 # Generous read window — local MLX generation of the capped token budgets here
 # takes seconds, not minutes; a truly stuck request times out, is retried, then
 # surfaces as a task error rather than an indefinite hang.
-_OMLX_TIMEOUT_S = 120.0
+_REQUEST_TIMEOUT_S = 120.0
 
-# ── prompt template ────────────────────────────────────────────────
+# ── OpenAIVisionTagger ─────────────────────────────────────────────
 
-_VISION_PROMPT_ZH = """\
-你是一个专业的视频画面分析助手。请仔细观察以下多张从视频中提取的画面帧，完成两件事：
-
-1. **画面描述**：用中文撰写一段简洁的描述（30-80字），概括这些帧中看到的视觉内容、场景、人物动作等。
-2. **标签**：提取5-10个关键词/短语作为视觉标签，涵盖场景、物体、色彩、氛围等维度。
-
-请以如下JSON格式回复（不要添加任何其他内容）：
-{{"description": "你的画面描述", "tags": ["标签1", "标签2", ...]}}
-
-以下是多帧画面（按时间顺序排列）：
-"""
-
-_VISION_PROMPT_EN = """\
-You are a professional video frame analysis assistant. Carefully examine the \
-following frames extracted from a video and do two things:
-
-1. **Description**: Write a concise description in English (30-80 words) \
-summarizing the visual content, scenes, and actions seen in these frames.
-2. **Tags**: Extract 5-10 keywords/phrases as visual tags covering scene, \
-objects, color, mood, etc.
-
-Reply ONLY in the following JSON format (no extra content):
-{{"description": "your description", "tags": ["tag1", "tag2", ...]}}
-
-The frames below are in chronological order:
-"""
-
-_VISION_PROMPTS = {"zh": _VISION_PROMPT_ZH, "en": _VISION_PROMPT_EN}
-
-_KEYFRAMES_PROMPT_ZH = """\
-你是专业的视频剪辑助手。下面按时间顺序给出从一段 B-roll（无解说）视频采样的若干帧，\
-每帧标注了编号和时间戳。请挑出画面最好、最适合做封面或剪辑代表的最多 {n} 帧，按好坏排序。
-
-只能使用下面列出的帧编号。请仅以如下 JSON 回复（不要其他内容）：
-{{"keyframes": [{{"index": 帧编号, "reason": "一句话理由"}}, ...]}}
-
-帧清单（编号 / 时间）：
-{frames}
-"""
-
-_KEYFRAMES_PROMPT_EN = """\
-You are a professional video editing assistant. Below are frames sampled in \
-chronological order from a B-roll (no narration) video, each labeled with an \
-index and timestamp. Pick up to {n} best frames — most striking / best as a \
-cover or edit representative — ranked best first.
-
-Use only the frame indices listed below. Reply ONLY as the following JSON \
-(no extra content):
-{{"keyframes": [{{"index": frame_index, "reason": "one-line reason"}}, ...]}}
-
-Frames (index / time):
-{frames}
-"""
-
-_KEYFRAMES_PROMPTS = {"zh": _KEYFRAMES_PROMPT_ZH, "en": _KEYFRAMES_PROMPT_EN}
-
-
-# ── OmlxVisionTagger ─────────────────────────────────────────────
-
-class OmlxVisionTagger(VisionTagger):
-    """Call a local OpenAI-compatible vision model server (OMLX) to tag B-roll frames.
+class OpenAIVisionTagger(VisionTagger):
+    """Call a local OpenAI-compatible vision model server to tag B-roll frames.
 
     Parameters
     ----------
     config:
-        Application-wide configuration containing OMLX endpoint and model settings.
+        Application-wide configuration containing the OpenAI-compatible endpoint and model settings.
     model:
         Override the vision model name from config defaults (``Qwen3-VL-8B``).
         Useful when testing with a smaller model.
@@ -108,10 +55,10 @@ class OmlxVisionTagger(VisionTagger):
     Examples
     --------
     >>> config = AppConfig(  # doctest: +SKIP
-    ...     env=EnvSettings(OMLX_BASE_URL="http://localhost:8000/v1", OMLX_API_KEY="test-key"),
+    ...     env=EnvSettings(OPENAI_BASE_URL="http://localhost:8000/v1", OPENAI_API_KEY="test-key"),
     ...     prefs=Prefs(vision_model="Qwen3-VL-8B"),
     ... )
-    >>> tagger = OmlxVisionTagger(config)  # doctest: +SKIP
+    >>> tagger = OpenAIVisionTagger(config)  # doctest: +SKIP
     """
 
     def __init__(self, config: AppConfig, model: str | None = None) -> None:
@@ -124,12 +71,12 @@ class OmlxVisionTagger(VisionTagger):
         )
 
     def describe(self, frame_paths: list[Path]) -> VisionResult:
-        """Tag B-roll frames via OMLX vision model structured output.
+        """Tag B-roll frames via structured output from the configured vision server.
 
         1. Reads each frame image and encodes as base64 data URI
            (``data:image/png;base64,<base64>``).
-        2. Sends all frames in a single multi-frame visual message to OMLX
-           with the Chinese prompt appended as text.
+        2. Sends all frames in a single multi-frame visual message to the
+           OpenAI-compatible server with the Chinese prompt appended as text.
         3. Parses structured JSON response into :class:`VisionResult`.
 
         Parameters
@@ -145,7 +92,7 @@ class OmlxVisionTagger(VisionTagger):
         Raises
         ------
         RuntimeError
-            If the OMLX call fails (connection error, bad response, etc.).
+            If the request to the OpenAI-compatible server fails (connection error, bad response, etc.).
         """
         if not frame_paths:
             return VisionResult(description="", tags=[])
@@ -165,7 +112,7 @@ class OmlxVisionTagger(VisionTagger):
             }
 
         # Build multi-frame visual message: one text + N images in single user message
-        prompt = _VISION_PROMPTS.get(self._config.prefs.output_language, _VISION_PROMPT_ZH)
+        prompt = VISION_PROMPTS.get(self._config.prefs.output_language, VISION_PROMPT_ZH)
         image_parts = [_encode_frame(p) for p in frame_paths]
         text_part: dict[str, str] = {"type": "text", "text": prompt}
         content: list[dict[str, Any]] = [text_part] + image_parts
@@ -175,9 +122,9 @@ class OmlxVisionTagger(VisionTagger):
         for attempt in range(1 + max_retries):
             try:
                 client = OpenAI(
-                    base_url=self._config.env.OMLX_BASE_URL,
-                    api_key=self._config.env.OMLX_API_KEY,
-                    timeout=_OMLX_TIMEOUT_S,
+                    base_url=self._config.env.OPENAI_BASE_URL,
+                    api_key=self._config.env.OPENAI_API_KEY,
+                    timeout=_REQUEST_TIMEOUT_S,
                 )
 
                 # NOTE: no strict json_schema response_format — grammar-constrained
@@ -186,7 +133,7 @@ class OmlxVisionTagger(VisionTagger):
                 # instead, and cap max_tokens so a misbehaving model can't hang.
                 response = client.chat.completions.create(
                     model=self._model,
-                    messages=[{"role": "user", "content": content}],  # type: ignore[list-item,misc]  # OMLX accepts plain dict messages
+                    messages=[{"role": "user", "content": content}],  # type: ignore[list-item,misc]  # the server accepts plain dict messages
                     max_tokens=512,
                     temperature=0.7,
                 )
@@ -194,14 +141,14 @@ class OmlxVisionTagger(VisionTagger):
             except APIConnectionError as e:
                 if attempt == max_retries:
                     raise RuntimeError(
-                        f"OMLX vision connection failed after {1 + max_retries} attempt(s): {e}"
+                        f"connection to the OpenAI-compatible server failed after {1 + max_retries} attempt(s): {e}"
                     ) from e
                 continue  # retry on connection error
 
             except Exception as e:  # noqa: BLE001 — catch-all for unexpected LLM errors
                 if attempt == max_retries:
                     raise RuntimeError(
-                        f"OMLX vision request failed after {1 + max_retries} attempt(s): {e}"
+                        f"request to the OpenAI-compatible server failed after {1 + max_retries} attempt(s): {e}"
                     ) from e
                 continue  # retry on other errors
 
@@ -233,7 +180,7 @@ class OmlxVisionTagger(VisionTagger):
             return VisionResult(description=description, tags=list(tags_raw))
 
         raise RuntimeError(
-            "OMLX vision tagger returned no valid result after retries"
+            "vision tagger returned no valid result after retries"
         )
 
     def recommend_keyframes(
@@ -263,16 +210,16 @@ class OmlxVisionTagger(VisionTagger):
             return {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{b64}"}}
 
         listing = "\n".join(f"[{i}] {ts:.1f}s" for i, ts in enumerate(timestamps))
-        prompt = _KEYFRAMES_PROMPTS.get(
-            self._config.prefs.output_language, _KEYFRAMES_PROMPT_ZH,
+        prompt = KEYFRAMES_PROMPTS.get(
+            self._config.prefs.output_language, KEYFRAMES_PROMPT_ZH,
         ).format(n=n, frames=listing)
         content: list[dict[str, Any]] = [{"type": "text", "text": prompt}]
         content += [_encode(p) for p, _ in ordered]
 
         client = OpenAI(
-            base_url=self._config.env.OMLX_BASE_URL,
-            api_key=self._config.env.OMLX_API_KEY,
-            timeout=_OMLX_TIMEOUT_S,
+            base_url=self._config.env.OPENAI_BASE_URL,
+            api_key=self._config.env.OPENAI_API_KEY,
+            timeout=_REQUEST_TIMEOUT_S,
         )
         max_retries = 2
         for attempt in range(1 + max_retries):
@@ -285,11 +232,11 @@ class OmlxVisionTagger(VisionTagger):
                 )
             except APIConnectionError as e:
                 if attempt == max_retries:
-                    raise RuntimeError(f"OMLX vision connection failed after {1 + max_retries} attempt(s): {e}") from e
+                    raise RuntimeError(f"connection to the OpenAI-compatible server failed after {1 + max_retries} attempt(s): {e}") from e
                 continue
             except Exception as e:  # noqa: BLE001
                 if attempt == max_retries:
-                    raise RuntimeError(f"OMLX vision request failed after {1 + max_retries} attempt(s): {e}") from e
+                    raise RuntimeError(f"request to the OpenAI-compatible server failed after {1 + max_retries} attempt(s): {e}") from e
                 continue
 
             raw = response.choices[0].message.content
@@ -302,7 +249,7 @@ class OmlxVisionTagger(VisionTagger):
             suggestions = self._build_keyframes(picks, ordered, timestamps, half, n)
             return suggestions  # valid JSON → accept (even if empty)
 
-        raise RuntimeError("OMLX keyframe recommender returned no valid result after retries")
+        raise RuntimeError("keyframe recommender returned no valid result after retries")
 
     @staticmethod
     def _window_half(timestamps: list[float]) -> float:

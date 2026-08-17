@@ -417,7 +417,7 @@ class TestErrorInjectionContinuation:
         the library and the clip is marked 'partial' (not 'error')."""
         failing_vision = MagicMock()
         failing_vision.describe.side_effect = RuntimeError(
-            "OMLX vision tagger returned no valid result after retries"
+            "vision tagger returned no valid result after retries"
         )
 
         orch = Orchestrator(

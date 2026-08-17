@@ -97,7 +97,7 @@ CutFinder is **implemented** (v1.3+). Source code lives in `backend/cutfinder/` 
 - **Setup:** `make setup` (mise + Brewfile deps + uv sync + frontend npm install)
 - **Dev server:** `make dev` (starts backend via uvicorn + Vite frontend proxy)
 - **Unit tests:** `make test` → pytest (e.g. 546 total, ~545 passed)
-- **Integration tests:** `make test-integration` (real OMLX + ffmpeg/mlx-whisper/Silero)
+- **Integration tests:** `make test-integration` (real OpenAI-compatible server + ffmpeg/mlx-whisper/Silero)
 - **E2E:** `make e2e` (Playwright end-to-end against live server)
 - **Single test:** `pytest tests/unit/test_file.py::test_name -v`
 
@@ -124,26 +124,26 @@ These come directly from the user and override convenience:
 
 ### Model serving — this is the part that requires care
 
-Text and vision models are **both served by OMLX** (github.com/jundot/omlx), a local OpenAI-compatible server at `http://localhost:8000/v1`. They are *not* run as separate mlx-vlm processes — you call the same `/chat/completions` endpoint and switch via the `model` name.
+Text and vision models are **both served by a local OpenAI-compatible server** — any server that exposes the standard `/chat/completions` API works (OMLX at github.com/jundot/omlx is the reference implementation this project was built against; LM Studio, Ollama's OpenAI-compat endpoint, and vLLM are also fine). The endpoint and key are configured via `OPENAI_BASE_URL`/`OPENAI_API_KEY` in Settings (or `~/.cutfinder/config.json`). Models are *not* run as separate mlx-vlm processes — you call the same `/chat/completions` endpoint and switch via the `model` name.
 
 - **A-roll text summary + tags:** `Qwen3.6-35B-A3B` (text-only MoE — it cannot see images).
 - **B-roll visual tags + description:** `Qwen3-VL-8B-Instruct` (vision; send extracted frames as base64 images using the standard OpenAI vision message format).
-- OMLX handles load/unload and memory (LRU eviction, model pinning, per-model TTL), so both models can be configured to coexist.
+- The server should handle load/unload and memory (LRU eviction, model pinning, per-model TTL) so both models can be configured to coexist — OMLX does this.
 
-**Speech is the exception (OMLX does not serve audio):** A-roll transcription runs as a **separate local process**, selectable via the machine-global `transcription_engine` pref (Settings → Speech engine). One choice governs *all* A-roll speech work — catalog transcription, keyframe reasoning over the stored transcript, and subtitle export:
+**Speech is the exception (the server does not serve audio):** A-roll transcription runs as a **separate local process**, selectable via the machine-global `transcription_engine` pref (Settings → Speech engine). One choice governs *all* A-roll speech work — catalog transcription, keyframe reasoning over the stored transcript, and subtitle export:
 - **`whisper`** — `mlx-whisper` large-v3 (default `mlx-community/whisper-large-v3-mlx`). See `adapters/mlx_whisper.py`.
-- **`qwen`** — local **Qwen3-ASR + Qwen3-ForcedAligner** via `mlx-audio` (`adapters/qwen_transcriber.py`): VAD-chunk the audio → Qwen3-ASR per chunk for accurate Chinese/zh-en text → ForcedAligner for real per-character timestamps → group into cues. More accurate on Chinese and gives non-drifting subtitle timing. The aligner caps at ~400s/call, so chunks are bounded (`qwen_max_chunk_s`, default 60, max 300). **OMLX cannot serve the ForcedAligner over HTTP** (its `/audio/transcriptions` has no text param), so it must run locally. Models download into `models/qwen/`.
+- **`qwen`** — local **Qwen3-ASR + Qwen3-ForcedAligner** via `mlx-audio` (`adapters/qwen_transcriber.py`): VAD-chunk the audio → Qwen3-ASR per chunk for accurate Chinese/zh-en text → ForcedAligner for real per-character timestamps → group into cues. More accurate on Chinese and gives non-drifting subtitle timing. The aligner caps at ~400s/call, so chunks are bounded (`qwen_max_chunk_s`, default 60, max 300). **The OpenAI-compatible server can't serve the ForcedAligner over HTTP** (its `/audio/transcriptions` has no text param), so it must run locally. Models download into `models/qwen/`.
 
 A/B classification uses a lightweight **Silero VAD** speech-presence check, also separate.
 
 ### Per-clip pipeline
 
 Scan source folder(s) → dedup by fingerprint → ffprobe metadata + ffmpeg thumbnail → Silero VAD speech check:
-- **Speech present → A-roll:** the configured speech engine produces the full transcript (stored) → Qwen3.6 (via OMLX) summary + tags.
-- **No speech → B-roll:** ffmpeg keyframes → Qwen3-VL (via OMLX, base64) visual tags + description.
+- **Speech present → A-roll:** the configured speech engine produces the full transcript (stored) → Qwen3.6 (via the OpenAI-compatible server) summary + tags.
+- **No speech → B-roll:** ffmpeg keyframes → Qwen3-VL (via the OpenAI-compatible server, base64) visual tags + description.
 
 Then write metadata/type/summary/tags/transcript/thumbnail path to SQLite and copy the original into the dated library folder. A/B verdicts and tags are AI-generated but **user-correctable**, and corrections are remembered.
 
 ## Scope boundaries
 
-In v1: requirements 0–7 (custom folders, time preservation, A/B detection, A-roll summary, date+type organization, tags, thumbnails, OMLX integration). **Implemented:** keyframe suggestions (req 8), native macOS `.app` packaging, subtitle export (iTT/SRT + FCPXML caption track), rough-cut director agent with per-day mini-agents and critic review, vocal separation (Demucs) before transcription. **Deferred:** Final Cut Pro deep integration beyond subtitle export (FCPXML Keywords/clip-level keyword mapping).
+In v1: requirements 0–7 (custom folders, time preservation, A/B detection, A-roll summary, date+type organization, tags, thumbnails, OpenAI-compatible server integration). **Implemented:** keyframe suggestions (req 8), native macOS `.app` packaging, subtitle export (iTT/SRT + FCPXML caption track), rough-cut director agent with per-day mini-agents and critic review, vocal separation (Demucs) before transcription. **Deferred:** Final Cut Pro deep integration beyond subtitle export (FCPXML Keywords/clip-level keyword mapping).

@@ -182,7 +182,7 @@ class PrefsOut(BaseModel):
 
 
 class SettingsOut(BaseModel):
-    # One unified view: per-library prefs + machine-global keys (OMLX_BASE_URL
+    # One unified view: per-library prefs + machine-global keys (OPENAI_BASE_URL
     # etc., secret masked) merged together — no separate "env" grouping.
     prefs: PrefsOut = Field(default_factory=PrefsOut)
 
