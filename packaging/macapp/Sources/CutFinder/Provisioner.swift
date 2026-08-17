@@ -87,9 +87,9 @@ final class Provisioner {
         case .omlx:
             // Probe-only; planner only routes here via .guide, but be safe.
             let status = DependencyChecker.omlxStatus()
-            onLog("OMLX 状态：\(status)")
+            onLog("AI 模型服务状态：\(status)")
             if status != .ready {
-                throw ProvisionError(step: .omlx, detail: "OMLX 未就绪：\(status)")
+                throw ProvisionError(step: .omlx, detail: "AI 模型服务未就绪：\(status)")
             }
         }
     }

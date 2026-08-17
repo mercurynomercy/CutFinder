@@ -245,7 +245,7 @@ describe('CutplanPage', () => {
     openSpy.mockRestore()
   })
 
-  it('renders a photo shot with the photo badge, not B-roll', async () => {
+  it('renders a photo shot with a Photo label, not B-roll', async () => {
     const photoPlan = {
       ...PLAN,
       shots: [{
@@ -271,8 +271,9 @@ describe('CutplanPage', () => {
 
     await screen.findByText('photo-0008.JPG')
     // The default test locale is English → 'Photo'; assert we never render the raw 'photo'.
-    expect(screen.getByText('Photo')).toBeInTheDocument()
-    expect(screen.queryByText('photo')).not.toBeInTheDocument()
+    expect(screen.getByText('[Photo]')).toBeInTheDocument()
+    expect(screen.queryByText('[photo]')).not.toBeInTheDocument()
+    expect(screen.queryByText('[B-roll]')).not.toBeInTheDocument()
   })
 
   it('renders clarifying-question option chips and sends the chosen one', async () => {

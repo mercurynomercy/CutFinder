@@ -430,7 +430,7 @@ export function SettingsPage({ onSave, onSuggestAllKeyframes, onCleanupLibrary, 
 
       {/* ── Content ─────────────────────────────────────────── */}
       <div className="flex flex-1 overflow-auto">
-        <div className="mx-auto w-full max-w-5xl p-6 pb-24">
+        <div className="mx-auto w-full max-w-5xl p-6">
 
         {/* Responsive two-column grid — single column on narrow screens */}
         <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
@@ -813,8 +813,8 @@ export function SettingsPage({ onSave, onSuggestAllKeyframes, onCleanupLibrary, 
       </div>
       </div>
 
-      {/* ── Fixed save bar ───────────────────────────────────── */}
-      <div className="fixed bottom-0 left-0 right-0 border-t border-[--border] bg-[--surface-1]">
+      {/* ── Save bar ─────────────────────────────────────────── */}
+      <div className="shrink-0 border-t border-[--border] bg-[--surface-1]">
         <div className="mx-auto flex max-w-5xl justify-end px-6 py-3">
           <Button onClick={handleSave} disabled={saving}>
             {saving ? t('settings.saving') : t('settings.save')}

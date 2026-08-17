@@ -107,7 +107,13 @@ final class MainWindowController: NSWindowController, WKNavigationDelegate {
             webView = web
         }
         setContent(web)
-        web.load(URLRequest(url: url))
+        // The local backend's bundle changes across app rebuilds/restarts within the
+        // same dev machine; WKWebView's persistent disk cache would otherwise keep
+        // serving a stale index.html/JS bundle indefinitely. Caching gives no benefit
+        // for a 127.0.0.1-only backend, so always bypass it on load.
+        var request = URLRequest(url: url)
+        request.cachePolicy = .reloadIgnoringLocalAndRemoteCacheData
+        web.load(request)
     }
 
     func showError(title: String, message: String, actions: [ErrorView.Action], details: String? = nil) {
@@ -117,7 +123,8 @@ final class MainWindowController: NSWindowController, WKNavigationDelegate {
     }
 
     func reload() {
-        webView?.reload()
+        // reloadFromOrigin (not reload) so ⌘R actually bypasses the disk cache too.
+        webView?.reloadFromOrigin()
     }
 
     // MARK: - WKNavigationDelegate

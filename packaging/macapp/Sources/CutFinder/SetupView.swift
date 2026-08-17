@@ -20,7 +20,7 @@ final class SetupView: NSView {
         .ffmpeg: "ffmpeg",
         .pythonEnv: "Python 运行环境",
         .models: "音频分离模型（demucs）",
-        .omlx: "OMLX 模型服务",
+        .omlx: "AI 模型服务（OpenAI 兼容）",
     ]
 
     override init(frame frameRect: NSRect) {
