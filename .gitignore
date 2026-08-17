@@ -45,6 +45,7 @@ superpowers
 *.tsbuildinfo
 playwright-report/
 test-results/
+.playwright-mcp/
 .vite/
 
 # Debug scripts (e2e development)
