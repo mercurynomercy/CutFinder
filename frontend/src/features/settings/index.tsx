@@ -118,15 +118,15 @@ export function SettingsPage({ onSave }: SettingsPageProps) {
   const [extensions, setExtensions] = useState('')
   const [photoExtensions, setPhotoExtensions] = useState('')
 
-  // Machine-global env settings (OMLX endpoint/key, model names). These live
+  // Machine-global env settings (OpenAI-compatible endpoint/key, model names). These live
   // in ~/.cutfinder/config.json — no .env needed. The API key is write-only:
   // GET returns a mask, and we only send it when the user types a new value.
-  const [omlxBaseUrl, setOmlxBaseUrl] = useState('')
+  const [openaiBaseUrl, setOpenaiBaseUrl] = useState('')
   const [apiKeyInput, setApiKeyInput] = useState('')
   const [textModelGlobal, setTextModelGlobal] = useState('')
   const [visionModelGlobal, setVisionModelGlobal] = useState('')
   const [apiKeyConfigured, setApiKeyConfigured] = useState(false)
-  const [omlxTest, setOmlxTest] = useState<
+  const [openaiTest, setOpenaiTest] = useState<
     { state: 'idle' | 'testing' } |
     { state: 'ok'; models: string[]; missing: string[] } |
     { state: 'err'; error: string }
@@ -167,13 +167,13 @@ export function SettingsPage({ onSave }: SettingsPageProps) {
       setLibraryPath(lib.library_path)
       if (lib.library_path) {
         const data = await api.getSettings()
-        // Machine-global keys (OMLX endpoint/key, model names) are merged into
+        // Machine-global keys (OpenAI-compatible endpoint/key, model names) are merged into
         // the one prefs view now — there is no separate "env" grouping.
         setPrefs(data.prefs)
         setTextModelGlobal(data.prefs.TEXT_MODEL || '')
         setVisionModelGlobal(data.prefs.VISION_MODEL || '')
-        setOmlxBaseUrl(data.prefs.OMLX_BASE_URL || '')
-        setApiKeyConfigured(Boolean(data.prefs.OMLX_API_KEY))
+        setOpenaiBaseUrl(data.prefs.OPENAI_BASE_URL || '')
+        setApiKeyConfigured(Boolean(data.prefs.OPENAI_API_KEY))
         setApiKeyInput('')
       }
     } catch (err: unknown) {
@@ -276,11 +276,11 @@ export function SettingsPage({ onSave }: SettingsPageProps) {
       // Machine-global keys: always send the (non-secret) endpoint and model names; only send
       // the API key when the user typed a new one, so the stored secret is
       // never overwritten by the mask.
-      body.OMLX_BASE_URL = omlxBaseUrl.trim()
+      body.OPENAI_BASE_URL = openaiBaseUrl.trim()
       if (textModelGlobal) body.TEXT_MODEL = textModelGlobal
       else delete body.TEXT_MODEL  // clear: fall back to default
       if (visionModelGlobal) body.VISION_MODEL = visionModelGlobal
-      if (apiKeyInput.trim()) body.OMLX_API_KEY = apiKeyInput.trim()
+      if (apiKeyInput.trim()) body.OPENAI_API_KEY = apiKeyInput.trim()
       await api.putSettings(body)
       if (apiKeyInput.trim()) {
         setApiKeyConfigured(true)
@@ -294,22 +294,22 @@ export function SettingsPage({ onSave }: SettingsPageProps) {
     }
   }
 
-  // Probe the OMLX endpoint/key/models with the form's current (unsaved) values,
+  // Probe the OpenAI-compatible server's endpoint/key/models with the form's current (unsaved) values,
   // so "已配置" is verifiable before hitting Save.
   const handleTestConnection = async () => {
-    setOmlxTest({ state: 'testing' })
+    setOpenaiTest({ state: 'testing' })
     try {
       const body: Record<string, string> = {
-        OMLX_BASE_URL: omlxBaseUrl,
+        OPENAI_BASE_URL: openaiBaseUrl,
         TEXT_MODEL: textModelGlobal,
         VISION_MODEL: visionModelGlobal,
       }
-      if (apiKeyInput.trim()) body.OMLX_API_KEY = apiKeyInput.trim()
-      const res = await api.testOmlxConnection(body)
-      if (res.ok) setOmlxTest({ state: 'ok', models: res.models ?? [], missing: res.missing ?? [] })
-      else setOmlxTest({ state: 'err', error: res.error ?? t('settings.testFailed') })
+      if (apiKeyInput.trim()) body.OPENAI_API_KEY = apiKeyInput.trim()
+      const res = await api.testOpenAIConnection(body)
+      if (res.ok) setOpenaiTest({ state: 'ok', models: res.models ?? [], missing: res.missing ?? [] })
+      else setOpenaiTest({ state: 'err', error: res.error ?? t('settings.testFailed') })
     } catch (err: unknown) {
-      setOmlxTest({ state: 'err', error: err instanceof Error ? err.message : String(err) })
+      setOpenaiTest({ state: 'err', error: err instanceof Error ? err.message : String(err) })
     }
   }
 
@@ -450,17 +450,17 @@ export function SettingsPage({ onSave }: SettingsPageProps) {
               </div>
             </fieldset>
 
-            {/* ── OMLX connection (machine-global) ─────── */}
+            {/* ── OpenAI-compatible connection (machine-global) ─────── */}
             <fieldset className="rounded-lg border border-[--border] bg-[--surface-1] p-4">
-              <legend className="text-sm font-medium text-[--text-primary]">{t('settings.omlxConnection')}</legend>
+              <legend className="text-sm font-medium text-[--text-primary]">{t('settings.openaiConnection')}</legend>
               <p className="mt-1 text-xs leading-relaxed text-[--text-secondary]">
-                {t('settings.omlxConnectionDesc')}
+                {t('settings.openaiConnectionDesc')}
               </p>
 
               <label className="mt-3 block text-sm text-[--text-secondary]">{t('settings.baseUrl')}</label>
               <input
-                type="text" value={omlxBaseUrl}
-                onChange={(e) => setOmlxBaseUrl(e.target.value)}
+                type="text" value={openaiBaseUrl}
+                onChange={(e) => setOpenaiBaseUrl(e.target.value)}
                 placeholder="http://localhost:8000/v1"
                 className="mt-1 w-full rounded-md border border-[--border] bg-[--surface-2] px-3 py-1.5 text-sm font-mono outline-none focus:border-[--primary]"
               />
@@ -472,7 +472,7 @@ export function SettingsPage({ onSave }: SettingsPageProps) {
               <input
                 type="password" value={apiKeyInput}
                 onChange={(e) => setApiKeyInput(e.target.value)}
-                placeholder={apiKeyConfigured ? t('settings.apiKeyPlaceholder') : 'omlx-…'}
+                placeholder={apiKeyConfigured ? t('settings.apiKeyPlaceholder') : 'sk-…'}
                 autoComplete="new-password"
                 className="w-full rounded-md border border-[--border] bg-[--surface-2] px-3 py-1.5 text-sm font-mono outline-none focus:border-[--primary]"
               />
@@ -498,23 +498,23 @@ export function SettingsPage({ onSave }: SettingsPageProps) {
               <button
                 type="button"
                 onClick={handleTestConnection}
-                disabled={omlxTest.state === 'testing'}
+                disabled={openaiTest.state === 'testing'}
                 className="mt-3 rounded-md border border-[--border] bg-[--surface-2] px-3 py-1.5 text-sm hover:border-[--primary] disabled:opacity-60"
               >
-                {omlxTest.state === 'testing' ? t('settings.testing') : t('settings.testConnection')}
+                {openaiTest.state === 'testing' ? t('settings.testing') : t('settings.testConnection')}
               </button>
-              {omlxTest.state === 'ok' && omlxTest.missing.length === 0 && (
+              {openaiTest.state === 'ok' && openaiTest.missing.length === 0 && (
                 <p className="mt-2 text-xs text-[--success]">
-                  ✅ {t('settings.testOk', { n: omlxTest.models.length })}
+                  ✅ {t('settings.testOk', { n: openaiTest.models.length })}
                 </p>
               )}
-              {omlxTest.state === 'ok' && omlxTest.missing.length > 0 && (
+              {openaiTest.state === 'ok' && openaiTest.missing.length > 0 && (
                 <p className="mt-2 text-xs text-[--warning]">
-                  ⚠️ {t('settings.testMissing', { models: omlxTest.missing.join(', ') })}
+                  ⚠️ {t('settings.testMissing', { models: openaiTest.missing.join(', ') })}
                 </p>
               )}
-              {omlxTest.state === 'err' && (
-                <p className="mt-2 max-w-full break-words text-xs text-[--error]">❌ {omlxTest.error}</p>
+              {openaiTest.state === 'err' && (
+                <p className="mt-2 max-w-full break-words text-xs text-[--error]">❌ {openaiTest.error}</p>
               )}
             </fieldset>
 

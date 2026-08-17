@@ -65,27 +65,27 @@ class TestEnvSettings:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """All required env vars present → EnvSettings loads successfully."""
-        monkeypatch.setenv("OMLX_BASE_URL", "http://localhost:8000/v1")
-        monkeypatch.setenv("OMLX_API_KEY", "test-key-123")
+        monkeypatch.setenv("OPENAI_BASE_URL", "http://localhost:8000/v1")
+        monkeypatch.setenv("OPENAI_API_KEY", "test-key-123")
 
         env = EnvSettings()
-        assert env.OMLX_BASE_URL == "http://localhost:8000/v1"
-        assert env.OMLX_API_KEY == "test-key-123"
+        assert env.OPENAI_BASE_URL == "http://localhost:8000/v1"
+        assert env.OPENAI_API_KEY == "test-key-123"
 
     def test_missing_vars_default_empty(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Missing OMLX vars no longer raise — they default to empty strings.
+        """Missing OpenAI-compatible server vars no longer raise — they default to empty strings.
 
         Creds are now optional at load time and filled via the UI / global
         store; adapters surface a clear error only if used while unset.
         """
-        monkeypatch.delenv("OMLX_BASE_URL", raising=False)
-        monkeypatch.delenv("OMLX_API_KEY", raising=False)
+        monkeypatch.delenv("OPENAI_BASE_URL", raising=False)
+        monkeypatch.delenv("OPENAI_API_KEY", raising=False)
 
         env = EnvSettings()
-        assert env.OMLX_BASE_URL == ""
-        assert env.OMLX_API_KEY == ""
+        assert env.OPENAI_BASE_URL == ""
+        assert env.OPENAI_API_KEY == ""
 
 
 # ── Global settings store (~/.cutfinder/config.json) ─────────────────
@@ -110,22 +110,22 @@ class TestGlobalSettings:
         from cutfinder.config import load_global_settings, save_global_settings
 
         save_global_settings(
-            {"OMLX_BASE_URL": "http://x/v1", "OMLX_API_KEY": "k", "bogus": "no"}
+            {"OPENAI_BASE_URL": "http://x/v1", "OPENAI_API_KEY": "k", "bogus": "no"}
         )
 
         loaded = load_global_settings()
-        assert loaded == {"OMLX_BASE_URL": "http://x/v1", "OMLX_API_KEY": "k"}
+        assert loaded == {"OPENAI_BASE_URL": "http://x/v1", "OPENAI_API_KEY": "k"}
 
     def test_save_merges_without_clobbering(self, global_file: Path) -> None:
         """A second partial save preserves previously stored keys."""
         from cutfinder.config import load_global_settings, save_global_settings
 
-        save_global_settings({"OMLX_BASE_URL": "http://x/v1", "OMLX_API_KEY": "k"})
-        save_global_settings({"OMLX_BASE_URL": "http://y/v1"})
+        save_global_settings({"OPENAI_BASE_URL": "http://x/v1", "OPENAI_API_KEY": "k"})
+        save_global_settings({"OPENAI_BASE_URL": "http://y/v1"})
 
         loaded = load_global_settings()
-        assert loaded["OMLX_BASE_URL"] == "http://y/v1"
-        assert loaded["OMLX_API_KEY"] == "k"
+        assert loaded["OPENAI_BASE_URL"] == "http://y/v1"
+        assert loaded["OPENAI_API_KEY"] == "k"
 
     def test_save_atomic_preserves_old_on_failure(
         self, global_file: Path, monkeypatch: pytest.MonkeyPatch
@@ -133,7 +133,7 @@ class TestGlobalSettings:
         """A crash during the write must not truncate the existing global file."""
         from cutfinder.config import save_global_settings
 
-        save_global_settings({"OMLX_BASE_URL": "http://v1/v1", "OMLX_API_KEY": "k"})
+        save_global_settings({"OPENAI_BASE_URL": "http://v1/v1", "OPENAI_API_KEY": "k"})
         before = global_file.read_text(encoding="utf-8")
 
         def boom(*_a: object, **_k: object) -> None:
@@ -141,7 +141,7 @@ class TestGlobalSettings:
 
         monkeypatch.setattr("cutfinder.config.os.replace", boom)
         with pytest.raises(OSError):
-            save_global_settings({"OMLX_BASE_URL": "http://v2/v2"})
+            save_global_settings({"OPENAI_BASE_URL": "http://v2/v2"})
 
         assert global_file.read_text(encoding="utf-8") == before
         assert not list(global_file.parent.glob("*.tmp"))
@@ -158,15 +158,15 @@ class TestGlobalSettings:
         """Empty env values are filled from the global store."""
         from cutfinder.config import resolve_env, save_global_settings
 
-        monkeypatch.delenv("OMLX_BASE_URL", raising=False)
-        monkeypatch.delenv("OMLX_API_KEY", raising=False)
+        monkeypatch.delenv("OPENAI_BASE_URL", raising=False)
+        monkeypatch.delenv("OPENAI_API_KEY", raising=False)
         save_global_settings(
-            {"OMLX_BASE_URL": "http://global/v1", "OMLX_API_KEY": "global-key"}
+            {"OPENAI_BASE_URL": "http://global/v1", "OPENAI_API_KEY": "global-key"}
         )
 
         env = resolve_env()
-        assert env.OMLX_BASE_URL == "http://global/v1"
-        assert env.OMLX_API_KEY == "global-key"
+        assert env.OPENAI_BASE_URL == "http://global/v1"
+        assert env.OPENAI_API_KEY == "global-key"
 
 
 class TestGlobalPrefs:
@@ -209,12 +209,12 @@ class TestGlobalPrefs:
             save_global_settings,
         )
 
-        save_global_settings({"OMLX_BASE_URL": "http://x/v1"})
+        save_global_settings({"OPENAI_BASE_URL": "http://x/v1"})
         save_global_prefs({"vocal_separation": True})
         save_global_settings({"TEXT_MODEL": "Qwen"})
 
         assert load_global_settings() == {
-            "OMLX_BASE_URL": "http://x/v1",
+            "OPENAI_BASE_URL": "http://x/v1",
             "TEXT_MODEL": "Qwen",
         }
         assert load_global_prefs() == {"vocal_separation": True}
@@ -250,15 +250,15 @@ class TestGlobalPrefs:
         """
         from cutfinder.config import resolve_env, save_global_settings
 
-        monkeypatch.setenv("OMLX_BASE_URL", "http://env/v1")
-        monkeypatch.setenv("OMLX_API_KEY", "env-key")
+        monkeypatch.setenv("OPENAI_BASE_URL", "http://env/v1")
+        monkeypatch.setenv("OPENAI_API_KEY", "env-key")
         save_global_settings(
-            {"OMLX_BASE_URL": "http://global/v1", "OMLX_API_KEY": "global-key"}
+            {"OPENAI_BASE_URL": "http://global/v1", "OPENAI_API_KEY": "global-key"}
         )
 
         env = resolve_env()
-        assert env.OMLX_BASE_URL == "http://global/v1"
-        assert env.OMLX_API_KEY == "global-key"
+        assert env.OPENAI_BASE_URL == "http://global/v1"
+        assert env.OPENAI_API_KEY == "global-key"
 
 
 class TestCutDirectorPrompt:
@@ -301,9 +301,9 @@ class TestCutDirectorPrompt:
             save_global_settings,
         )
 
-        save_global_settings({"OMLX_BASE_URL": "http://x/v1"})
+        save_global_settings({"OPENAI_BASE_URL": "http://x/v1"})
         save_cut_director_prompt("提示词")
-        assert load_global_settings() == {"OMLX_BASE_URL": "http://x/v1"}
+        assert load_global_settings() == {"OPENAI_BASE_URL": "http://x/v1"}
         assert load_cut_director_prompt() == "提示词"
 
 
@@ -381,8 +381,8 @@ class TestLoadConfig:
         write_config_json: Callable[[dict[str, Any]], None],
     ) -> None:
         """Env vars + JSON are merged into AppConfig with correct values."""
-        monkeypatch.setenv("OMLX_BASE_URL", "http://localhost:8001/v1")
-        monkeypatch.setenv("OMLX_API_KEY", "key-from-env")
+        monkeypatch.setenv("OPENAI_BASE_URL", "http://localhost:8001/v1")
+        monkeypatch.setenv("OPENAI_API_KEY", "key-from-env")
 
         write_config_json({
             "library_path": "/tmp/test-lib",
@@ -393,8 +393,8 @@ class TestLoadConfig:
         config = load_config(tmp_library.parent)
 
         assert isinstance(config, AppConfig)
-        assert config.env.OMLX_BASE_URL == "http://localhost:8001/v1"
-        assert config.env.OMLX_API_KEY == "key-from-env"
+        assert config.env.OPENAI_BASE_URL == "http://localhost:8001/v1"
+        assert config.env.OPENAI_API_KEY == "key-from-env"
 
         # JSON values override defaults
         assert config.prefs.library_path == "/tmp/test-lib"
@@ -411,8 +411,8 @@ class TestLoadConfig:
         tmp_library: Path,
     ) -> None:
         """JSON without library_path → ValueError."""
-        monkeypatch.setenv("OMLX_BASE_URL", "http://localhost:8000/v1")
-        monkeypatch.setenv("OMLX_API_KEY", "test-key")
+        monkeypatch.setenv("OPENAI_BASE_URL", "http://localhost:8000/v1")
+        monkeypatch.setenv("OPENAI_API_KEY", "test-key")
 
         tmp_library.mkdir(parents=True, exist_ok=True)
         json_file = tmp_library / "config.json"
@@ -427,8 +427,8 @@ class TestLoadConfig:
         tmp_library: Path,
     ) -> None:
         """No JSON file → Prefs uses defaults (except mandatory library_path)."""
-        monkeypatch.setenv("OMLX_BASE_URL", "http://localhost:8000/v1")
-        monkeypatch.setenv("OMLX_API_KEY", "test-key")
+        monkeypatch.setenv("OPENAI_BASE_URL", "http://localhost:8000/v1")
+        monkeypatch.setenv("OPENAI_API_KEY", "test-key")
 
         # Write JSON with only the mandatory field
         tmp_library.mkdir(parents=True, exist_ok=True)
@@ -454,8 +454,8 @@ class TestSavePrefs:
         tmp_library: Path,
     ) -> None:
         """save_prefs → load_config produces identical Prefs values."""
-        monkeypatch.setenv("OMLX_BASE_URL", "http://localhost:8000/v1")
-        monkeypatch.setenv("OMLX_API_KEY", "round-trip-key")
+        monkeypatch.setenv("OPENAI_BASE_URL", "http://localhost:8000/v1")
+        monkeypatch.setenv("OPENAI_API_KEY", "round-trip-key")
 
         prefs = Prefs(
             library_path="/tmp/rt-lib",
@@ -482,8 +482,8 @@ class TestSavePrefs:
         tmp_library: Path,
     ) -> None:
         """Fields not explicitly set are preserved as defaults after round-trip."""
-        monkeypatch.setenv("OMLX_BASE_URL", "http://localhost:8000/v1")
-        monkeypatch.setenv("OMLX_API_KEY", "preserves-defaults-key")
+        monkeypatch.setenv("OPENAI_BASE_URL", "http://localhost:8000/v1")
+        monkeypatch.setenv("OPENAI_API_KEY", "preserves-defaults-key")
 
         prefs = Prefs(library_path="/tmp/pres-lib")
         save_prefs(prefs, tmp_library.parent)

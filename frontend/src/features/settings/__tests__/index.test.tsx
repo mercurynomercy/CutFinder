@@ -119,9 +119,9 @@ describe('SettingsPage', () => {
     expect(saved!.photo_extensions).toEqual(['.jpg', '.jpeg', '.png', '.heic', '.webp'])
   })
 
-  it('tests the OMLX connection and shows success', async () => {
+  it('tests the OpenAI-compatible connection and shows success', async () => {
     server.use(
-      http.post(`${API}/settings/omlx/test`, () =>
+      http.post(`${API}/settings/openai/test`, () =>
         HttpResponse.json({ ok: true, models: ['Qwen3.6-35B-A3B'], missing: [] })),
     )
     render(<SettingsPage />)
@@ -130,10 +130,10 @@ describe('SettingsPage', () => {
     expect(await screen.findByText(/连接成功|Connected/)).toBeInTheDocument()
   })
 
-  it('shows the OMLX error when the key is invalid', async () => {
+  it('shows the OpenAI-compatible server error when the key is invalid', async () => {
     server.use(
-      http.post(`${API}/settings/omlx/test`, () =>
-        HttpResponse.json({ ok: false, error: 'OMLX returned HTTP 401: Invalid API key' })),
+      http.post(`${API}/settings/openai/test`, () =>
+        HttpResponse.json({ ok: false, error: 'OpenAI-compatible server returned HTTP 401: Invalid API key' })),
     )
     render(<SettingsPage />)
     await userEvent.click(await screen.findByRole('button', { name: /测试连接|Test connection/ }))

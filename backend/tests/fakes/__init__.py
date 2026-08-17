@@ -31,7 +31,7 @@ from .fake_transcriber import (
 )
 from .fake_separator import FakeVocalSeparator
 from .fake_library import FakeLibraryWriter
-from .omlx_vision import FakeVisionTagger, make_sample_result
+from .openai_vision import FakeVisionTagger, make_sample_result
 from .fake_repository import FakeCatalogRepository
 
 __all__ = [

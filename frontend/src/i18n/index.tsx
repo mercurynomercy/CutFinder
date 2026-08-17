@@ -77,12 +77,12 @@ const en = {
   'roughcut.critic': 'Critic review pass',
   'roughcut.criticDesc': 'After the shot list is assembled, run one extra review pass (rhythm / narrative / A-B balance) and re-do the dates it flags. Costs one more model call.',
   'roughcut.visionBudget': 'Vision look-ups per generation',
-  'roughcut.visionBudgetDesc': 'Max live B-roll vision checks per shot list (0 = unlimited). Each one makes OMLX swap models, slow on weaker Macs.',
+  'roughcut.visionBudgetDesc': 'Max live B-roll vision checks per shot list (0 = unlimited). Each one makes the server swap models, slow on weaker Macs.',
   'roughcut.durationFootageHint': '(limited footage in range — fitted as close as possible)',
   'roughcut.leanBudget': 'Per-day catalog size (agent, tokens)',
-  'roughcut.leanBudgetDesc': 'How much of a day’s clip catalog the agent sees (one short line per clip; transcripts fetched on demand), counted as real tokens via OMLX. Higher = no clips dropped on busy days; the text model takes a huge context, so the cap is just to bound local prefill cost.',
+  'roughcut.leanBudgetDesc': 'How much of a day’s clip catalog the agent sees (one short line per clip; transcripts fetched on demand), counted as real tokens via the OpenAI-compatible server. Higher = no clips dropped on busy days; the text model takes a huge context, so the cap is just to bound local prefill cost.',
   'roughcut.stagedBudget': 'Per-day catalog size (fast, tokens)',
-  'roughcut.stagedBudgetDesc': 'Fast mode inlines transcripts (it has no tools), so it fills faster than agent mode. Counted as real tokens via OMLX. Higher = fuller transcripts reach the model, at more local prefill cost.',
+  'roughcut.stagedBudgetDesc': 'Fast mode inlines transcripts (it has no tools), so it fills faster than agent mode. Counted as real tokens via the OpenAI-compatible server. Higher = fuller transcripts reach the model, at more local prefill cost.',
   'roughcut.promptTitle': 'Director prompt',
   'roughcut.promptHelp': 'Edit the director system prompt. Placeholders {aspect}, {target}, {style} are filled per request.',
   'roughcut.promptCustom': 'Custom prompt in use',
@@ -274,9 +274,9 @@ const en = {
   'settings.choose': 'Choose…',
   'settings.selecting': 'Selecting…',
 
-  'settings.omlxConnection': 'OMLX connection',
-  'settings.omlxConnectionDesc':
-    'Address and key for the local OMLX inference service (machine-wide, stored in ~/.cutfinder/config.json — no .env needed). Values saved here take precedence over .env / environment variables.',
+  'settings.openaiConnection': 'OpenAI-compatible connection',
+  'settings.openaiConnectionDesc':
+    'Address and key for the local OpenAI-compatible inference service (e.g. OMLX, LM Studio, Ollama; machine-wide, stored in ~/.cutfinder/config.json — no .env needed). Values saved here take precedence over .env / environment variables.',
   'settings.baseUrl': 'Base URL',
   'settings.apiKey': 'API key',
   'settings.apiKeyConfigured': 'Configured — leave blank to keep, enter a new value to override',
@@ -284,10 +284,10 @@ const en = {
   'settings.apiKeyPlaceholder': '••••••••（leave blank to keep）',
   'settings.textModel': 'Text model',
   'settings.textModelDesc':
-    'For A-roll summary + tag generation (via OMLX, text-only model). Defaults to Qwen3.6-35B-A3B if blank.',
+    'For A-roll summary + tag generation (via the OpenAI-compatible server, text-only model). Defaults to Qwen3.6-35B-A3B if blank.',
   'settings.visionModel': 'Vision model',
   'settings.visionModelDesc':
-    'For B-roll visual tags + description generation (via OMLX, multimodal model). Defaults to Qwen3-VL-8B if blank.',
+    'For B-roll visual tags + description generation (via the OpenAI-compatible server, multimodal model). Defaults to Qwen3-VL-8B if blank.',
   'settings.testConnection': 'Test connection',
   'settings.testing': 'Testing…',
   'settings.testOk': 'Connected · {n} model(s) available',
@@ -295,7 +295,7 @@ const en = {
   'settings.testFailed': 'Connection test failed',
 
   'settings.whisperTitle': 'Speech engine (speech-to-text)',
-  'settings.whisperDesc': 'How A-roll speech is transcribed — used everywhere: catalog analysis, keyframes, and subtitle export. Runs locally, not via OMLX.',
+  'settings.whisperDesc': 'How A-roll speech is transcribed — used everywhere: catalog analysis, keyframes, and subtitle export. Runs locally, not via the OpenAI-compatible server.',
   'settings.whisperModel': 'Whisper model',
   'settings.whisperModelDesc': 'HuggingFace model id. Downloaded into the project models/ folder on first use and loaded offline afterwards.',
   'settings.speechEngine': 'Engine',
@@ -402,12 +402,12 @@ const zh: Record<Key, string> = {
   'roughcut.critic': '审片复检',
   'roughcut.criticDesc': '分镜表拼好后，额外跑一轮审片：检查主观质量（节奏、叙事连贯、A/B-roll 配比），并对点名的日期重做一遍。会多一次模型调用。',
   'roughcut.visionBudget': '视觉确认次数',
-  'roughcut.visionBudgetDesc': '每份分镜表里现场看 B-roll 画面的最大次数（0 = 不限）。每次都会让 OMLX 换模型，弱机会变慢。',
+  'roughcut.visionBudgetDesc': '每份分镜表里现场看 B-roll 画面的最大次数（0 = 不限）。每次都会让服务端换模型，弱机会变慢。',
   'roughcut.durationFootageHint': '（该范围内素材有限，已尽量贴近）',
   'roughcut.leanBudget': '单日素材目录上限（Agent，token）',
-  'roughcut.leanBudgetDesc': 'Agent 模式下这一天能看到的素材目录大小（每片段一行摘要，台词按需用工具取），按真实 token 计（经 OMLX 数）。越大越不会在素材多的日子丢片段；文本模型可吃超大上下文，这个上限只是为了约束本地推理开销。',
+  'roughcut.leanBudgetDesc': 'Agent 模式下这一天能看到的素材目录大小（每片段一行摘要，台词按需用工具取），按真实 token 计（经 OpenAI 兼容服务端数）。越大越不会在素材多的日子丢片段；文本模型可吃超大上下文，这个上限只是为了约束本地推理开销。',
   'roughcut.stagedBudget': '单日素材目录上限（快速，token）',
-  'roughcut.stagedBudgetDesc': '快速模式会把台词内联进目录（它没有工具可取），所以比 Agent 模式填得更快；按真实 token 计（经 OMLX 数）。越大送进模型的台词越完整，本地推理开销也越高。',
+  'roughcut.stagedBudgetDesc': '快速模式会把台词内联进目录（它没有工具可取），所以比 Agent 模式填得更快；按真实 token 计（经 OpenAI 兼容服务端数）。越大送进模型的台词越完整，本地推理开销也越高。',
   'roughcut.promptTitle': '导演 Prompt',
   'roughcut.promptHelp': '编辑导演的 system prompt。占位符 {aspect}、{target}、{style} 会在每次请求时自动替换。',
   'roughcut.promptCustom': '正在使用自定义 prompt',
@@ -587,9 +587,9 @@ const zh: Record<Key, string> = {
   'settings.choose': '选择…',
   'settings.selecting': '选择中…',
 
-  'settings.omlxConnection': 'OMLX 连接',
-  'settings.omlxConnectionDesc':
-    '本地 OMLX 推理服务的地址和密钥（全机共用，存储在 ~/.cutfinder/config.json，无需 .env 文件）。这里保存的值优先生效，会覆盖 .env / 环境变量。',
+  'settings.openaiConnection': 'OpenAI 兼容连接',
+  'settings.openaiConnectionDesc':
+    '本地 OpenAI 兼容推理服务的地址和密钥（如 OMLX、LM Studio、Ollama 等；全机共用，存储在 ~/.cutfinder/config.json，无需 .env 文件）。这里保存的值优先生效，会覆盖 .env / 环境变量。',
   'settings.baseUrl': 'Base URL',
   'settings.apiKey': 'API 密钥',
   'settings.apiKeyConfigured': '已配置 — 留空则保持不变，输入新值则覆盖',
@@ -597,10 +597,10 @@ const zh: Record<Key, string> = {
   'settings.apiKeyPlaceholder': '••••••••（留空不修改）',
   'settings.textModel': '文本模型',
   'settings.textModelDesc':
-    '用于 A-roll 的中文摘要 + 标签生成（通过 OMLX，纯文本模型）。留空则用默认 Qwen3.6-35B-A3B。',
+    '用于 A-roll 的中文摘要 + 标签生成（通过 OpenAI 兼容服务端，纯文本模型）。留空则用默认 Qwen3.6-35B-A3B。',
   'settings.visionModel': '视觉模型',
   'settings.visionModelDesc':
-    '用于 B-roll 的视觉标签 + 描述生成（通过 OMLX，多模态模型）。留空则用默认 Qwen3-VL-8B。',
+    '用于 B-roll 的视觉标签 + 描述生成（通过 OpenAI 兼容服务端，多模态模型）。留空则用默认 Qwen3-VL-8B。',
   'settings.testConnection': '测试连接',
   'settings.testing': '测试中…',
   'settings.testOk': '连接成功 · 可用模型 {n} 个',
@@ -608,7 +608,7 @@ const zh: Record<Key, string> = {
   'settings.testFailed': '连接测试失败',
 
   'settings.whisperTitle': '语音引擎（语音转写）',
-  'settings.whisperDesc': 'A-roll 语音转文字的方式——全程通用：编目分析、关键帧、字幕导出都用它。本地运行，不经过 OMLX。',
+  'settings.whisperDesc': 'A-roll 语音转文字的方式——全程通用：编目分析、关键帧、字幕导出都用它。本地运行，不经过 OpenAI 兼容服务端。',
   'settings.whisperModel': 'Whisper model',
   'settings.whisperModelDesc': 'HuggingFace 模型 id。首次使用时下载到项目的 models/ 目录，之后离线加载。',
   'settings.speechEngine': '引擎',

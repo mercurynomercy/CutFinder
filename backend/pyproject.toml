@@ -9,9 +9,9 @@ dependencies = [
     "uvicorn[standard]",
     "pydantic>=2.0",
     "pydantic-settings",
-    # OpenAI-compatible client for OMLX (text + vision)
+    # OpenAI-compatible client for the local text + vision server
     "openai",
-    # Speech transcription — local mlx-whisper (separate from OMLX)
+    # Speech transcription — local mlx-whisper (separate from the OpenAI-compatible server)
     "mlx-whisper",
     # Qwen3-ASR + ForcedAligner speech engine (see adapters/qwen_transcriber.py)
     "mlx-audio",
@@ -52,7 +52,7 @@ python_files = "test_*.py"
 python_classes = "Test*"
 addopts = "--strict-markers -q"
 
-# Mark for integration tests (need real ffmpeg / OMLX)
+# Mark for integration tests (need real ffmpeg / an OpenAI-compatible server)
 markers = [
     "integration: marks test as requiring external dependencies (deselect with '-m \"not integration\"')",
 ]

@@ -130,9 +130,9 @@ class Orchestrator:
         mlx-whisper Chinese transcription adapter.  ``None`` skips A-roll
         transcript generation (summary tags still work).
     summarizer:
-        OMLX text model adapter for A-roll summary + tags.  ``None`` skips.
+        OpenAI-compatible text model adapter for A-roll summary + tags.  ``None`` skips.
     vision_tagger:
-        OMLX vision model adapter for B-roll visual tags + description.
+        OpenAI-compatible vision model adapter for B-roll visual tags + description.
         ``None`` skips (clip will have no vision output).
     repository:
         :class:`CatalogRepository` for persisting clips, tags, transcripts.

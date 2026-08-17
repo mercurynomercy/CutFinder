@@ -1,8 +1,8 @@
-"""OmlxAgentClient — one tool-calling turn against the OMLX text model.
+"""OpenAIAgentClient — one tool-calling turn against the configured text model.
 
-Implements :class:`LLMAgentClient` by calling OMLX's OpenAI-compatible
+Implements :class:`LLMAgentClient` by calling the OpenAI-compatible server's
 ``/chat/completions`` with the director's tool schemas. Reuses the same
-endpoint/key/model resolution as :class:`OmlxSummarizer`.
+endpoint/key/model resolution as :class:`OpenAITextSummarizer`.
 """
 
 from __future__ import annotations
@@ -13,13 +13,13 @@ from typing import Any
 from ..config import AppConfig
 from ..ports.cutplan import AgentStep, ToolCall
 
-# Bound OMLX HTTP calls so a hung model server can't stall a cut-plan turn
+# Bound HTTP calls to the OpenAI-compatible server so a hung model server can't stall a cut-plan turn
 # forever. Larger window than the per-clip pipeline: the director generates up
 # to ~2048 tokens per round. A stuck request times out, is retried, then errors.
-_OMLX_TIMEOUT_S = 180.0
+_REQUEST_TIMEOUT_S = 180.0
 
 
-class OmlxAgentClient:
+class OpenAIAgentClient:
     """Tool-calling client for the rough-cut director (text model)."""
 
     def __init__(self, config: AppConfig, model: str | None = None) -> None:
@@ -32,9 +32,9 @@ class OmlxAgentClient:
         from openai import APIConnectionError, OpenAI
 
         client = OpenAI(
-            base_url=self._config.env.OMLX_BASE_URL,
-            api_key=self._config.env.OMLX_API_KEY,
-            timeout=_OMLX_TIMEOUT_S,
+            base_url=self._config.env.OPENAI_BASE_URL,
+            api_key=self._config.env.OPENAI_API_KEY,
+            timeout=_REQUEST_TIMEOUT_S,
         )
 
         max_retries = 2
@@ -52,13 +52,13 @@ class OmlxAgentClient:
             except APIConnectionError as e:
                 if attempt == max_retries:
                     raise RuntimeError(
-                        f"OMLX connection failed after {1 + max_retries} attempt(s): {e}"
+                        f"connection to the OpenAI-compatible server failed after {1 + max_retries} attempt(s): {e}"
                     ) from e
                 continue
             except Exception as e:  # noqa: BLE001 — retry unexpected LLM errors
                 if attempt == max_retries:
                     raise RuntimeError(
-                        f"OMLX agent request failed after {1 + max_retries} attempt(s): {e}"
+                        f"agent request to the OpenAI-compatible server failed after {1 + max_retries} attempt(s): {e}"
                     ) from e
                 continue
 
@@ -76,25 +76,27 @@ class OmlxAgentClient:
                 ))
             return AgentStep(content=msg.content or "", tool_calls=tool_calls)
 
-        raise RuntimeError("OMLX agent returned no result after retries")
+        raise RuntimeError("agent returned no result after retries")
 
     def count_tokens(self, text: str) -> int | None:
-        """Exact token count of *text* via OMLX's ``/messages/count_tokens``.
+        """Exact token count of *text* via the server's ``/messages/count_tokens``.
 
-        OMLX has no OpenAI-style tokenize route but exposes the Anthropic-style
-        endpoint, which tokenizes *with the served model's own tokenizer* (so it
-        matches the real prompt). Best-effort: any failure returns ``None`` and
+        The OpenAI chat-completions contract has no tokenize route; this calls
+        the Anthropic-style ``/messages/count_tokens`` endpoint instead, which
+        OMLX exposes and tokenizes *with the served model's own tokenizer* (so
+        it matches the real prompt). Not every OpenAI-compatible server
+        supports this route — best-effort: any failure returns ``None`` and
         the director falls back to a character estimate.
         """
         import httpx
 
         if not text:
             return 0
-        url = f"{self._config.env.OMLX_BASE_URL.rstrip('/')}/messages/count_tokens"
+        url = f"{self._config.env.OPENAI_BASE_URL.rstrip('/')}/messages/count_tokens"
         try:
             resp = httpx.post(
                 url,
-                headers={"Authorization": f"Bearer {self._config.env.OMLX_API_KEY}"},
+                headers={"Authorization": f"Bearer {self._config.env.OPENAI_API_KEY}"},
                 json={"model": self._model, "messages": [{"role": "user", "content": text}]},
                 timeout=30.0,
             )
@@ -114,9 +116,9 @@ class OmlxAgentClient:
         from openai import APIConnectionError, OpenAI
 
         client = OpenAI(
-            base_url=self._config.env.OMLX_BASE_URL,
-            api_key=self._config.env.OMLX_API_KEY,
-            timeout=_OMLX_TIMEOUT_S,
+            base_url=self._config.env.OPENAI_BASE_URL,
+            api_key=self._config.env.OPENAI_API_KEY,
+            timeout=_REQUEST_TIMEOUT_S,
         )
 
         max_retries = 2
@@ -137,16 +139,16 @@ class OmlxAgentClient:
             except APIConnectionError as e:
                 if attempt == max_retries:
                     raise RuntimeError(
-                        f"OMLX connection failed after {1 + max_retries} attempt(s): {e}"
+                        f"connection to the OpenAI-compatible server failed after {1 + max_retries} attempt(s): {e}"
                     ) from e
                 continue
             except Exception as e:  # noqa: BLE001
                 if attempt == max_retries:
                     raise RuntimeError(
-                        f"OMLX request failed after {1 + max_retries} attempt(s): {e}"
+                        f"request to the OpenAI-compatible server failed after {1 + max_retries} attempt(s): {e}"
                     ) from e
                 continue
 
             return response.choices[0].message.content or ""
 
-        raise RuntimeError("OMLX agent returned no completion after retries")
+        raise RuntimeError("agent returned no completion after retries")

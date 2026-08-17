@@ -1,12 +1,13 @@
-"""Integration tests for OmlxVisionTagger — real OMLX calls.
+"""Integration tests for OpenAIVisionTagger — real server calls.
 
-These tests require a running OMLX server and use the actual vision model
-to produce real visual tags. Skip if OMLX is unavailable or credentials are missing.
+These tests require a running OpenAI-compatible server (e.g. OMLX) and use
+the actual vision model to produce real visual tags. Skip if the server is
+unavailable or credentials are missing.
 
 Run with:
-    pytest tests/integration/test_integration_omlx_vision.py -v --run-integration
+    pytest tests/integration/test_integration_openai_vision.py -v --run-integration
 
-Pattern matches test_integration_omlx_summarizer.py.
+Pattern matches test_integration_openai_summarizer.py.
 """
 
 from __future__ import annotations
@@ -16,7 +17,7 @@ from pathlib import Path
 
 import pytest
 
-from cutfinder.adapters.omlx_vision import OmlxVisionTagger
+from cutfinder.adapters.openai_vision import OpenAIVisionTagger
 from cutfinder.config import resolve_env
 
 
@@ -34,23 +35,23 @@ def _real_frame(index: int = 0) -> Path:
     return frame
 
 
-def _has_omlx_config() -> bool:
-    """Check if OMLX credentials are configured (global store or OS env)."""
+def _has_openai_config() -> bool:
+    """Check if server credentials are configured (global store or OS env)."""
     try:
         settings = resolve_env()
-        return bool(settings.OMLX_BASE_URL and settings.OMLX_API_KEY)
+        return bool(settings.OPENAI_BASE_URL and settings.OPENAI_API_KEY)
     except Exception:
         return False
 
 
 @pytest.fixture(scope="module")
 def vision_tagger(tmp_path_factory):
-    """Create a real OmlxVisionTagger for integration tests."""
-    if not _has_omlx_config():
-        pytest.skip("OMLX credentials not configured (skip integration test)")
+    """Create a real OpenAIVisionTagger for integration tests."""
+    if not _has_openai_config():
+        pytest.skip("OpenAI-compatible server credentials not configured (skip integration test)")
 
     # Use a temp library dir for config
-    tmp_path_factory.mktemp("omlx_vision_test")
+    tmp_path_factory.mktemp("openai_vision_test")
     # We'll load config from env vars directly since we don't need a real library
 
     from cutfinder.config import AppConfig, Prefs
@@ -59,15 +60,15 @@ def vision_tagger(tmp_path_factory):
         prefs=Prefs(vision_model="Qwen3-VL-8B"),
     )
 
-    return OmlxVisionTagger(config)
+    return OpenAIVisionTagger(config)
 
 
 @pytest.mark.integration
-class TestOmlxVisionTaggerIntegration:
-    """Real OMLX integration tests — require running inference server."""
+class TestOpenAIVisionTaggerIntegration:
+    """Real integration tests — require a running inference server."""
 
     def test_single_frame_tagging(self, vision_tagger):
-        """Send one frame to OMLX and verify structured JSON response."""
+        """Send one frame to the server and verify structured JSON response."""
         frame = _real_frame(0)
 
         result = vision_tagger.describe([frame])
@@ -79,7 +80,7 @@ class TestOmlxVisionTaggerIntegration:
             assert isinstance(tag, str)
 
     def test_multi_frame_tagging(self, vision_tagger):
-        """Send multiple frames in one request — OMLX should handle multi-frame input."""
+        """Send multiple frames in one request — the server should handle multi-frame input."""
         frame1 = _real_frame(0)
         frame2 = _real_frame(1)
         result = vision_tagger.describe([frame1, frame2])

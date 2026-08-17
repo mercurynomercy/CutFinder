@@ -40,7 +40,7 @@
 | 4 | 按拍摄日期 + A/B-roll 自动分类到目录 | ✅ 已实现 | 目录结构 `库/日期/A-roll(或 B-roll)/`，重名自动加序号 |
 | 5 | 标签标记素材内容 | ✅ 已实现 | AI 自动生成 + 用户手动增删，来源可区分（auto vs manual） |
 | 6 | 素材缩略图生成与浏览墙 | ✅ 已实现 | ffmpeg 抽代表帧，存储于 `.cutfinder/thumbnails/`；支持照片（HEIC/JPG/PNG） |
-| 7 | 接本地 MLX / OpenAI 兼容接口 Qwen3.6/视觉模型 | ✅ 已实现 | A-roll 文本总结、B-roll 画面识别均走 OMLX（`localhost:8000/v1`） |
+| 7 | 接本地 OpenAI 兼容接口 Qwen3.6/视觉模型 | ✅ 已实现 | A-roll 文本总结、B-roll 画面识别均走本地 OpenAI 兼容服务端（如 OMLX，`localhost:8000/v1`） |
 | 8 | 关键帧（keyframe）建议 | ✅ 已实现 | 复用 B-roll 视觉模型，为每段素材推荐最佳切点；详情面板 + 画廊角标展示 |
 
 ---
@@ -50,7 +50,7 @@
 | 层 | 选型 | 理由 |
 |----|------|------|
 | 运行形态 | 本地 Web App（浏览器访问 `localhost`）；原生 macOS `.app` 外壳（Swift/AppKit + WKWebView 内嵌前端，已实现） | AI/视频工具链最顺；Dock 生命周期、签名公证完整支持 |
-| 模型服务 | [OMLX](https://github.com/jundot/omlx)（本地推理服务器，OpenAI 兼容） | 同一个接口同时托管文本与视觉模型，内置 LRU/pin/TTL 内存管理 |
+| 模型服务 | 本地 OpenAI 兼容推理服务器（参考实现：[OMLX](https://github.com/jundot/omlx)；LM Studio、Ollama 等亦可） | 同一个接口同时托管文本与视觉模型，服务端负责 LRU/pin/TTL 内存管理 |
 | 后端 | Python + FastAPI（`backend/cutfinder/`） | 视频与 AI 生态最全，模块通过 `Protocol` 接口隔离可测 |
 | 数据库 | SQLite（单文件，存于 `<库>/.cutfinder/catalog.sqlite`），含 FTS5 全文搜索 | 零配置、易备份；FTS5 支持按转写文本 + 画面描述全文检索 |
 | 前端 | Vite + React + Tailwind CSS + shadcn/ui（`frontend/`） | 缩略图墙 + 多维筛选 / 搜索；深色 UI，详情面板右抽屉 |
@@ -65,11 +65,11 @@
 |------|------|---------|
 | 人声检测（A/B 判定） | Silero VAD（轻量） | `adapters/silero_vad.py`，本地推理独立进程；阈值默认 0.35（可配置） |
 | 人声分离（转写前去 BGM） | **Demucs** `htdemucs`（约 80 MB） | `adapters/demucs_separator.py`，本地 torch/MPS；A-roll 流水线可选开关 `vocal_separation`（默认关），字幕导出强制分离 |
-| 中文语音转写（A-roll） | `mlx-whisper` large-v3 / **Qwen3-ASR** + ForcedAligner | 双引擎，`transcription_engine` 偏好切换（默认 `whisper`）；不走 OMLX，独立本地进程 |
-| A-roll 简介 + 标签（文本总结） | **Qwen3.6-35B-A3B**（文本 MoE） | OMLX `/chat/completions`，结构化输出 `{summary, tags}` |
-| B-roll 画面识别 + 标签 | **Qwen3-VL-8B**（视觉） | OMLX 同一接口换 `model` 名，base64 发帧；结构化输出 `{description, tags}` |
+| 中文语音转写（A-roll） | `mlx-whisper` large-v3 / **Qwen3-ASR** + ForcedAligner | 双引擎，`transcription_engine` 偏好切换（默认 `whisper`）；不走 OpenAI 兼容服务端，独立本地进程 |
+| A-roll 简介 + 标签（文本总结） | **Qwen3.6-35B-A3B**（文本 MoE） | OpenAI 兼容服务端 `/chat/completions`，结构化输出 `{summary, tags}` |
+| B-roll 画面识别 + 标签 | **Qwen3-VL-8B**（视觉） | 同一 OpenAI 兼容接口换 `model` 名，base64 发帧；结构化输出 `{description, tags}` |
 
-> **模型分工**：`Qwen3.6-35B-A3B` 是文本模型，只看文字；`Qwen3-VL-8B` 是视觉模型，专门「看」画面。两者由 OMLX 同时托管，通过同一 OpenAI 兼容接口、用不同 `model` 名调用。OMLX 负责模型的加载/卸载与内存管理（LRU 淘汰、pin、按模型 TTL）。
+> **模型分工**：`Qwen3.6-35B-A3B` 是文本模型，只看文字；`Qwen3-VL-8B` 是视觉模型，专门「看」画面。两者由本地 OpenAI 兼容服务端（如 OMLX）同时托管，通过同一接口、用不同 `model` 名调用。服务端负责模型的加载/卸载与内存管理（LRU 淘汰、pin、按模型 TTL）。
 
 ---
 
@@ -93,8 +93,8 @@
    ▼                                      ▼
 (可选 Demucs 去 BGM → )               ffmpeg 均匀抽若干帧（默认5）
 mlx-whisper / Qwen3-ASR 转写中文全文          ▼
-▼                                   Qwen3-VL 给帧打「标签+描述」(OMLX)
-Qwen3.6 生成「简介+标签」(OMLX)           │
+▼                                   Qwen3-VL 给帧打「标签+描述」(OpenAI 兼容服务端)
+Qwen3.6 生成「简介+标签」(OpenAI 兼容服务端)  │
   │                                       │
   └───────────────┬───────────────────────┘
                   ▼
@@ -157,8 +157,8 @@ Qwen3.6 生成「简介+标签」(OMLX)           │
 
 | 变量 | 默认值 | 说明 |
 |------|--------|------|
-| `OMLX_BASE_URL` | 空（可设在 `~/.cutfinder/config.json`） | OMLX 接口地址，可在 Settings UI 中设置 |
-| `OMLX_API_KEY` | **必填**，无默认值 | OMLX 鉴权密钥；缺失时启动不报错但 AI 分析不可用 |
+| `OPENAI_BASE_URL` | 空（可设在 `~/.cutfinder/config.json`） | 本地 OpenAI 兼容服务端（如 OMLX）接口地址，可在 Settings UI 中设置 |
+| `OPENAI_API_KEY` | **必填**，无默认值 | 该服务端的鉴权密钥；缺失时启动不报错但 AI 分析不可用 |
 
 ### JSON 偏好设置（`<库>/.cutfinder/config.json`）
 
@@ -167,8 +167,8 @@ Qwen3.6 生成「简介+标签」(OMLX)           │
 | `source_folders` | 空列表 | 源文件夹路径，可多个 |
 | `library_path` | 空（必填） | 复制目标素材库根目录；保存时校验非空 |
 | `text_model` | `Qwen3.6-35B-A3B` | A-roll 简介/标签用的文本模型名（空则用默认） |
-| `vision_model` | `Qwen3-VL-8B`（空则用默认） | B-roll 画面识别用的视觉模型名（量化等级在 OMLX 侧选择） |
-| `whisper_model` | `mlx-community/whisper-large-v3-mlx` | mlx-whisper 模型档位（独立于 OMLX） |
+| `vision_model` | `Qwen3-VL-8B`（空则用默认） | B-roll 画面识别用的视觉模型名（量化等级在服务端侧选择） |
+| `whisper_model` | `mlx-community/whisper-large-v3-mlx` | mlx-whisper 模型档位（独立于 OpenAI 兼容服务端） |
 | `transcription_engine` | `whisper` | 转写引擎选择：`whisper`（mlx-whisper）或 `qwen`（Qwen3-ASR + ForcedAligner），机器全局 |
 | `qwen_asr_model` | `mlx-community/Qwen3-ASR-1.7B-8bit` | Qwen3-ASR 模型名（机器全局） |
 | `qwen_aligner_model` | `mlx-community/Qwen3-ForcedAligner-0.6B-8bit` | ForcedAligner 模型名（机器全局） |
@@ -207,7 +207,7 @@ Qwen3.6 生成「简介+标签」(OMLX)           │
 | 4 | 按拍摄日期+类型自动分类到目录 | ✅ 已实现 |
 | 5 | AI自动生成 + 用户手动标签，来源可区分 | ✅ 已实现 |
 | 6 | ffmpeg/Pillow 缩略图生成与浏览墙（含照片） | ✅ 已实现 |
-| 7 | OMLX Qwen3.6 / VL 本地模型集成（文本+视觉） | ✅ 已实现 |
+| 7 | OpenAI 兼容服务端 Qwen3.6 / VL 本地模型集成（文本+视觉） | ✅ 已实现 |
 | 8 | 关键帧建议（A-roll/B-roll）+ 详情面板角标 + 自动开关 | ✅ 已实现 |
 
 ### v1 之外的独立工具（复用适配器/队列/SSE，不改动 per-clip 流水线）
@@ -234,10 +234,10 @@ Qwen3.6 生成「简介+标签」(OMLX)           │
 | **拍摄时间被改** | 分类日期错误，素材顺序混乱 | 不改原文件；副本用 `copy2` 保留 mtime/atime；内嵌元数据天然不变 |
 | **占用双倍磁盘空间**（复制模式） | 素材库膨胀，磁盘压力 | 文档明示设计选择；后续可提供「仅索引/移动」模式作为选项（未实现） |
 | **AI 判定/简介出错** | A/B 分类不准，摘要不可用 | VAD 阈值可配置（默认 0.35）；A/B 判定可手动纠正并记住（`roll_source='manual'`）；简介与标签均可人工编辑 |
-| **文本+视觉两模型同驻内存** | Apple Silicon 显存不足，推理变慢或 OOM | OMLX LRU/pin/TTL 内存管理；视觉默认量化（4/6-bit）；抽帧数量可配置 |
+| **文本+视觉两模型同驻内存** | Apple Silicon 显存不足，推理变慢或 OOM | 依赖服务端 LRU/pin/TTL 内存管理（如 OMLX）；视觉默认量化（4/6-bit）；抽帧数量可配置 |
 | **中文转写准确率** | A-roll 简介基于错误文本，标签不准 | Whisper large-v3 中文表现好；Qwen3-ASR+ForcedAligner 更准且时间轴不漂移（zh-en mixed audio）；保留全文供人工核对 |
 | **LLM function-calling 不稳定**（初剪 Agent） | 多轮工具调用不收敛，分镜表无法生成 | 已退化为「按天 mini-agent」+ 回落 staged 纯 JSON；round cap + emit_plan 催收兜底；多片段日用精简上下文 |
-| **OMLX 服务不可达** | A-roll/B-roll AI 分析失败，但基础功能（扫描/VAD/缩略图）仍可用 | 原生 App Shell 启动时探测 OMLX，不可达弹引导页（含下载链接 + 重试）；Web App 启动时明确报错 |
+| **OpenAI 兼容服务端不可达** | A-roll/B-roll AI 分析失败，但基础功能（扫描/VAD/缩略图）仍可用 | 原生 App Shell 启动时探测该服务端，不可达弹引导页（含下载链接 + 重试）；Web App 启动时明确报错 |
 
 ---
 

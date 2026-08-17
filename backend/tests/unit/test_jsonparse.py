@@ -1,4 +1,4 @@
-"""Tests for the lenient JSON-object extractor used by the OMLX adapters."""
+"""Tests for the lenient JSON-object extractor used by the OpenAI-compatible adapters."""
 
 from __future__ import annotations
 

@@ -76,7 +76,7 @@ class BrollInspector(Protocol):
 
 
 class LLMAgentClient(Protocol):
-    """Text-model access for the director (OMLX Qwen3.6)."""
+    """Text-model access for the director (Qwen3.6 via an OpenAI-compatible server)."""
 
     def run(
         self, messages: list[dict[str, Any]], tools: list[dict[str, Any]],

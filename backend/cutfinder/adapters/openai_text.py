@@ -1,18 +1,18 @@
-"""OmlxSummarizer — A-roll text summary + tags via OMLX (OpenAI-compatible).
+"""OpenAITextSummarizer — A-roll text summary + tags via a local OpenAI-compatible server.
 
-Calls the local OMLX server's ``/chat/completions`` endpoint with
+Calls the configured server's ``/chat/completions`` endpoint with
 structured JSON output to produce a Chinese summary and tag list from
 transcript text.
 
 Edge cases handled:
   * Missing ``full_text`` or empty string → returns empty SummaryResult.
-  * OMLX unavailable (connection error) → raises ``RuntimeError`` with detail.
+  * Server unavailable (connection error) → raises ``RuntimeError`` with detail.
   * Malformed LLM response (missing keys) → falls back to empty strings/lists.
 
 Examples
 --------
->>> config = AppConfig(env=EnvSettings(OMLX_BASE_URL="http://localhost:8000/v1", OMLX_API_KEY="key"), prefs=Prefs())
->>> summarizer = OmlxSummarizer(config)  # doctest: +SKIP
+>>> config = AppConfig(env=EnvSettings(OPENAI_BASE_URL="http://localhost:8000/v1", OPENAI_API_KEY="key"), prefs=Prefs())
+>>> summarizer = OpenAITextSummarizer(config)  # doctest: +SKIP
 >>> result = summarizer.summarize("这是一段关于旅行的视频...")  # doctest: +SKIP
 >>> print(result.summary)
 """
@@ -24,91 +24,23 @@ from typing import Any
 from ..config import AppConfig
 from ..domain.models import CutSuggestion, Segment, SummaryResult
 from ..ports.ai import Summarizer
+from .text_prompts import CUTS_PROMPT_ZH, CUTS_PROMPTS, SUMMARIZE_PROMPT_ZH, SUMMARIZE_PROMPTS
 
-# Bound OMLX HTTP calls so a hung model server can't block the worker forever.
+# Bound HTTP calls to the OpenAI-compatible server so a hung model server can't block the worker forever.
 # Generous read window — local MLX generation of the capped token budgets here
 # takes seconds, not minutes; a truly stuck request times out, is retried, then
 # surfaces as a task error rather than an indefinite hang.
-_OMLX_TIMEOUT_S = 120.0
+_REQUEST_TIMEOUT_S = 120.0
 
-# ── prompt template ────────────────────────────────────────────────
+# ── OpenAITextSummarizer ───────────────────────────────────────────────
 
-_SUMMARIZE_PROMPT_ZH = """\
-你是一个专业的视频内容整理助手。请根据以下A-roll（有解说）视频的转写文本，完成两件事：
-
-1. **简介**：用中文撰写一段简洁的概述（30-80字），概括视频的核心内容和主题。
-2. **标签**：提取5-10个关键词/短语作为标签，涵盖视频的主题、场景、情感等维度。
-
-请以如下JSON格式回复（不要添加任何其他内容）：
-{{"summary": "你的简介", "tags": ["标签1", "标签2", ...]}}
-
-转写文本：
-{transcript_text}
-"""
-
-_SUMMARIZE_PROMPT_EN = """\
-You are a professional video content organization assistant. Based on the \
-transcript of the following A-roll (narrated) video, do two things:
-
-1. **Summary**: Write a concise overview in English (30-80 words) capturing the \
-core content and theme.
-2. **Tags**: Extract 5-10 keywords/phrases as tags covering theme, scene, \
-emotion, etc.
-
-Reply ONLY in the following JSON format (no extra content):
-{{"summary": "your summary", "tags": ["tag1", "tag2", ...]}}
-
-Transcript:
-{transcript_text}
-"""
-
-_SUMMARIZE_PROMPTS = {"zh": _SUMMARIZE_PROMPT_ZH, "en": _SUMMARIZE_PROMPT_EN}
-
-_CUTS_PROMPT_ZH = """\
-你是专业的视频剪辑助手。下面是一段 A-roll（有解说）视频的转写，已按句子编号并标注时间。\
-请挑出最值得保留、最精彩或信息量最大的最多 {n} 段，按精彩程度从高到低排序。
-
-要求：
-- 每段用**起始句子编号**和**结束句子编号**表示（可只含一句，即 start == end）。
-- 只能使用下面列出的句子编号，不要编造时间。
-- 每段给一句话理由。
-
-请仅以如下 JSON 回复（不要其他内容）：
-{{"cuts": [{{"start": 起始编号, "end": 结束编号, "reason": "理由"}}, ...]}}
-
-句子列表：
-{segments}
-"""
-
-_CUTS_PROMPT_EN = """\
-You are a professional video editing assistant. Below is the transcript of an \
-A-roll (narrated) video, numbered by sentence with timestamps. Pick up to {n} \
-best stretches to keep — the most compelling or information-rich — ranked best first.
-
-Rules:
-- Express each stretch by its **start sentence index** and **end sentence index** \
-(a single sentence is fine: start == end).
-- Use only the sentence indices listed below; do not invent timecodes.
-- Give a one-line reason for each.
-
-Reply ONLY as the following JSON (no extra content):
-{{"cuts": [{{"start": start_index, "end": end_index, "reason": "reason"}}, ...]}}
-
-Sentences:
-{segments}
-"""
-
-_CUTS_PROMPTS = {"zh": _CUTS_PROMPT_ZH, "en": _CUTS_PROMPT_EN}
-
-# ── OmlxSummarizer ───────────────────────────────────────────────
-
-class OmlxSummarizer(Summarizer):
-    """Call a local OpenAI-compatible model server (OMLX) to summarize transcript text.
+class OpenAITextSummarizer(Summarizer):
+    """Call a local OpenAI-compatible model server to summarize transcript text.
 
     Parameters
     ----------
     config:
-        Application-wide configuration containing OMLX endpoint and model settings.
+        Application-wide configuration containing the OpenAI-compatible endpoint and model settings.
     model:
         Override the text model name from config defaults (``Qwen3.6-35B-A3B``).
         Useful when testing with a smaller model like ``"Qwen2.5-7B-Instruct"``.
@@ -116,10 +48,10 @@ class OmlxSummarizer(Summarizer):
     Examples
     --------
     >>> config = AppConfig(  # doctest: +SKIP
-    ...     env=EnvSettings(OMLX_BASE_URL="http://localhost:8000/v1", OMLX_API_KEY="test-key"),
+    ...     env=EnvSettings(OPENAI_BASE_URL="http://localhost:8000/v1", OPENAI_API_KEY="test-key"),
     ...     prefs=Prefs(text_model="Qwen3.6-35B-A3B"),
     ... )
-    >>> summarizer = OmlxSummarizer(config)  # doctest: +SKIP
+    >>> summarizer = OpenAITextSummarizer(config)  # doctest: +SKIP
     """
 
     def __init__(self, config: AppConfig, model: str | None = None) -> None:
@@ -132,11 +64,12 @@ class OmlxSummarizer(Summarizer):
         )
 
     def summarize(self, transcript_text: str) -> SummaryResult:
-        """Summarize A-roll transcript text via OMLX structured output.
+        """Summarize A-roll transcript text via structured output from the configured server.
 
         1. Builds a Chinese prompt with the transcript inserted.
-        2. Sends to OMLX /chat/completions using OpenAI Python client with
-           ``response_format={"type": "json_schema", ...}`` for structured output.
+        2. Sends to the OpenAI-compatible server's /chat/completions using the
+           OpenAI Python client with ``response_format={"type": "json_schema", ...}``
+           for structured output.
         3. Parses the JSON response into a :class:`SummaryResult`.
 
         Parameters
@@ -152,7 +85,7 @@ class OmlxSummarizer(Summarizer):
         Raises
         ------
         RuntimeError
-            If the OMLX call fails (connection error, bad response, etc.).
+            If the request to the OpenAI-compatible server fails (connection error, bad response, etc.).
         """
         if not transcript_text or not transcript_text.strip():
             return SummaryResult(summary="", tags=[])
@@ -162,13 +95,13 @@ class OmlxSummarizer(Summarizer):
         from ._jsonparse import parse_json_object
 
         client = OpenAI(
-            base_url=self._config.env.OMLX_BASE_URL,
-            api_key=self._config.env.OMLX_API_KEY,
-            timeout=_OMLX_TIMEOUT_S,
+            base_url=self._config.env.OPENAI_BASE_URL,
+            api_key=self._config.env.OPENAI_API_KEY,
+            timeout=_REQUEST_TIMEOUT_S,
         )
 
-        prompt_template = _SUMMARIZE_PROMPTS.get(
-            self._config.prefs.output_language, _SUMMARIZE_PROMPT_ZH
+        prompt_template = SUMMARIZE_PROMPTS.get(
+            self._config.prefs.output_language, SUMMARIZE_PROMPT_ZH
         )
         prompt = prompt_template.format(transcript_text=transcript_text)
         max_retries = 2
@@ -191,14 +124,14 @@ class OmlxSummarizer(Summarizer):
             except APIConnectionError as e:
                 if attempt == max_retries:
                     raise RuntimeError(
-                        f"OMLX connection failed after {1 + max_retries} attempt(s): {e}"
+                        f"connection to the OpenAI-compatible server failed after {1 + max_retries} attempt(s): {e}"
                     ) from e
                 continue  # retry on connection error
 
             except Exception as e:  # noqa: BLE001 — catch-all for unexpected LLM errors
                 if attempt == max_retries:
                     raise RuntimeError(
-                        f"OMLX request failed after {1 + max_retries} attempt(s): {e}"
+                        f"request to the OpenAI-compatible server failed after {1 + max_retries} attempt(s): {e}"
                     ) from e
                 continue  # retry on other errors
 
@@ -230,7 +163,7 @@ class OmlxSummarizer(Summarizer):
             return SummaryResult(summary=summary, tags=list(tags_raw))
 
         raise RuntimeError(
-            "OMLX summarizer returned no valid result after retries"
+            "text summarizer returned no valid result after retries"
         )
 
     def recommend_cuts(self, segments: list[Segment], n: int) -> list[CutSuggestion]:
@@ -251,13 +184,13 @@ class OmlxSummarizer(Summarizer):
             f"[{i}] ({s.start_s:.1f}-{s.end_s:.1f}s) {s.text}"
             for i, s in enumerate(segments)
         )
-        prompt_template = _CUTS_PROMPTS.get(self._config.prefs.output_language, _CUTS_PROMPT_ZH)
+        prompt_template = CUTS_PROMPTS.get(self._config.prefs.output_language, CUTS_PROMPT_ZH)
         prompt = prompt_template.format(n=n, segments=numbered)
 
         client = OpenAI(
-            base_url=self._config.env.OMLX_BASE_URL,
-            api_key=self._config.env.OMLX_API_KEY,
-            timeout=_OMLX_TIMEOUT_S,
+            base_url=self._config.env.OPENAI_BASE_URL,
+            api_key=self._config.env.OPENAI_API_KEY,
+            timeout=_REQUEST_TIMEOUT_S,
         )
         max_retries = 2
         for attempt in range(1 + max_retries):
@@ -271,11 +204,11 @@ class OmlxSummarizer(Summarizer):
                 )
             except APIConnectionError as e:
                 if attempt == max_retries:
-                    raise RuntimeError(f"OMLX connection failed after {1 + max_retries} attempt(s): {e}") from e
+                    raise RuntimeError(f"connection to the OpenAI-compatible server failed after {1 + max_retries} attempt(s): {e}") from e
                 continue
             except Exception as e:  # noqa: BLE001
                 if attempt == max_retries:
-                    raise RuntimeError(f"OMLX request failed after {1 + max_retries} attempt(s): {e}") from e
+                    raise RuntimeError(f"request to the OpenAI-compatible server failed after {1 + max_retries} attempt(s): {e}") from e
                 continue
 
             raw = response.choices[0].message.content
@@ -292,7 +225,7 @@ class OmlxSummarizer(Summarizer):
             # Valid JSON but no usable cut → don't loop forever; accept empty.
             return []
 
-        raise RuntimeError("OMLX cut recommender returned no valid result after retries")
+        raise RuntimeError("cut recommender returned no valid result after retries")
 
     @staticmethod
     def _build_cuts(

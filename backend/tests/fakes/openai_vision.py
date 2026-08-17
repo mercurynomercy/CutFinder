@@ -1,11 +1,11 @@
-"""Fake VisionTagger for unit testing — no real OMLX calls.
+"""Fake VisionTagger for unit testing — no real server calls.
 
 Returns a fixed :class:`VisionResult` so tests can verify
 prompt construction, request parameters, and JSON parsing logic without network access.
 
 Examples
 --------
->>> from tests.fakes.omlx_vision import FakeVisionTagger, make_sample_result
+>>> from tests.fakes.openai_vision import FakeVisionTagger, make_sample_result
 >>> fake = FakeVisionTagger()
 >>> result = fake.describe([Path("frame1.png")])
 >>> assert isinstance(result.description, str)

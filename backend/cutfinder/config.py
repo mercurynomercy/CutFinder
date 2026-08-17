@@ -1,6 +1,6 @@
 """Configuration loading: OS env + JSON (machine-global + per-library prefs).
 
-OMLX endpoint/key and model names come from ``~/.cutfinder/config.json``
+OpenAI-compatible endpoint/key and model names come from ``~/.cutfinder/config.json``
 (written by the Settings UI) or OS environment variables; per-library
 preferences live in ``<library>/.cutfinder/config.json``. All classes are
 frozen Pydantic ``BaseModel`` instances so they are immutable, hashable
@@ -21,11 +21,11 @@ from pydantic import BaseModel, Field, ValidationInfo, field_validator
 from pydantic_settings import BaseSettings
 
 # ---------------------------------------------------------------------------
-# EnvSettings — OMLX endpoint/key from OS env vars / the machine-global store
+# EnvSettings — OpenAI-compatible endpoint/key from OS env vars / the machine-global store
 # ---------------------------------------------------------------------------
 
 # Keys that live in the machine-global store / environment (not per-library).
-_GLOBAL_KEYS = ("OMLX_BASE_URL", "OMLX_API_KEY", "TEXT_MODEL", "VISION_MODEL")
+_GLOBAL_KEYS = ("OPENAI_BASE_URL", "OPENAI_API_KEY", "TEXT_MODEL", "VISION_MODEL")
 
 # Typed Prefs fields the UI stores machine-globally (in ~/.cutfinder/config.json)
 # instead of per library, so one value applies across every library. Unlike
@@ -60,13 +60,13 @@ DEMUCS_MODELS_DIR = MODELS_DIR / "demucs"
 QWEN_MODELS_DIR = MODELS_DIR / "qwen"
 
 # Machine-global settings written by the UI. These are shared across all
-# libraries (the OMLX endpoint/key are machine-wide, not per-library) so the
+# libraries (the OpenAI-compatible endpoint/key are machine-wide, not per-library) so the
 # app runs with no environment variables at all.
 _GLOBAL_CONFIG_FILE = Path.home() / ".cutfinder" / "config.json"
 
 
 class EnvSettings(BaseSettings):
-    """OMLX endpoint/key.
+    """OpenAI-compatible server endpoint/key.
 
     Resolved by :func:`resolve_env` with precedence
     ``~/.cutfinder/config.json`` (written by the UI) > OS environment
@@ -75,13 +75,13 @@ class EnvSettings(BaseSettings):
     surface a clear connection error if used while still empty.
     """
 
-    OMLX_BASE_URL: str = Field(
+    OPENAI_BASE_URL: str = Field(
         default="",
-        description="Base URL for the local OMLX server.",
+        description="Base URL for the local OpenAI-compatible server.",
     )
-    OMLX_API_KEY: str = Field(
+    OPENAI_API_KEY: str = Field(
         default="",
-        description="API key for authenticating with the OMLX server.",
+        description="API key for authenticating with the OpenAI-compatible server.",
     )
 
     # Default model names — overridable via global config (settings UI) or env.
@@ -206,7 +206,7 @@ def save_cut_director_prompt(prompt: str | None) -> None:
 
 
 def resolve_env() -> EnvSettings:
-    """Resolve OMLX config, layering all sources.
+    """Resolve OpenAI-compatible server config, layering all sources.
 
     Precedence (highest wins): ``~/.cutfinder/config.json`` (Settings UI) >
     OS environment variable > empty. The Settings UI is authoritative — values
@@ -284,7 +284,7 @@ class Prefs(BaseModel, frozen=True):
     # Max tool-calling rounds before the loop force-finalizes the current draft.
     cut_max_tool_rounds: int = Field(default=24, ge=1, le=200)
     # Max live inspect_broll (Qwen3-VL) calls per generation; 0 = unlimited.
-    # Tunable because text/vision interleaving makes OMLX swap models (slow) —
+    # Tunable because text/vision interleaving makes the server swap models (slow) —
     # weak machines should cap it, strong machines can open it up.
     cut_vision_budget: int = Field(default=6, ge=0)
     # Default aspect ratio when the user doesn't state one in chat.
@@ -296,8 +296,8 @@ class Prefs(BaseModel, frozen=True):
     cut_critic_enabled: bool = False
     # Per-shooting-date catalog size caps (characters), fed to the day generator.
     # The Qwen3.6 text model takes a 260k-token context, so these are generous on
-    # purpose — they exist to bound local OMLX prefill cost/RAM, not to truncate.
-    # Counted as real tokens (OMLX /messages/count_tokens), not characters.
+    # purpose — they exist to bound local prefill cost/RAM, not to truncate.
+    # Counted as real tokens (via the server's /messages/count_tokens), not characters.
     # lean = agent mode (one short line per clip, transcripts fetched on demand);
     # staged = fast mode (台词 inlined since it has no tools, so it fills faster).
     cut_lean_token_budget: int = Field(default=50000, ge=1000, le=200000)
@@ -367,7 +367,7 @@ def load_config(library_path: str | Path) -> AppConfig:
     """
     library_dir = Path(library_path).resolve()
 
-    # Load OMLX settings from the global store, falling back to OS env vars.
+    # Load OpenAI-compatible server settings from the global store, falling back to OS env vars.
     env = resolve_env()
 
     # Load Prefs — merge JSON file on top of defaults

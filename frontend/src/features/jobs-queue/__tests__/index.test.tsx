@@ -122,7 +122,7 @@ describe('JobsQueuePage', () => {
         total: 1,
         done: 1,
         failed: 1,
-        error: 'OMLX returned HTTP 401: Invalid API key',
+        error: 'OpenAI-compatible server returned HTTP 401: Invalid API key',
       }),
     ])
 

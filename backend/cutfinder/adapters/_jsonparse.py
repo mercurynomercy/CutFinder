@@ -1,6 +1,6 @@
 """Lenient JSON-object extraction from chatty / fenced LLM output.
 
-The OMLX adapters no longer use strict ``response_format`` json_schema
+The OpenAI-compatible adapters no longer use strict ``response_format`` json_schema
 (it makes the quantized MLX models collapse into repetition loops), so the
 model returns the JSON as free text — possibly wrapped in ```json fences or
 with a little surrounding prose. This recovers the first JSON object.

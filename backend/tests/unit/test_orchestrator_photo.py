@@ -62,7 +62,7 @@ def test_photo_organizes_even_when_vision_fails() -> None:
     repo = FakeCatalogRepository()
     lib = FakeLibraryWriter(library_path="/lib")
     orch, vision = _orch(repo, lib)
-    vision.describe.side_effect = RuntimeError("OMLX down")
+    vision.describe.side_effect = RuntimeError("server down")
 
     clip_id = orch.process_clip(ClipCandidate(path="/src/a.png", fingerprint="bb02"))
 

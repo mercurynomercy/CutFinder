@@ -1,4 +1,4 @@
-"""Unit tests for OmlxSummarizer adapter.
+"""Unit tests for OpenAITextSummarizer adapter.
 
 Mocks the OpenAI client to test prompt construction, request params,
 JSON parsing from LLM response, retry logic, and edge cases — without
@@ -26,10 +26,10 @@ import pytest
 
 
 def _make_config(monkeypatch: pytest.MonkeyPatch) -> MagicMock:
-    """Create a mock AppConfig with OMLX settings."""
+    """Create a mock AppConfig with OpenAI-compatible server settings."""
     env = MagicMock()
-    env.OMLX_BASE_URL = "http://localhost:8000/v1"
-    env.OMLX_API_KEY = "test-api-key-12345"
+    env.OPENAI_BASE_URL = "http://localhost:8000/v1"
+    env.OPENAI_API_KEY = "test-api-key-12345"
     # Empty strings so the adapter's `.strip()` falls through to prefs.
     env.TEXT_MODEL = ""
     env.VISION_MODEL = ""
@@ -48,11 +48,11 @@ def _import_adapter():
     import sys
 
     for key in list(sys.modules):
-        if key.startswith("cutfinder.adapters.omlx_text"):
+        if key.startswith("cutfinder.adapters.openai_text"):
             del sys.modules[key]
 
-    import cutfinder.adapters.omlx_text  # noqa: F401
-    return sys.modules["cutfinder.adapters.omlx_text"]
+    import cutfinder.adapters.openai_text  # noqa: F401
+    return sys.modules["cutfinder.adapters.openai_text"]
 
 
 def _mocked_summarizer(
@@ -60,7 +60,7 @@ def _mocked_summarizer(
     monkeypatch: pytest.MonkeyPatch,
     model_override: str | None = None,
 ) -> MagicMock:
-    """Create an OmlxSummarizer with OpenAI client mocked.
+    """Create an OpenAITextSummarizer with OpenAI client mocked.
 
     Returns the adapter module so we can access internal functions too.
     """
@@ -70,7 +70,7 @@ def _mocked_summarizer(
     mock_openai = MagicMock()
     monkeypatch.setitem(__import__("sys").modules, "openai", mock_openai)  # type: ignore[attr-defined]
 
-    summarizer = mod.OmlxSummarizer(config, model=model_override)
+    summarizer = mod.OpenAITextSummarizer(config, model=model_override)
     return summarizer
 
 
@@ -500,7 +500,7 @@ class TestRetryLogic:
         mock_openai.APIConnectionError = _APIConnErr  # type: ignore[attr-defined]
         monkeypatch.setitem(__import__("sys").modules, "openai", mock_openai)  # type: ignore[attr-defined]
 
-        with pytest.raises(RuntimeError, match="OMLX connection failed"):
+        with pytest.raises(RuntimeError, match="connection to the OpenAI-compatible server failed"):
             summarizer.summarize("test")
 
     def test_unknown_error_raises_after_retries(self, monkeypatch):
@@ -543,8 +543,8 @@ class TestRetryLogic:
 
         monkeypatch.setitem(__import__("sys").modules, "openai", mock_openai)  # type: ignore[attr-defined]
 
-        summarizer = _import_adapter().OmlxSummarizer(config, model=None)
-        with pytest.raises(RuntimeError, match="OMLX request failed"):
+        summarizer = _import_adapter().OpenAITextSummarizer(config, model=None)
+        with pytest.raises(RuntimeError, match="request to the OpenAI-compatible server failed"):
             summarizer.summarize("test")
 
     def test_model_refusal_raises(self, monkeypatch):
@@ -600,12 +600,12 @@ class TestConfigIntegration:
 
     def test_default_model_from_prefs(self, monkeypatch):
         config = _make_config(monkeypatch)
-        mod = __import__("cutfinder.adapters.omlx_text", fromlist=["OmlxSummarizer"])
-        s = mod.OmlxSummarizer(config)
+        mod = __import__("cutfinder.adapters.openai_text", fromlist=["OpenAITextSummarizer"])
+        s = mod.OpenAITextSummarizer(config)
         assert s._model == "Qwen3.6-35B-A3B"
 
     def test_custom_model_override(self, monkeypatch):
         config = _make_config(monkeypatch)
-        mod = __import__("cutfinder.adapters.omlx_text", fromlist=["OmlxSummarizer"])
-        s = mod.OmlxSummarizer(config, model="custom-model")
+        mod = __import__("cutfinder.adapters.openai_text", fromlist=["OpenAITextSummarizer"])
+        s = mod.OpenAITextSummarizer(config, model="custom-model")
         assert s._model == "custom-model"

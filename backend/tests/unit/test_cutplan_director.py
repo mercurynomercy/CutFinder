@@ -435,7 +435,7 @@ class FakeAgentLLM:
         return self.raw
 
     def count_tokens(self, text: str) -> int:
-        # Deterministic stand-in for OMLX count_tokens: ~2 chars per token.
+        # Deterministic stand-in for the server's count_tokens: ~2 chars per token.
         self.count_calls = getattr(self, "count_calls", 0) + 1
         return (len(text) + 1) // 2
 

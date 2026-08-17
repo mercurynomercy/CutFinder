@@ -1,7 +1,7 @@
-"""Tests for :mod:`scripts.check_omlx` (CLI entry-point).
+"""Tests for :mod:`scripts.check_openai_compat` (CLI entry-point).
 
 Uses ``monkeypatch`` to inject environment variables and temporary JSON files,
-then asserts the CLI script resolves OMLX config correctly.
+then asserts the CLI script resolves the OpenAI-compatible server config correctly.
 
 httpx is mocked so no real server is needed.
 """
@@ -53,22 +53,22 @@ def write_global_cfg(tmp_path: Path) -> Callable[[dict[str, Any]], None]:
 
 
 class TestConfigFromGlobalStore:
-    """CLI script should read OMLX settings from ~/.cutfinder/config.json."""
+    """CLI script should read OpenAI-compatible server settings from ~/.cutfinder/config.json."""
 
     def test_reads_url_and_key_from_config_json(
         self, write_global_cfg: Callable[[dict[str, Any]], None], monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """When env vars are empty, config.json values should be used."""
-        write_global_cfg({"OMLX_BASE_URL": "http://localhost:9001/v1", "OMLX_API_KEY": "ui-key"})
+        write_global_cfg({"OPENAI_BASE_URL": "http://localhost:9001/v1", "OPENAI_API_KEY": "ui-key"})
 
         # Remove any env vars that could interfere
-        monkeypatch.delenv("OMLX_BASE_URL", raising=False)
-        monkeypatch.delenv("OMLX_API_KEY", raising=False)
+        monkeypatch.delenv("OPENAI_BASE_URL", raising=False)
+        monkeypatch.delenv("OPENAI_API_KEY", raising=False)
 
         # Import fresh after patching
-        import scripts.check_omlx as mod  # type: ignore[import-not-found]
+        import scripts.check_openai_compat as mod  # type: ignore[import-not-found]
 
-        base, key = mod._resolve_omlx_config()  # type: ignore[attr-defined]
+        base, key = mod._resolve_openai_config()  # type: ignore[attr-defined]
         assert base == "http://localhost:9001/v1"
         assert key == "ui-key"
 
@@ -76,13 +76,13 @@ class TestConfigFromGlobalStore:
         self, write_global_cfg: Callable[[dict[str, Any]], None], monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """Config fills env var gap — config wins when both are set."""
-        write_global_cfg({"OMLX_BASE_URL": "http://localhost:9001/v1", "OMLX_API_KEY": "ui-key"})
-        monkeypatch.setenv("OMLX_BASE_URL", "http://localhost:9002/v1")
-        monkeypatch.delenv("OMLX_API_KEY", raising=False)  # key absent → config fills it
+        write_global_cfg({"OPENAI_BASE_URL": "http://localhost:9001/v1", "OPENAI_API_KEY": "ui-key"})
+        monkeypatch.setenv("OPENAI_BASE_URL", "http://localhost:9002/v1")
+        monkeypatch.delenv("OPENAI_API_KEY", raising=False)  # key absent → config fills it
 
-        import scripts.check_omlx as mod  # type: ignore[import-not-found]
+        import scripts.check_openai_compat as mod  # type: ignore[import-not-found]
 
-        base, key = mod._resolve_omlx_config()  # type: ignore[attr-defined]
+        base, key = mod._resolve_openai_config()  # type: ignore[attr-defined]
         assert base == "http://localhost:9001/v1"  # config wins over env var
         assert key == "ui-key"  # config.json fills the missing env var
 
@@ -90,13 +90,13 @@ class TestConfigFromGlobalStore:
         self, write_global_cfg: Callable[[dict[str, Any]], None], monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """Global config (Settings UI) wins over env vars — highest priority."""
-        write_global_cfg({"OMLX_BASE_URL": "http://localhost:9003/v1", "OMLX_API_KEY": "ui-wins"})
-        monkeypatch.setenv("OMLX_BASE_URL", "http://localhost:9004/v1")
-        monkeypatch.setenv("OMLX_API_KEY", "env-loses")
+        write_global_cfg({"OPENAI_BASE_URL": "http://localhost:9003/v1", "OPENAI_API_KEY": "ui-wins"})
+        monkeypatch.setenv("OPENAI_BASE_URL", "http://localhost:9004/v1")
+        monkeypatch.setenv("OPENAI_API_KEY", "env-loses")
 
-        import scripts.check_omlx as mod  # type: ignore[import-not-found]
+        import scripts.check_openai_compat as mod  # type: ignore[import-not-found]
 
-        base, key = mod._resolve_omlx_config()  # type: ignore[attr-defined]
+        base, key = mod._resolve_openai_config()  # type: ignore[attr-defined]
         assert base == "http://localhost:9003/v1"  # config.json wins
         assert key == "ui-wins"
 
@@ -108,22 +108,22 @@ class TestEmptyKey:
         self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
     ) -> None:
         """No key anywhere → exit code 1 with clear error message."""
-        monkeypatch.delenv("OMLX_BASE_URL", raising=False)
-        monkeypatch.delenv("OMLX_API_KEY", raising=False)
+        monkeypatch.delenv("OPENAI_BASE_URL", raising=False)
+        monkeypatch.delenv("OPENAI_API_KEY", raising=False)
 
-        import scripts.check_omlx as mod  # type: ignore[import-not-found]
+        import scripts.check_openai_compat as mod  # type: ignore[import-not-found]
         from cutfinder.config import resolve_env as orig_resolve
 
-        # Stub _resolve_omlx_config to return empty key
-        with patch.object(mod, "_resolve_omlx_config", return_value=("http://localhost:8000/v1", "")):
+        # Stub _resolve_openai_config to return empty key
+        with patch.object(mod, "_resolve_openai_config", return_value=("http://localhost:8000/v1", "")):
             result = mod.main()
 
         assert result == 1
         captured = capsys.readouterr()
-        assert "OMLX_API_KEY is empty" in captured.err
+        assert "OPENAI_API_KEY is empty" in captured.err
 
         # Restore original so other tests aren't affected
-        mod._resolve_omlx_config = orig_resolve  # type: ignore[attr-defined]
+        mod._resolve_openai_config = orig_resolve  # type: ignore[attr-defined]
 
 
 class TestIntegration:
@@ -141,16 +141,16 @@ class TestIntegration:
             captured_request["auth"] = request.headers.get("Authorization", "")
             return httpx.Response(200, json={"data": [{"id": m} for m in ["Qwen3.6-35B-A3B", "Qwen3-VL-8B-Instruct"]]})
 
-        write_global_cfg({"OMLX_BASE_URL": "http://localhost:8099/v1", "OMLX_API_KEY": "test-key"})
-        monkeypatch.delenv("OMLX_BASE_URL", raising=False)
-        monkeypatch.delenv("OMLX_API_KEY", raising=False)
+        write_global_cfg({"OPENAI_BASE_URL": "http://localhost:8099/v1", "OPENAI_API_KEY": "test-key"})
+        monkeypatch.delenv("OPENAI_BASE_URL", raising=False)
+        monkeypatch.delenv("OPENAI_API_KEY", raising=False)
 
-        import scripts.check_omlx as mod  # type: ignore[import-not-found]
+        import scripts.check_openai_compat as mod  # type: ignore[import-not-found]
         from cutfinder.config import resolve_env as orig_resolve
 
         transport = httpx.MockTransport(handler)
-        # Stub _resolve_omlx_config so main() uses known credentials and URL
-        with patch.object(mod, "_resolve_omlx_config", return_value=("http://localhost:8099/v1", "test-key")):
+        # Stub _resolve_openai_config so main() uses known credentials and URL
+        with patch.object(mod, "_resolve_openai_config", return_value=("http://localhost:8099/v1", "test-key")):
             # Replace httpx.get with a transport-based call so response has request set
             original_get = mod.httpx.get  # type: ignore[attr-defined]
             try:
@@ -164,4 +164,4 @@ class TestIntegration:
         assert captured_request["auth"] == "Bearer test-key"
 
         # Restore original so other tests aren't affected
-        mod._resolve_omlx_config = orig_resolve  # type: ignore[attr-defined]
+        mod._resolve_openai_config = orig_resolve  # type: ignore[attr-defined]

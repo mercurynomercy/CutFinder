@@ -1,4 +1,4 @@
-"""Tests for the settings routes, focused on POST /settings/omlx/test."""
+"""Tests for the settings routes, focused on POST /settings/openai/test."""
 from __future__ import annotations
 
 from types import SimpleNamespace
@@ -35,8 +35,8 @@ def _client(env, models_result=None, raise_exc=None):
 
 
 ENV = {
-    "OMLX_BASE_URL": "http://localhost:1235/v1",
-    "OMLX_API_KEY": "stored-key",
+    "OPENAI_BASE_URL": "http://localhost:1235/v1",
+    "OPENAI_API_KEY": "stored-key",
     "TEXT_MODEL": "Qwen3.6-35B-A3B",
     "VISION_MODEL": "Qwen3-VL-8B",
 }
@@ -44,8 +44,8 @@ ENV = {
 
 def test_test_connection_ok_uses_stored_key_when_blank():
     client, fake = _client(ENV, models_result=["Qwen3.6-35B-A3B", "Qwen3-VL-8B"])
-    with mock.patch("cutfinder.adapters.omlx_check.check_omlx", side_effect=fake) as m:
-        r = client.post("/api/settings/omlx/test", json={})
+    with mock.patch("cutfinder.adapters.openai_check.check_openai_compat", side_effect=fake) as m:
+        r = client.post("/api/settings/openai/test", json={})
     assert r.status_code == 200
     body = r.json()
     assert body["ok"] is True
@@ -56,17 +56,17 @@ def test_test_connection_ok_uses_stored_key_when_blank():
 
 def test_test_connection_reports_missing_model():
     client, fake = _client(ENV, models_result=["Qwen3.6-35B-A3B"])
-    with mock.patch("cutfinder.adapters.omlx_check.check_omlx", side_effect=fake):
-        r = client.post("/api/settings/omlx/test", json={})
+    with mock.patch("cutfinder.adapters.openai_check.check_openai_compat", side_effect=fake):
+        r = client.post("/api/settings/openai/test", json={})
     body = r.json()
     assert body["ok"] is True
     assert body["missing"] == ["Qwen3-VL-8B"]
 
 
 def test_test_connection_surfaces_auth_error():
-    client, fake = _client(ENV, raise_exc=RuntimeError("OMLX returned HTTP 401: Invalid API key"))
-    with mock.patch("cutfinder.adapters.omlx_check.check_omlx", side_effect=fake):
-        r = client.post("/api/settings/omlx/test", json={})
+    client, fake = _client(ENV, raise_exc=RuntimeError("OpenAI-compatible server returned HTTP 401: Invalid API key"))
+    with mock.patch("cutfinder.adapters.openai_check.check_openai_compat", side_effect=fake):
+        r = client.post("/api/settings/openai/test", json={})
     assert r.status_code == 200
     body = r.json()
     assert body["ok"] is False
@@ -74,10 +74,10 @@ def test_test_connection_surfaces_auth_error():
 
 
 def test_test_connection_empty_key_short_circuits():
-    env = {**ENV, "OMLX_API_KEY": ""}
+    env = {**ENV, "OPENAI_API_KEY": ""}
     client, fake = _client(env)
-    with mock.patch("cutfinder.adapters.omlx_check.check_omlx", side_effect=fake) as m:
-        r = client.post("/api/settings/omlx/test", json={"OMLX_API_KEY": ""})
+    with mock.patch("cutfinder.adapters.openai_check.check_openai_compat", side_effect=fake) as m:
+        r = client.post("/api/settings/openai/test", json={"OPENAI_API_KEY": ""})
     body = r.json()
     assert body["ok"] is False
-    m.assert_not_called()  # never call check_omlx with empty key (it sys.exit)
+    m.assert_not_called()  # never call check_openai_compat with empty key (it sys.exit)

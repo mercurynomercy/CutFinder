@@ -2,7 +2,7 @@
 
 Spawns a single asyncio worker task that processes clips sequentially
 from an ``asyncio.Queue``.  This respects model VRAM constraints by never
-running more than one analysis at a time (OMLX handles model switching).
+running more than one analysis at a time (the server handles model switching).
 
 Progress events are broadcast to any number of SSE subscribers so the
 frontend can render real-time progress bars.
@@ -750,7 +750,7 @@ class WorkerQueue:
         self._emit({"type": "clip_started", "path": candidate.path})
 
         try:
-            # process_clip is blocking (ffmpeg/whisper/OMLX); run it off the event
+            # process_clip is blocking (ffmpeg/whisper/OpenAI-compatible server); run it off the event
             # loop so the API (SSE, /jobs, /clips) stays responsive during a scan.
             clip_id = (
                 await asyncio.to_thread(self._orchestrator.process_clip, candidate)
@@ -782,7 +782,7 @@ class WorkerQueue:
         self._emit({"type": "reanalyze_started", "clip_id": clip_id})
 
         try:
-            # reanalyze is blocking (whisper/OMLX); run it off the event loop.
+            # reanalyze is blocking (whisper/OpenAI-compatible server); run it off the event loop.
             success = (
                 await asyncio.to_thread(self._orchestrator.reanalyze, clip_id)
                 if self._orchestrator else True
