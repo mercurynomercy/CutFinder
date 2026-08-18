@@ -77,13 +77,20 @@ def _build_router(ctx: Any) -> Any:
             ext_list = list(config.prefs.extensions or []) + list(config.prefs.photo_extensions or [])
             extensions = set(ext_list) if ext_list else None
 
+            from cutfinder.adapters.ffmpeg_probe import FfmpegProbe  # noqa: E402
+            from cutfinder.adapters.pillow_image import PillowImageProbe  # noqa: E402
             from cutfinder.pipeline.scanner import Scanner  # noqa: E402
 
             # Create the job *before* walking the filesystem so the task list
             # shows it immediately (the fingerprinting walk can take seconds).
             job_id = ctx.repository.create_job(total=0, kind="scan").id if ctx.repository else None
 
-            scanner = Scanner(repository=ctx.repository)
+            scanner = Scanner(
+                repository=ctx.repository,
+                probe=FfmpegProbe(),
+                image_probe=PillowImageProbe(),
+                photo_extensions={e.lower() for e in (config.prefs.photo_extensions or [])},
+            )
             # Run the (blocking) filesystem walk off the event loop so /jobs polling
             # stays responsive while a large folder is being scanned.
             candidates_obj = await _asyncio.to_thread(scanner.scan, source_folders, extensions)
@@ -178,6 +185,8 @@ def _build_router(ctx: Any) -> Any:
                 raise HTTPException(status_code=404, detail="No library configured")
 
             import asyncio as _asyncio  # noqa: E402
+            from cutfinder.adapters.ffmpeg_probe import FfmpegProbe  # noqa: E402
+            from cutfinder.adapters.pillow_image import PillowImageProbe  # noqa: E402
             from cutfinder.config import load_config  # noqa: E402
             from cutfinder.pipeline.scanner import Scanner  # noqa: E402
 
@@ -186,7 +195,12 @@ def _build_router(ctx: Any) -> Any:
             ext_list = list(config.prefs.extensions or []) + list(config.prefs.photo_extensions or [])
             extensions = set(ext_list) if ext_list else None
 
-            scanner = Scanner(repository=ctx.repository)
+            scanner = Scanner(
+                repository=ctx.repository,
+                probe=FfmpegProbe(),
+                image_probe=PillowImageProbe(),
+                photo_extensions={e.lower() for e in (config.prefs.photo_extensions or [])},
+            )
             candidates_obj = await _asyncio.to_thread(scanner.scan, source_folders, extensions)
             # Preserve progress: scan returns only the remaining (unseen) items, so
             # total = already-processed + remaining keeps the bar continuous (a 60/100

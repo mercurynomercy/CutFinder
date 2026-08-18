@@ -115,13 +115,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     private func showOMLXGuidance(_ status: OMLXStatus) {
         let detail: String
         switch status {
-        case .unreachable: detail = "无法连接 OMLX（\(AppConfig.omlxBaseURL)）。"
+        case .unreachable: detail = "无法连接 AI 模型服务（\(AppConfig.omlxBaseURL)）。"
         case .missingModels(let models): detail = "缺少模型：\(models.joined(separator: ", "))。"
         case .ready: detail = ""
         }
         windowController.showError(
-            title: "未检测到 OMLX 模型服务",
-            message: "CutFinder 的「A-roll 简介 / B-roll 画面打标」需要本机的 OMLX（独立 App，负责文本/视觉模型）。扫描、转写、缩略图不受影响，可先继续使用。",
+            title: "未检测到 AI 模型服务",
+            message: "CutFinder 的「A-roll 简介 / B-roll 画面打标」需要本机的 OpenAI 兼容模型服务（负责文本/视觉模型），推荐使用 OMLX（独立 App），LM Studio、Ollama 等亦可。扫描、转写、缩略图不受影响，可先继续使用。",
             actions: [
                 ErrorView.Action(title: "打开 OMLX 下载页", isPrimary: true) {
                     NSWorkspace.shared.open(AppConfig.omlxDownloadURL)
@@ -229,7 +229,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         let helpMenu = NSMenu(title: "帮助")
         helpItem.submenu = helpMenu
         helpMenu.addItem(withTitle: "CutFinder 文档", action: #selector(openDocs), keyEquivalent: "").target = self
-        helpMenu.addItem(withTitle: "检查 OMLX 状态", action: #selector(checkOMLX), keyEquivalent: "").target = self
+        helpMenu.addItem(withTitle: "检查 AI 模型服务状态", action: #selector(checkOMLX), keyEquivalent: "").target = self
 
         NSApp.mainMenu = mainMenu
     }
@@ -297,14 +297,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             let status = DependencyChecker.omlxStatus()
             DispatchQueue.main.async {
                 let alert = NSAlert()
-                alert.messageText = "OMLX 状态"
+                alert.messageText = "AI 模型服务状态"
                 switch status {
                 case .ready:
-                    alert.informativeText = "OMLX 就绪，所需模型均在列。"
+                    alert.informativeText = "服务就绪，所需模型均在列。"
                 case .missingModels(let models):
-                    alert.informativeText = "OMLX 可达，但缺少模型：\(models.joined(separator: ", "))。"
+                    alert.informativeText = "服务可达，但缺少模型：\(models.joined(separator: ", "))。"
                 case .unreachable:
-                    alert.informativeText = "无法连接 OMLX（\(AppConfig.omlxBaseURL)）。请确认 OMLX 已启动。"
+                    alert.informativeText = "无法连接 AI 模型服务（\(AppConfig.omlxBaseURL)）。请确认服务已启动（如 OMLX）。"
                 }
                 alert.runModal()
             }

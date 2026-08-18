@@ -18,7 +18,7 @@ Edge cases handled:
 
 Examples
 --------
->>> config = AppConfig(env=EnvSettings(OMLX_BASE_URL="http://localhost:8000/v1", OMLX_API_KEY="key"), prefs=Prefs(library_path="/tmp/lib"))
+>>> config = AppConfig(env=EnvSettings(OPENAI_BASE_URL="http://localhost:8000/v1", OPENAI_API_KEY="key"), prefs=Prefs(library_path="/tmp/lib"))
 >>> writer = FsLibraryWriter(config)  # doctest: +SKIP
 """
 
@@ -113,7 +113,7 @@ class FsLibraryWriter:
     Examples
     --------
     >>> config = AppConfig(  # doctest: +SKIP
-    ...     env=EnvSettings(OMLX_BASE_URL="http://localhost:8000/v1", OMLX_API_KEY="test-key"),
+    ...     env=EnvSettings(OPENAI_BASE_URL="http://localhost:8000/v1", OPENAI_API_KEY="test-key"),
     ...     prefs=Prefs(library_path="/tmp/test_lib"),
     ... )
     >>> writer = FsLibraryWriter(config)  # doctest: +SKIP

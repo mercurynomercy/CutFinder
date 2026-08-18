@@ -1,4 +1,4 @@
-/** Tests for the DetailPanel feature — behavior-focused (loads + interactions). */
+/** Tests for the DetailPanel feature — full-screen clip-detail view. */
 
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
@@ -14,16 +14,18 @@ describe('DetailPanel', () => {
     expect(container).toBeEmptyDOMElement()
   })
 
-  it('loads and shows the clip detail (source file)', async () => {
+  it('renders as a full-screen view (no modal backdrop) once loaded', async () => {
     render(<DetailPanel clipId={1} onClose={() => {}} />)
-    expect(await screen.findByText('Source file')).toBeInTheDocument()
+    await screen.findByText('Source file')
+    expect(document.querySelector('.bg-black\\/50')).not.toBeInTheDocument()
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 
-  it('calls onClose when the close button is clicked', async () => {
+  it('calls onClose when the back-to-gallery button is clicked', async () => {
     const onClose = vi.fn()
     render(<DetailPanel clipId={1} onClose={onClose} />)
     await screen.findByText('Source file')
-    await userEvent.click(screen.getByRole('button', { name: /close panel/i }))
+    await userEvent.click(screen.getByRole('button', { name: 'Back to gallery' }))
     expect(onClose).toHaveBeenCalled()
   })
 
@@ -33,6 +35,30 @@ describe('DetailPanel', () => {
     await screen.findByText('Source file')
     await userEvent.keyboard('{Escape}')
     expect(onClose).toHaveBeenCalled()
+  })
+
+  it('does not render an editable summary textarea', async () => {
+    render(<DetailPanel clipId={1} onClose={() => {}} />)
+    await screen.findByText('Source file')
+    expect(screen.queryByRole('textbox', { name: /summary/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument()
+  })
+
+  it('shows the library path (file destination) and capture date together', async () => {
+    server.use(
+      http.get('http://localhost:5080/api/clips/:id', ({ params }) =>
+        HttpResponse.json({
+          id: Number(params.id), source_path: '/m/v.mp4', library_path: '/Library/2026-01-15/A-roll/A-0001.mp4',
+          roll_type: 'a', roll_source: 'auto', summary: 'sum', description: null,
+          duration_s: 10, width: null, height: null, fps: null, codec: null,
+          thumbnail_path: null, status: 'done', error: null, capture_time: '2026-01-15T08:00:00Z',
+          date_source: 'file', tags: [],
+        }),
+      ),
+    )
+    render(<DetailPanel clipId={1} onClose={() => {}} />)
+    expect(await screen.findByText('/Library/2026-01-15/A-roll/A-0001.mp4')).toBeInTheDocument()
+    expect(screen.getByText(/Capture date \(from file time\)/)).toBeInTheDocument()
   })
 
   it('shows the Suggested cuts section with a Suggest keyframes button', async () => {
@@ -63,10 +89,8 @@ describe('DetailPanel', () => {
 
   it('shows the A/B correction toggle and re-analyze action', async () => {
     render(<DetailPanel clipId={1} onClose={() => {}} />)
-    // Compact segmented A/B toggle
     expect(await screen.findByRole('button', { name: 'A-roll' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'B-roll' })).toBeInTheDocument()
-    // Re-analyze action (icon button)
     expect(screen.getByRole('button', { name: 'Re-analyze' })).toBeInTheDocument()
   })
 })

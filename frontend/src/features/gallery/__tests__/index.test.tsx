@@ -68,7 +68,7 @@ describe('Gallery', () => {
   it('renders A-roll badge for clips with roll_type "a"', () => {
     const onSelect = vi.fn()
     render(<Gallery clips={MOCK_CLIPS} selectedClipId={null} onSelect={onSelect} />)
-    const badgeSpans = document.querySelectorAll('span[class*="rounded-full"]')
+    const badgeSpans = document.querySelectorAll('span[class*="rounded"]')
     let foundABadge = false
     for (const span of badgeSpans) {
       if ((span.textContent?.trim() || '') === 'A-roll') foundABadge = true
@@ -79,7 +79,7 @@ describe('Gallery', () => {
   it('renders B-roll badge for clips with roll_type "b"', () => {
     const onSelect = vi.fn()
     render(<Gallery clips={MOCK_CLIPS} selectedClipId={null} onSelect={onSelect} />)
-    const badgeSpans = document.querySelectorAll('span[class*="rounded-full"]')
+    const badgeSpans = document.querySelectorAll('span[class*="rounded"]')
     let foundBBadge = false
     for (const span of badgeSpans) {
       if ((span.textContent?.trim() || '') === 'B-roll') foundBBadge = true

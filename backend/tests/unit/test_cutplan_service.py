@@ -8,8 +8,58 @@ import pytest
 
 from cutfinder.adapters.sqlite_cutplan import MemoryCutSessionStore
 from cutfinder.cutplan.director import CutDirectorResult
-from cutfinder.domain.models import CutPlan, RoughCutRequest, Shot
+from cutfinder.domain.models import (
+    ChatMessage,
+    ClipBrief,
+    CutPlan,
+    PendingClarification,
+    RoughCutRequest,
+    Shot,
+)
 from cutfinder.pipeline.cutplan_service import CutPlanService
+
+
+def test_store_pending_round_trips() -> None:
+    store = MemoryCutSessionStore()
+    s = store.create_session()
+    pending = PendingClarification(
+        kind="preflight_date", question="请指定日期范围", options=["2026-04-25", "2026-04-26"],
+    )
+
+    store.set_session_pending(s.id, pending)
+    store.set_session_status(s.id, "waiting_for_input")
+
+    got = store.get_session(s.id)
+    assert got.status == "waiting_for_input"
+    assert got.pending == pending
+
+    store.clear_session_pending(s.id)
+    assert store.get_session(s.id).pending is None
+
+
+def test_store_tracks_already_asked_fields() -> None:
+    store = MemoryCutSessionStore()
+    s = store.create_session()
+
+    assert store.get_asked(s.id) == set()
+    store.mark_asked(s.id, "date")
+    assert store.get_asked(s.id) == {"date"}
+    store.mark_asked(s.id, "duration")
+    assert store.get_asked(s.id) == {"date", "duration"}
+
+
+def test_reset_interrupted_sessions_skips_waiting_for_input() -> None:
+    store = MemoryCutSessionStore()
+    s1 = store.create_session()
+    s2 = store.create_session()
+    store.set_session_status(s1.id, "running")
+    store.set_session_status(s2.id, "waiting_for_input")
+
+    n = store.reset_interrupted_sessions()
+
+    assert n == 1
+    assert store.get_session(s1.id).status == "idle"
+    assert store.get_session(s2.id).status == "waiting_for_input"
 
 
 class FakeDirector:
@@ -24,12 +74,17 @@ class FakeDirector:
         result: CutDirectorResult,
         progress_steps: list[str] | None = None,
         partial_plans: list[CutPlan] | None = None,
+        day_steps: list[tuple[int, int]] | None = None,
+        resume_result: CutDirectorResult | None = None,
     ) -> None:
         self.result = result
         self.calls: list[tuple[RoughCutRequest, list[Any], str]] = []
         self.prior_plans: list[CutPlan | None] = []
         self._progress_steps = progress_steps or []
         self._partial_plans = partial_plans or []
+        self._day_steps = day_steps or []
+        self._resume_result = resume_result
+        self.resume_calls: list[tuple[RoughCutRequest, dict[str, Any], str, CutPlan | None]] = []
 
     def generate(
         self,
@@ -40,6 +95,7 @@ class FakeDirector:
         prior_plan: CutPlan | None = None,
         on_progress: Any = None,
         on_partial: Any = None,
+        on_day: Any = None,
     ) -> CutDirectorResult:
         self.calls.append((request, list(history), user_text))
         self.prior_plans.append(prior_plan)
@@ -49,7 +105,25 @@ class FakeDirector:
         for p in self._partial_plans:
             if on_partial:
                 on_partial(p)
+        for idx, n in self._day_steps:
+            if on_day:
+                on_day(idx, n)
         return self.result
+
+    def resume_day(
+        self,
+        request: RoughCutRequest,
+        resume_state: dict[str, Any],
+        answer_text: str,
+        *,
+        prior_plan: CutPlan | None = None,
+        on_progress: Any = None,
+        on_partial: Any = None,
+        on_day: Any = None,
+    ) -> CutDirectorResult:
+        self.resume_calls.append((request, resume_state, answer_text, prior_plan))
+        assert self._resume_result is not None
+        return self._resume_result
 
 
 def _plan() -> CutPlan:
@@ -92,6 +166,30 @@ def test_handle_saves_partial_plan_and_clears_progress() -> None:
 
     assert store.get_latest_plan(s.id).total_s == 5.0   # partial plan persisted
     assert store.get_session(s.id).progress == ""        # progress cleared at end
+
+
+def test_handle_forwards_day_progress_to_store() -> None:
+    store = MemoryCutSessionStore()
+    s = store.create_session()
+    director = FakeDirector(CutDirectorResult("ok", _plan()), day_steps=[(1, 3), (2, 3)])
+    svc = CutPlanService(store, director)  # type: ignore[arg-type]
+
+    calls: list[tuple[int, int]] = []
+    orig = store.set_session_day_progress
+
+    def spy(session_id: int, day_index: int, day_total: int) -> None:
+        calls.append((day_index, day_total))
+        orig(session_id, day_index, day_total)
+
+    store.set_session_day_progress = spy  # type: ignore[method-assign]
+
+    svc.handle(s.id, "剪一条", RoughCutRequest())
+
+    assert calls == [(1, 3), (2, 3)]
+    # Progress is cleared once the turn finishes (same lifecycle as `progress`).
+    session = store.get_session(s.id)
+    assert session.day_index is None
+    assert session.day_total is None
 
 
 def test_refine_reuses_stored_request() -> None:
@@ -204,3 +302,187 @@ def test_handle_unknown_session_raises() -> None:
     svc = CutPlanService(store, FakeDirector(CutDirectorResult("x", None)))  # type: ignore[arg-type]
     with pytest.raises(ValueError):
         svc.handle(999, "go")
+
+
+class FakePreflightRetriever:
+    def __init__(self, briefs: list[Any]) -> None:
+        self._briefs = briefs
+
+    def search_footage(self, **kwargs: Any) -> list[Any]:
+        return self._briefs
+
+    def get_clip_detail(self, clip_id: int) -> Any:
+        return None
+
+
+def test_handle_pauses_for_missing_date_before_calling_director() -> None:
+    store = MemoryCutSessionStore()
+    s = store.create_session()
+    director = FakeDirector(CutDirectorResult("不应该被调用", _plan()))
+    retriever = FakePreflightRetriever([
+        ClipBrief(clip_id=1, roll="a", capture_time="2026-04-25T09:00:00"),
+        ClipBrief(clip_id=2, roll="a", capture_time="2026-04-26T09:00:00"),
+    ])
+    svc = CutPlanService(store, director, retriever=retriever)  # type: ignore[arg-type]
+
+    result = svc.handle(s.id, "帮我剪个 vlog")
+
+    assert director.calls == []  # never reached the (expensive) director
+    assert result.pending is not None
+    assert result.pending.kind == "preflight_date"
+    session = store.get_session(s.id)
+    assert session.status == "waiting_for_input"
+    assert session.pending is not None
+    msgs = store.get_messages(s.id)
+    assert [m.role for m in msgs] == ["user", "assistant"]
+    assert msgs[1].content == result.pending.question
+
+
+def test_handle_resumes_preflight_pause_as_a_normal_turn() -> None:
+    store = MemoryCutSessionStore()
+    s = store.create_session()
+    director = FakeDirector(CutDirectorResult("生成完成", _plan()))
+    retriever = FakePreflightRetriever([
+        ClipBrief(clip_id=1, roll="a", capture_time="2026-04-25T09:00:00"),
+        ClipBrief(clip_id=2, roll="a", capture_time="2026-04-26T09:00:00"),
+    ])
+    svc = CutPlanService(store, director, retriever=retriever)  # type: ignore[arg-type]
+
+    svc.handle(s.id, "帮我剪个 vlog")  # pauses on date
+    assert store.get_session(s.id).status == "waiting_for_input"
+
+    result = svc.handle(s.id, "2026/04/25")  # user answers with a real date
+
+    # Duration is still missing but was never asked this session before the
+    # date pause resolved — the resumed turn re-checks and would pause again
+    # on duration rather than silently reaching the director. Confirm that:
+    assert director.calls == []
+    assert result.plan is None
+    assert result.pending is not None
+    assert result.pending.kind == "preflight_duration"
+    assert store.get_session(s.id).status == "waiting_for_input"
+    pending2 = store.get_session(s.id).pending
+    assert pending2 is not None and pending2.kind == "preflight_duration"
+
+
+def test_handle_skips_preflight_when_no_retriever_wired() -> None:
+    # Backward-compat default: retriever=None means pre-flight is disabled,
+    # matching every pre-existing CutPlanService(store, director) call site.
+    store = MemoryCutSessionStore()
+    s = store.create_session()
+    director = FakeDirector(CutDirectorResult("ok", _plan()))
+    svc = CutPlanService(store, director)  # type: ignore[arg-type]
+
+    result = svc.handle(s.id, "帮我剪个 vlog")
+
+    assert result.pending is None
+    assert director.calls  # director was actually called
+
+
+def test_handle_resumes_day_ask_user_via_resume_day() -> None:
+    store = MemoryCutSessionStore()
+    s = store.create_session()
+    pending = PendingClarification(
+        kind="day_ask_user", question="选哪条开场？", options=["A-0004", "A-0011"],
+        resume_state={"day": "2026-04-25", "messages": [], "round_i": 0, "tool_call_id": "call-1"},
+    )
+    store.set_session_pending(s.id, pending)
+    store.set_session_status(s.id, "waiting_for_input")
+    store.append_message(s.id, ChatMessage(role="assistant", content="选哪条开场？"))
+    resume_result = CutDirectorResult("好的", _plan())
+    director = FakeDirector(CutDirectorResult("不应该被调用", None), resume_result=resume_result)
+    svc = CutPlanService(store, director)  # type: ignore[arg-type]
+
+    result = svc.handle(s.id, "A-0004")
+
+    assert result is resume_result
+    assert director.resume_calls[0][1] == pending.resume_state
+    assert director.resume_calls[0][2] == "A-0004"
+    session = store.get_session(s.id)
+    assert session.status == "idle"
+    assert session.pending is None
+    msgs = store.get_messages(s.id)
+    assert [m.role for m in msgs] == ["assistant", "user", "assistant"]
+    assert msgs[1].content == "A-0004"
+    assert msgs[2].content == "好的"
+
+
+def test_handle_resumes_via_real_production_sequence() -> None:
+    """Regression for the final-review Finding 1 (Critical): the resume gate
+    must not depend on session.status.
+
+    cut_routes.send_message persists the user message and flips status to
+    "running" *synchronously*, before enqueueing the worker job — so by the
+    time the worker calls handle(), status is already "running", not
+    "waiting_for_input" (every other pause/resume test in this file sets
+    status directly to "waiting_for_input" and so never exercises this path).
+    Gating _resume on session.pending alone (not status) is what makes this
+    work; and since the route already appended the user message, handle()
+    must not duplicate it.
+    """
+    store = MemoryCutSessionStore()
+    s = store.create_session()
+    pending = PendingClarification(
+        kind="day_ask_user", question="选哪条开场？", options=["A-0004", "A-0011"],
+        resume_state={"day": "2026-04-25", "messages": [], "round_i": 0, "tool_call_id": "call-1"},
+    )
+    store.set_session_pending(s.id, pending)
+    store.set_session_status(s.id, "waiting_for_input")
+    store.append_message(s.id, ChatMessage(role="assistant", content="选哪条开场？"))
+
+    # Mirror cut_routes.send_message exactly: append the user message via the
+    # store, then flip status to "running" synchronously — BEFORE handle() runs.
+    store.append_message(s.id, ChatMessage(role="user", content="A-0004"))
+    store.set_session_status(s.id, "running")
+
+    resume_result = CutDirectorResult("好的", _plan())
+    director = FakeDirector(CutDirectorResult("不应该被调用", None), resume_result=resume_result)
+    svc = CutPlanService(store, director)  # type: ignore[arg-type]
+
+    result = svc.handle(s.id, "A-0004")
+
+    assert result is resume_result
+    assert director.calls == []  # generate() must NOT fire — this is a resume
+    assert director.resume_calls  # resume_day fired instead
+    assert director.resume_calls[0][1] == pending.resume_state
+    assert director.resume_calls[0][2] == "A-0004"
+    # The route already appended the user message — handle() must not duplicate it.
+    msgs = store.get_messages(s.id)
+    assert [m.role for m in msgs] == ["assistant", "user", "assistant"]
+    assert msgs[1].content == "A-0004"
+    session = store.get_session(s.id)
+    assert session.status == "idle"
+    assert session.pending is None
+
+
+def test_handle_full_preflight_chain_preserves_date_through_to_generation() -> None:
+    """Regression for the final-review Finding 2 (Critical): a date resolved
+    via pre-flight must survive a later pre-flight pause in the same chain.
+
+    Turn 1 (no date) -> pauses asking for a date. Turn 2 (answers date) ->
+    date resolved and saved, but duration is still missing -> pauses AGAIN
+    asking for duration (no plan generated yet, so the "drop remembered
+    dates" heuristic is still armed). Turn 3 (answers duration) -> must
+    finally reach the director with turn 2's date intact, not wiped.
+    """
+    store = MemoryCutSessionStore()
+    s = store.create_session()
+    director = FakeDirector(CutDirectorResult("生成完成", _plan()))
+    retriever = FakePreflightRetriever([
+        ClipBrief(clip_id=1, roll="a", capture_time="2026-04-25T09:00:00"),
+        ClipBrief(clip_id=2, roll="a", capture_time="2026-04-26T09:00:00"),
+    ])
+    svc = CutPlanService(store, director, retriever=retriever)  # type: ignore[arg-type]
+
+    r1 = svc.handle(s.id, "帮我剪个 vlog")
+    assert r1.pending is not None and r1.pending.kind == "preflight_date"
+
+    r2 = svc.handle(s.id, "2026-04-25")
+    assert r2.pending is not None and r2.pending.kind == "preflight_duration"
+    assert director.calls == []  # still hasn't reached the director
+
+    r3 = svc.handle(s.id, "10 分钟")
+
+    assert r3.pending is None
+    assert director.calls  # finally reached the director
+    assert director.calls[0][0].date_from == "2026-04-25"

@@ -13,7 +13,7 @@ enum AppConfig {
 
     // MARK: - Global config (settings UI)
 
-    private static let _globalKeys = ["OMLX_BASE_URL", "OMLX_API_KEY", "TEXT_MODEL", "VISION_MODEL"]
+    private static let _globalKeys = ["OPENAI_BASE_URL", "OPENAI_API_KEY", "TEXT_MODEL", "VISION_MODEL"]
 
     /// Read `~/.cutfinder/config.json` and return non-empty values for known keys.
     private static func _readGlobalConfig() -> [String: String] {
@@ -31,23 +31,23 @@ enum AppConfig {
         return result
     }
 
-    /// Base URL of the OMLX OpenAI-compatible server.
+    /// Base URL of the local OpenAI-compatible model server (e.g. OMLX, LM Studio, Ollama).
     /// Precedence: env var > `~/.cutfinder/config.json` (settings UI) > default.
     static var omlxBaseURL: String {
-        if let raw = ProcessInfo.processInfo.environment["OMLX_BASE_URL"], !raw.isEmpty {
+        if let raw = ProcessInfo.processInfo.environment["OPENAI_BASE_URL"], !raw.isEmpty {
             return raw
         }
         let cfg = _readGlobalConfig()
-        return cfg["OMLX_BASE_URL"] ?? "http://localhost:8000/v1"
+        return cfg["OPENAI_BASE_URL"] ?? "http://localhost:8000/v1"
     }
 
-    /// API key for OMLX authentication. Returns nil when no key is available.
+    /// API key for the OpenAI-compatible server. Returns nil when no key is available.
     static var omlxApiKey: String? {
-        if let raw = ProcessInfo.processInfo.environment["OMLX_API_KEY"], !raw.isEmpty {
+        if let raw = ProcessInfo.processInfo.environment["OPENAI_API_KEY"], !raw.isEmpty {
             return raw
         }
         let cfg = _readGlobalConfig()
-        return cfg["OMLX_API_KEY"]
+        return cfg["OPENAI_API_KEY"]
     }
 
     /// Read a single value from `~/.cutfinder/config.json`, or return the default.

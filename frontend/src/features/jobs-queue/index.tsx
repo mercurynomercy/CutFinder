@@ -46,14 +46,23 @@ function statusLabel(t: I18n['t'], status: string): string {
   }
 }
 
-const STATUS_BADGE: Record<string, string> = {
-  queued: 'bg-[--surface-3] text-[--text-secondary]',
-  pending: 'bg-[--surface-3] text-[--text-secondary]',
-  running: 'bg-[--primary]/15 text-[--primary]',
-  paused: 'bg-[--warning]/15 text-[--warning]',
-  done: 'bg-[--success]/15 text-[--success]',
-  failed: 'bg-[--error]/15 text-[--error]',
-  cancelled: 'bg-[--surface-3] text-[--text-muted]',
+// Kind badge colors — match OpenDesign: scan=primary, keyframe=warning, cut=teal
+const KIND_BADGE: Record<string, string> = {
+  scan: 'bg-[--primary-soft] text-[--primary]',
+  reanalyze: 'bg-[--primary-soft] text-[--primary]',
+  keyframes: 'bg-[--warning]/15 text-[--warning]',
+  subtitle: 'bg-[--primary-soft] text-[--primary]',
+  cutplan: 'bg-teal-500/15 text-teal-600',
+}
+
+const STATUS_COLOR: Record<string, string> = {
+  queued: 'text-[--text-muted]',
+  pending: 'text-[--text-muted]',
+  running: 'text-[--primary]',
+  paused: 'text-[--warning]',
+  done: 'text-[--success]',
+  failed: 'text-[--error]',
+  cancelled: 'text-[--text-muted]',
 }
 
 function formatTime(value: string | null): string {
@@ -73,9 +82,10 @@ function JobRow({ job, paused, onChanged }: { job: JobStatus; paused: boolean; o
   // explicitly instead of leaving it as an indefinite "queued".
   const isPausedQueued = paused && (job.status === 'queued' || job.status === 'pending')
   const statusText = isPausedQueued ? t('jobs.statusPaused') : statusLabel(t, job.status)
-  const statusBadge = isPausedQueued
-    ? 'bg-[--warning]/15 text-[--warning]'
-    : (STATUS_BADGE[job.status] ?? 'bg-[--surface-3] text-[--text-secondary]')
+  const statusColor = isPausedQueued
+    ? 'text-[--warning]'
+    : (STATUS_COLOR[job.status] ?? 'text-[--text-secondary]')
+  const kindBadge = KIND_BADGE[job.kind ?? ''] ?? 'bg-[--surface-3] text-[--text-secondary]'
 
   const handleDelete = async () => {
     setBusy(true)
@@ -119,44 +129,48 @@ function JobRow({ job, paused, onChanged }: { job: JobStatus; paused: boolean; o
   const canResume = job.status === 'paused' && job.kind !== 'reanalyze'
   const pct = job.total > 0 ? Math.min(100, Math.round((job.done / job.total) * 100)) : 0
 
+  // Progress bar fill color
+  const progressFillClass =
+    job.status === 'done' ? 'bg-[--success]'
+      : job.status === 'failed' ? 'bg-[--error]'
+        : job.status === 'paused' ? 'bg-[--warning]'
+          : 'bg-[--primary]'
+
   return (
-    <tr className="border-b border-[--border]">
-      <td className="px-4 py-3 text-sm tabular-nums text-[--text-muted]">
-        #{job.id}
-      </td>
-      <td className="px-4 py-3 text-sm text-[--text-primary]">
-        {kindLabel(t, job.kind)}
+    <tr className="border-b border-[--border] hover:bg-[--surface-2] transition-colors">
+      <td className="px-4 py-3">
+        <span className="font-mono text-sm text-[--text-secondary] font-medium">#{job.id}</span>
       </td>
       <td className="px-4 py-3">
-        <span className={`inline-flex rounded px-2 py-0.5 text-xs font-medium ${statusBadge}`}>
+        <span className={`inline-flex items-center h-[22px] px-2 text-xs font-semibold rounded-[4px] whitespace-nowrap ${kindBadge}`}>
+          {kindLabel(t, job.kind)}
+        </span>
+      </td>
+      <td className="px-4 py-3">
+        <span className={`text-sm font-medium whitespace-nowrap ${statusColor}`}>
           {statusText}
         </span>
       </td>
-      <td className="px-4 py-3 text-sm text-[--text-secondary]">
+      <td className="px-4 py-3 min-w-[140px]">
         {job.total === 0 && job.status === 'done' ? (
           <span className="text-[--text-muted]">{t('jobs.noNewFiles')}</span>
         ) : (
-          <div className="w-32">
-            <div className="flex items-baseline justify-between tabular-nums">
-              <span>{job.done}/{job.total}</span>
-              {job.failed > 0 && (
-                <span className="text-[--error]">{t('jobs.failedN', { n: job.failed })}</span>
-              )}
-            </div>
-            <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-[--surface-3]">
+          <div className="flex flex-col gap-1">
+            <div className="h-[4px] overflow-hidden rounded-[2px] bg-[--surface-3]">
               <div
-                className={`h-full rounded-full transition-all duration-500 ease-out ${
-                  job.status === 'done' ? 'bg-[--success]'
-                    : job.status === 'failed' ? 'bg-[--error]'
-                    : job.status === 'paused' ? 'bg-[--warning]'
-                    : 'bg-[--primary]'
-                }`}
+                className={`h-full rounded-[2px] transition-all duration-300 ease-out ${progressFillClass}`}
                 style={{ width: `${pct}%` }}
               />
             </div>
+            <div className="flex items-baseline justify-between tabular-nums">
+              <span className="font-mono text-xs text-[--text-muted]">{job.done}/{job.total}</span>
+              {job.failed > 0 && (
+                <span className="text-xs text-[--error]">{t('jobs.failedN', { n: job.failed })}</span>
+              )}
+            </div>
             {job.status === 'failed' && job.error && (
               <p
-                className="mt-1 max-w-full truncate text-xs text-[--error]"
+                className="mt-0.5 max-w-[200px] truncate text-xs text-[--error]"
                 title={job.error}
               >
                 {t('jobs.errorLabel')}: {job.error}
@@ -165,22 +179,38 @@ function JobRow({ job, paused, onChanged }: { job: JobStatus; paused: boolean; o
           </div>
         )}
       </td>
-      <td className="px-4 py-3 text-sm text-[--text-muted]">{formatTime(job.started_at)}</td>
-      <td className="px-4 py-3 text-right">
-        <div className="flex justify-end gap-2">
+      <td className="px-4 py-3">
+        <span className="font-mono text-xs text-[--text-secondary] whitespace-nowrap">
+          {formatTime(job.started_at)}
+        </span>
+      </td>
+      <td className="px-4 py-3">
+        <div className="flex items-center gap-2">
           {canResume && (
-            <Button size="sm" variant="secondary" onClick={handleResume} disabled={busy}>
+            <button
+              onClick={handleResume}
+              disabled={busy}
+              className="h-6 px-2.5 text-xs font-medium rounded-md border border-[--border] text-[--text-secondary] hover:bg-[--surface-2] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            >
               {t('jobs.resume')}
-            </Button>
+            </button>
           )}
           {job.failed > 0 && (
-            <Button size="sm" variant="secondary" onClick={handleRetry} disabled={busy}>
+            <button
+              onClick={handleRetry}
+              disabled={busy}
+              className="h-6 px-2.5 text-xs font-medium rounded-md border border-[--border] text-[--text-secondary] hover:bg-[--surface-2] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            >
               {t('jobs.retryFailed')}
-            </Button>
+            </button>
           )}
-          <Button size="sm" variant="danger" onClick={handleDelete} disabled={busy}>
+          <button
+            onClick={handleDelete}
+            disabled={busy}
+            className="h-6 px-2.5 text-xs font-medium rounded-md border border-[--error] text-[--error] hover:bg-[--error] hover:text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          >
             {t('jobs.delete')}
-          </Button>
+          </button>
         </div>
       </td>
     </tr>

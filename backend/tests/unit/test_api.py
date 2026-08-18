@@ -491,8 +491,8 @@ class TestResumeJobPreservesProgress:
 
         # 40 not-yet-processed candidates remain (files unchanged since scan).
         class _FakeScanner:
-            def __init__(self, repository: Any = None) -> None:  # noqa: D107
-                pass
+            def __init__(self, repository: Any = None, **kwargs: Any) -> None:  # noqa: D107
+                assert "probe" in kwargs and "image_probe" in kwargs and "photo_extensions" in kwargs
 
             def scan(self, folders: Any, extensions: Any) -> list[Any]:
                 return [object()] * 40

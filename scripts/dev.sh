@@ -5,8 +5,8 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 PIDFILE="$ROOT/.dev-pids"
 
-# OMLX endpoint/key come from the Settings UI (~/.cutfinder/config.json) or OS
-# env vars exported in your shell; no .env file is read.
+# The OpenAI-compatible server's endpoint/key come from the Settings UI
+# (~/.cutfinder/config.json) or OS env vars exported in your shell; no .env file is read.
 
 _cleaned=0
 

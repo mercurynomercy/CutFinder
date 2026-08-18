@@ -6,7 +6,6 @@ A/B roll badge overlay, and optional duration label.
 
 import * as React from 'react'
 
-import { Badge } from '@/components/ChipBadge'
 import { cn } from '@/lib/cn'
 import { localDateKey } from '@/lib/date'
 import { useI18n } from '@/i18n'
@@ -34,10 +33,6 @@ export interface ThumbnailCardProps extends React.HTMLAttributes<HTMLDivElement>
   summary?: string | null
   /** Tag names — shown as small chips under the summary */
   tags?: string[]
-  /** When provided, shows a re-analyze button on the thumbnail (stops propagation). */
-  onReanalyze?: () => void
-  /** Whether this card is currently re-analyzing (spins the icon). */
-  reanalyzing?: boolean
   /** When provided, shows a play/open button that opens the video (stops propagation). */
   onOpen?: () => void
   /** Whether the clip has keyframe suggestions (shows a corner badge). */
@@ -46,7 +41,7 @@ export interface ThumbnailCardProps extends React.HTMLAttributes<HTMLDivElement>
 
 const ThumbnailCard = React.forwardRef<HTMLDivElement, ThumbnailCardProps>(
   (
-    { thumbnailUrl, sourcePath, libraryPath, clipId, rollType, duration, captureTime, isSelected = false, status, summary, tags, onReanalyze, reanalyzing = false, onOpen, hasKeyframes = false, className, ...props },
+    { thumbnailUrl, sourcePath, libraryPath, clipId, rollType, duration, captureTime, isSelected = false, status, summary, tags, onOpen, hasKeyframes = false, className, ...props },
     ref,
   ) => {
     const { t } = useI18n()
@@ -102,24 +97,6 @@ const ThumbnailCard = React.forwardRef<HTMLDivElement, ThumbnailCardProps>(
             </div>
           )}
 
-          {/* Re-analyze button (top-left) — shown on hover, always for 'partial' */}
-          {onReanalyze && (
-            <button
-              onClick={(e) => { e.stopPropagation(); onReanalyze() }}
-              disabled={reanalyzing}
-              title={reanalyzing ? t('card.reanalyzing') : t('card.reanalyze')}
-              aria-label={t('card.reanalyze')}
-              className={cn(
-                'absolute left-2 top-2 rounded-md bg-black/60 p-1.5 text-white backdrop-blur-sm transition-opacity hover:bg-black/80 disabled:opacity-60',
-                reanalyzing || status === 'partial' ? 'opacity-100' : 'opacity-0 group-hover:opacity-100',
-              )}
-            >
-              <svg className={cn('h-4 w-4', reanalyzing && 'animate-spin')} fill="none" viewBox="0 0 24 24">
-                <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
-              </svg>
-            </button>
-          )}
-
           {/* Play / open button (centered) — shown on hover, opens the video */}
           {onOpen && (
             <button
@@ -147,23 +124,16 @@ const ThumbnailCard = React.forwardRef<HTMLDivElement, ThumbnailCardProps>(
             </div>
           )}
 
-          {/* Keyframe-suggestions badge (top-right) — scissors mark */}
-          {hasKeyframes && (
-            <div
+          {/* Roll-type badge (top-left, solid color + blur, overlaid on the thumbnail) */}
+          {rollType && (
+            <span
               className={cn(
-                'absolute top-2 flex items-center rounded bg-black/60 p-1 text-white backdrop-blur-sm',
-                isSelected ? 'right-9' : 'right-2',  // make room for the selection check
+                'absolute left-1.5 top-1.5 rounded px-1.5 py-0.5 text-[10px] font-semibold text-white backdrop-blur-sm',
+                rollType === 'a' ? 'bg-[--roll-a]' : rollType === 'b' ? 'bg-[--roll-b]' : 'bg-[--roll-photo]',
               )}
-              title={t('card.hasKeyframes')}
-              aria-label={t('card.hasKeyframes')}
             >
-              <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" aria-hidden="true">
-                <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M20.2 6 3 11l-.9-2.4c-.3-1.1.3-2.2 1.3-2.5l13.5-4c1.1-.3 2.2.3 2.5 1.3Z" />
-                <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="m6.2 5.3 3.1 3.9" />
-                <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="m12.4 3.4 3.1 4" />
-                <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M3 11h18v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z" />
-              </svg>
-            </div>
+              {rollType === 'photo' ? t('card.photo') : rollType === 'a' ? 'A-roll' : 'B-roll'}
+            </span>
           )}
 
           {/* Duration label (bottom-right) — not for photos (no playback time) */}
@@ -186,16 +156,9 @@ const ThumbnailCard = React.forwardRef<HTMLDivElement, ThumbnailCardProps>(
         {/* Info row (filename, summary, tags) — flex-1 so the date pins to the
             card bottom and aligns across cards of differing tag/summary heights */}
         <div className="flex flex-1 flex-col gap-1.5 px-3 py-2">
-          <div className="flex items-center gap-1.5">
-            {rollType && (
-              <Badge type={rollType} className="shrink-0 px-1.5">
-                {rollType === 'photo' ? t('card.photo') : rollType === 'a' ? 'A-roll' : 'B-roll'}
-              </Badge>
-            )}
-            <p className="truncate text-xs text-[--text-secondary]" title={libraryPath || sourcePath}>
-              {displayName}
-            </p>
-          </div>
+          <p className="truncate text-xs text-[--text-secondary]" title={libraryPath || sourcePath}>
+            {displayName}
+          </p>
 
           {summary ? (
             <p className="line-clamp-2 text-[11px] leading-snug text-[--text-muted]" title={summary}>

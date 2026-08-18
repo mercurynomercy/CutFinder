@@ -138,4 +138,4 @@ fi
 echo ""
 echo "✅ Built $APP"
 echo "   Drag it to /Applications (or open $DMG)."
-echo "   Note: OMLX must be installed separately (it serves the AI models)."
+echo "   Note: an OpenAI-compatible server (e.g. OMLX, LM Studio, Ollama) must be installed separately (it serves the AI models)."

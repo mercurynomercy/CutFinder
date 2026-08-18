@@ -98,51 +98,37 @@ function ScanProgress({ jobId, events }: ScanProgressProps) {
   const pct = total > 0 ? Math.round((done / total) * 100) : null
 
   return (
-    <>
-      {/* Thin progress bar pinned to the very top of the viewport */}
-      <div className="fixed inset-x-0 top-0 z-[60] h-0.5 bg-[--surface-2]">
+    <div
+      data-testid="statusbar"
+      className="fixed inset-x-0 bottom-0 z-[60] flex h-8 shrink-0 items-center gap-3 border-t border-[--border] bg-[--surface-1] px-4 text-xs text-[--text-secondary]"
+    >
+      <span className="font-mono">
+        {job?.kind === 'keyframes' ? t('jobs.suggestingKeyframes')
+          : job?.kind === 'reanalyze' ? t('jobs.reanalyzing')
+          : t('jobs.scanning')}
+      </span>
+
+      {currentPath && (
+        <span className="truncate font-mono text-[--text-primary]" title={currentPath}>{currentPath}</span>
+      )}
+
+      {speechModelPending && (
+        <span className="truncate">{t('jobs.speechModelDownloadHint')}</span>
+      )}
+
+      <div className="h-0.5 flex-1 overflow-hidden rounded-full bg-[--surface-3]">
         {pct === null ? (
-          <div className="h-full w-1/3 animate-[cf-slide_1.4s_ease-in-out_infinite] bg-[--primary]" />
+          <div className="h-full w-1/3 animate-[cf-slide_1.4s_ease-in-out_infinite] rounded-full bg-[--primary]" />
         ) : (
-          <div className="h-full bg-[--primary] transition-all duration-500 ease-out" style={{ width: `${pct}%` }} />
+          <div className="h-full rounded-full bg-[--primary] transition-all duration-500 ease-out" style={{ width: `${pct}%` }} />
         )}
         <style>{`@keyframes cf-slide{0%{transform:translateX(-120%)}100%{transform:translateX(420%)}}`}</style>
       </div>
 
-      {/* Floating progress card */}
-      <div className="fixed bottom-4 right-4 z-[90] w-72 rounded-xl border border-[--border] bg-[--surface-1] p-3 shadow-xl">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2 text-sm font-medium text-[--text-primary]">
-            <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-[1.5px] border-[--primary] border-t-transparent" />
-            {job?.kind === 'keyframes' ? t('jobs.suggestingKeyframes')
-              : job?.kind === 'reanalyze' ? t('jobs.reanalyzing')
-              : t('jobs.scanning')}
-          </div>
-          {pct !== null && (
-            <span className="text-xs tabular-nums text-[--text-secondary]">{done}/{total}</span>
-          )}
-        </div>
-
-        {/* Inner determinate/indeterminate bar */}
-        <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-[--surface-3]">
-          {pct === null ? (
-            <div className="h-full w-1/3 animate-[cf-slide_1.4s_ease-in-out_infinite] rounded-full bg-[--primary]" />
-          ) : (
-            <div className="h-full rounded-full bg-[--primary] transition-all duration-500 ease-out" style={{ width: `${pct}%` }} />
-          )}
-        </div>
-
-        {/* Current clip */}
-        {currentPath && (
-          <p className="mt-2 truncate text-xs text-[--text-muted]" title={currentPath}>{currentPath}</p>
-        )}
-
-        {/* One-off speech-model download heads-up (first scan only) */}
-        {speechModelPending && (
-          <p className="mt-2 text-xs text-[--text-secondary]">{t('jobs.speechModelDownloadHint')}</p>
-        )}
-      </div>
-    </>
+      {pct !== null && (
+        <span className="shrink-0 font-mono tabular-nums text-[--text-secondary]">{done}/{total}</span>
+      )}
+    </div>
   )
 }
 
@@ -188,8 +174,8 @@ export function JobsPanel({ activeJobId }: JobsPanelProps) {
     <>
       <ScanProgress jobId={activeJobId} events={events} />
 
-      {/* Toast notifications (bottom-right, above the progress card) */}
-      <div className="fixed bottom-24 right-4 z-[100] flex flex-col gap-2">
+      {/* Toast notifications (bottom-right, above the status bar) */}
+      <div className="fixed bottom-12 right-4 z-[100] flex flex-col gap-2">
         {toasts.map((toast) => (
           <div
             key={toast.id}

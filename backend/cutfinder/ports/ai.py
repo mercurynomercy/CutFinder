@@ -1,7 +1,7 @@
-"""Summarizer and VisionTagger — AI model adapters (OMLX).
+"""Summarizer and VisionTagger — AI model adapters (OpenAI-compatible server).
 
-Both protocols target the same OMLX server but use different models
-and message formats (text vs vision / base64 frames).
+Both protocols target the same OpenAI-compatible server but use different
+models and message formats (text vs vision / base64 frames).
 """
 
 from __future__ import annotations
@@ -13,7 +13,7 @@ from ..domain.models import CutSuggestion, Segment, SummaryResult, VisionResult
 
 
 class Summarizer(Protocol):
-    """Generate a Chinese summary + tags from A-roll transcript text (via OMLX)."""
+    """Generate a Chinese summary + tags from A-roll transcript text (via an OpenAI-compatible server)."""
 
     def summarize(self, transcript_text: str) -> SummaryResult:
         """Summarise *transcript_text* and return structured tags."""
@@ -28,7 +28,7 @@ class Summarizer(Protocol):
 
 
 class VisionTagger(Protocol):
-    """Generate a visual description + tags from B-roll frames (via OMLX)."""
+    """Generate a visual description + tags from B-roll frames (via an OpenAI-compatible server)."""
 
     def describe(self, frame_paths: list[Path]) -> VisionResult:
         """Send *frame_paths* (as base64) to the vision model and return results."""

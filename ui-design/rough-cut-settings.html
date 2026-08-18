@@ -1,0 +1,570 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CutFinder — 初剪设置</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  color-scheme: light;
+  --bg-canvas: #EEF0F3;
+  --surface-1: #FFFFFF;
+  --surface-2: #F6F7F9;
+  --surface-3: #E4E7EC;
+  --border: #D8DCE2;
+  --border-strong: #BCC2CB;
+  --text-primary: #1A1D21;
+  --text-secondary: #4B5563;
+  --text-muted: #6B7280;
+  --primary: #5256E0;
+  --primary-hover: #4146C4;
+  --primary-fg: #FFFFFF;
+  --primary-soft: rgba(82, 86, 224, 0.12);
+  --roll-a: #B45309;
+  --roll-b: #0F766E;
+  --success: #15803D;
+  --warning: #B45309;
+  --error: #DC2626;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 10px;
+  --shadow-1: 0 1px 2px rgba(0,0,0,0.06);
+  --shadow-2: 0 4px 12px rgba(0,0,0,0.08);
+  --font-ui: "Inter", "PingFang SC", -apple-system, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", monospace;
+  --text-xs: 12px;
+  --text-sm: 13px;
+  --text-base: 14px;
+  --text-md: 15px;
+  --text-lg: 16px;
+  --text-xl: 20px;
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+  --bg-canvas: #0E0F11;
+  --surface-1: #16181B;
+  --surface-2: #1E2125;
+  --surface-3: #282C31;
+  --border: #2E333A;
+  --border-strong: #3A4048;
+  --text-primary: #F2F4F7;
+  --text-secondary: #A4ACB9;
+  --text-muted: #6B7280;
+  --primary: #6366F1;
+  --primary-hover: #7077F2;
+  --primary-fg: #FFFFFF;
+  --primary-soft: rgba(99, 102, 241, 0.15);
+  --roll-a: #F59E0B;
+  --roll-b: #2DD4BF;
+  --success: #22C55E;
+  --warning: #F59E0B;
+  --error: #EF4444;
+}
+
+body {
+  font-family: var(--font-ui);
+  font-size: var(--text-base);
+  line-height: 1.5;
+  color: var(--text-primary);
+  background: var(--bg-canvas);
+  -webkit-font-smoothing: antialiased;
+}
+
+[data-theme="dark"] h1, [data-theme="dark"] h2, [data-theme="dark"] h3 { line-height: 1.35; }
+:root h1, :root h2, :root h3 { line-height: 1.35; }
+
+a { color: inherit; text-decoration: none; }
+button { font-family: inherit; cursor: pointer; border: none; background: none; }
+input, select, textarea { font-family: inherit; }
+
+/* ── App Shell ── */
+.app { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+
+/* ── Top Bar ── */
+.topbar {
+  display: flex; align-items: center; gap: 12px;
+  height: 48px; padding: 0 16px;
+  background: var(--surface-1);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0; z-index: 100;
+}
+.topbar-title {
+  font-size: var(--text-lg); font-weight: 600;
+  letter-spacing: -0.01em; color: var(--text-primary);
+}
+.topbar-spacer { flex: 1; }
+.topbar-btn {
+  display: flex; align-items: center; gap: 6px;
+  height: 32px; padding: 0 12px;
+  font-size: var(--text-sm); font-weight: 500;
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  transition: background 150ms, color 150ms;
+}
+.topbar-btn:hover { background: var(--surface-3); color: var(--text-primary); }
+.topbar-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--bg-canvas), 0 0 0 4px var(--primary);
+}
+.topbar-close {
+  width: 32px; height: 32px; padding: 0;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: var(--radius-sm);
+}
+.topbar-theme-toggle {
+  width: 32px; height: 32px; padding: 0;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: var(--radius-sm); color: var(--text-secondary);
+  transition: background 150ms, color 150ms;
+}
+.topbar-theme-toggle:hover { background: var(--surface-3); color: var(--text-primary); }
+
+/* ── Main ── */
+.main { flex: 1; overflow-y: auto; padding: 24px 32px; }
+
+/* ── Settings Card ── */
+.settings-card {
+  max-width: 640px;
+  margin: 0 auto;
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+.settings-card-header {
+  padding: 16px 24px;
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between;
+}
+.settings-card-title {
+  font-size: var(--text-md); font-weight: 600;
+}
+.custom-prompt-badge {
+  font-size: var(--text-xs); font-weight: 500;
+  color: var(--primary);
+  cursor: pointer;
+}
+.custom-prompt-badge:hover { text-decoration: underline; }
+
+.settings-card-body { padding: 24px; }
+.settings-section { margin-bottom: 24px; }
+.settings-section:last-child { margin-bottom: 0; }
+.settings-section-title {
+  font-size: var(--text-sm); font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 12px;
+  letter-spacing: 0.01em;
+}
+.settings-divider {
+  height: 1px;
+  background: var(--border);
+  margin: 24px 0;
+}
+
+/* ── Form Controls ── */
+.form-group { margin-bottom: 20px; }
+.form-group:last-child { margin-bottom: 0; }
+.form-label {
+  display: block;
+  font-size: var(--text-sm); font-weight: 500;
+  color: var(--text-primary);
+  margin-bottom: 6px;
+}
+.form-hint {
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  line-height: 1.6;
+  margin-top: 4px;
+}
+.form-select {
+  width: 100%; height: 36px; padding: 0 12px;
+  display: flex; align-items: center;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+  outline: none;
+  cursor: pointer;
+  transition: border-color 150ms, box-shadow 150ms;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L5 5L9 1' stroke='%236B7280' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  padding-right: 32px;
+}
+.form-select:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px var(--primary-soft);
+}
+.form-select:hover { border-color: var(--border-strong); }
+
+.form-number-input {
+  width: 120px; height: 36px; padding: 0 10px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+  font-family: var(--font-mono);
+  color: var(--text-primary);
+  text-align: center;
+  outline: none;
+  transition: border-color 150ms, box-shadow 150ms;
+}
+.form-number-input:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px var(--primary-soft);
+}
+.form-number-input:hover { border-color: var(--border-strong); }
+
+/* ── Checkbox ── */
+.checkbox-group {
+  display: flex; align-items: flex-start; gap: 10px;
+  cursor: pointer;
+  user-select: none;
+}
+.checkbox-group:hover .checkbox-box { border-color: var(--border-strong); }
+.checkbox-box {
+  width: 18px; height: 18px; flex-shrink: 0;
+  border: 1.5px solid var(--border-strong);
+  border-radius: 4px;
+  display: flex; align-items: center; justify-content: center;
+  transition: background 150ms, border-color 150ms;
+  margin-top: 1px;
+}
+.checkbox-box.checked {
+  background: var(--primary);
+  border-color: var(--primary);
+}
+.checkbox-box svg { display: none; }
+.checkbox-box.checked svg { display: block; }
+.checkbox-label {
+  font-size: var(--text-sm); font-weight: 500;
+  color: var(--text-primary);
+}
+.checkbox-hint {
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  line-height: 1.6;
+  margin-top: 2px;
+}
+
+/* ── Textarea ── */
+.form-textarea {
+  width: 100%; min-height: 180px; padding: 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-xs);
+  font-family: var(--font-ui);
+  color: var(--text-primary);
+  outline: none;
+  resize: vertical;
+  line-height: 1.6;
+  transition: border-color 150ms, box-shadow 150ms;
+}
+.form-textarea::placeholder { color: var(--text-muted); }
+.form-textarea:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px var(--primary-soft);
+}
+.form-textarea-hint {
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+}
+
+/* ── Footer ── */
+.settings-footer {
+  padding: 16px 24px;
+  border-top: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between;
+  background: var(--surface-1);
+}
+.reset-btn {
+  height: 36px; padding: 0 16px;
+  font-size: var(--text-sm); font-weight: 500;
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  transition: background 150ms;
+}
+.reset-btn:hover { background: var(--surface-3); }
+.reset-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--bg-canvas), 0 0 0 4px var(--primary);
+}
+.footer-actions { display: flex; gap: 8px; }
+.cancel-btn {
+  height: 36px; padding: 0 16px;
+  font-size: var(--text-sm); font-weight: 500;
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  transition: background 150ms;
+}
+.cancel-btn:hover { background: var(--surface-3); }
+.cancel-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--bg-canvas), 0 0 0 4px var(--primary);
+}
+.save-btn {
+  height: 36px; padding: 0 20px;
+  font-size: var(--text-sm); font-weight: 600;
+  background: var(--primary); color: var(--primary-fg);
+  border-radius: var(--radius-sm);
+  transition: background 150ms;
+}
+.save-btn:hover { background: var(--primary-hover); }
+.save-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--bg-canvas), 0 0 0 4px var(--primary);
+}
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--border-strong); }
+
+.icon-sm { width: 14px; height: 14px; }
+.icon-md { width: 16px; height: 16px; }
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- ── Top Bar ── -->
+  <header class="topbar">
+    <span class="topbar-title">初剪设置</span>
+    <span class="topbar-spacer"></span>
+    <button class="topbar-theme-toggle" id="themeToggle" aria-label="切换主题">
+      <svg class="icon-md sun-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true" style="display:none">
+        <circle cx="8" cy="8" r="3"/><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.1 3.1l1.4 1.4M11.5 11.5l1.4 1.4M12.9 3.1l-1.4 1.4M4.5 11.5l-1.4 1.4"/>
+      </svg>
+      <svg class="icon-md moon-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+        <path d="M13.5 9.5A5.5 5.5 0 0 1 6.5 2.5a5.5 5.5 0 1 0 7 7Z"/>
+      </svg>
+    </button>
+    <a href="rough-cut.html" class="topbar-close" aria-label="关闭">
+      <svg class="icon-md" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+        <path d="M4 4l8 8M12 4l-8 8"/>
+      </svg>
+    </a>
+  </header>
+
+  <!-- ── Main ── -->
+  <div class="main">
+    <div class="settings-card" data-od-id="settings-card">
+      <div class="settings-card-header">
+        <span class="settings-card-title">Rough-cut settings</span>
+        <span class="custom-prompt-badge">Custom prompt in use</span>
+      </div>
+
+      <div class="settings-card-body">
+        <!-- Generation Options -->
+        <div class="settings-section">
+          <div class="settings-section-title">Generation options</div>
+
+          <!-- Generation Mode -->
+          <div class="form-group">
+            <label class="form-label" for="gen-mode">Generation mode</label>
+            <select class="form-select" id="gen-mode">
+              <option value="agent" selected>Agent (deeper)</option>
+              <option value="fast">Fast</option>
+            </select>
+            <div class="form-hint">
+              Agent: a scoped tool loop per shooting date (deeper, falls back to fast when it doesn't converge). Fast: one structured pass per date (quicker, coarser).
+            </div>
+          </div>
+
+          <!-- Max Tool Rounds -->
+          <div class="form-group">
+            <label class="form-label" for="max-rounds">Max tool rounds (agent)</label>
+            <input class="form-number-input" type="number" id="max-rounds" value="24" min="1" max="100" aria-describedby="max-rounds-hint">
+            <div class="form-hint" id="max-rounds-hint">
+              How many tool-call rounds a day's agent may take before it's forced to finalize (or falls back to fast). Higher = more room to deep-dive, slower. Only applies in Agent mode.
+            </div>
+          </div>
+
+          <!-- Per-day Catalog Size (Agent) -->
+          <div class="form-group">
+            <label class="form-label" for="agent-catalog">Per-day catalog size (agent, tokens)</label>
+            <input class="form-number-input" type="number" id="agent-catalog" value="50000" min="1000" max="200000" step="1000" aria-describedby="agent-catalog-hint">
+            <div class="form-hint" id="agent-catalog-hint">
+              How much of a day's clip catalog the agent sees (one short line per clip; transcripts fetched on demand), counted as real tokens via OMLX. Higher = no clips dropped on busy days; the text model takes a huge context, so the cap is just to bound local prefill cost.
+            </div>
+          </div>
+
+          <!-- Critic Review Pass -->
+          <div class="form-group">
+            <label class="checkbox-group" for="critic-review">
+              <span class="checkbox-box" id="critic-box">
+                <svg class="icon-sm" viewBox="0 0 12 12" fill="none" stroke="white" stroke-width="2" aria-hidden="true">
+                  <path d="M2.5 6.5L5 9L9.5 3"/>
+                </svg>
+              </span>
+              <div>
+                <div class="checkbox-label">Critic review pass</div>
+                <div class="checkbox-hint">After the shot list is assembled, run one extra review pass (rhythm / narrative / A-B balance) and re-do the dates it flags. Costs one more model call.</div>
+              </div>
+            </label>
+          </div>
+
+          <!-- Vision Look-ups -->
+          <div class="form-group">
+            <label class="form-label" for="vision-lookups">Vision look-ups per generation</label>
+            <input class="form-number-input" type="number" id="vision-lookups" value="6" min="0" max="100" aria-describedby="vision-hint">
+            <div class="form-hint" id="vision-hint">
+              Max live B-roll vision checks per shot list (0 = unlimited). Each one makes OMLX swap models, slow on weaker Macs.
+            </div>
+          </div>
+
+          <!-- Per-day Catalog Size (Fast) -->
+          <div class="form-group">
+            <label class="form-label" for="fast-catalog">Per-day catalog size (fast, tokens)</label>
+            <input class="form-number-input" type="number" id="fast-catalog" value="40000" min="1000" max="200000" step="1000" aria-describedby="fast-catalog-hint">
+            <div class="form-hint" id="fast-catalog-hint">
+              Fast mode inlines transcripts (it has no tools), so it fills faster than agent mode. Counted as real tokens via OMLX. Higher = fuller transcripts reach the model, at more local prefill cost.
+            </div>
+          </div>
+        </div>
+
+        <div class="settings-divider"></div>
+
+        <!-- Director Prompt -->
+        <div class="settings-section">
+          <div class="settings-section-title">Director prompt</div>
+          <div class="form-textarea-hint">
+            Edit the director system prompt. Placeholders {aspect}, {target}, {style} are filled per request.
+          </div>
+          <textarea class="form-textarea" id="director-prompt" aria-label="导演提示词">你是专业的视频初剪导演。基于下面给出的已编目素材，生成一份精确到片段内 in/out 的分镜表，供用户照搬到剪辑软件。
+
+按【拍摄日期】分章：每个拍摄日期作为一个章节，chapter 字段直接填该日期（ISO 格式，如 2026-04-25）；把同一天的素材组织成一段叙事，章节按日期先后排列。
+
+在每一天内：严格按每条素材给出的【拍摄时间】时间戳先后顺序组织，还原当天真实的行程时间线—先发生的先出现（例如先到关帝庙，再去 Market City，最后吃饭，就按这个顺序排）。素材清单已按拍摄时间排好，请保持这个顺序。
+
+输出格式：
+- 每个 shot 一行
+- 格式：`[A-roll/B-roll] 素材文件名 | 时间戳 in/out | 简短描述`
+- 描述要说明这个 shot 的内容和它在叙事中的作用
+- 只输出分镜表，不要其他内容
+
+素材清单：
+{clips}</textarea>
+        </div>
+      </div>
+
+      <!-- Footer -->
+      <div class="settings-footer">
+        <button class="reset-btn" data-od-id="reset-btn">Reset to default</button>
+        <div class="footer-actions">
+          <a href="rough-cut.html" class="cancel-btn">Cancel</a>
+          <button class="save-btn" data-od-id="save-btn">Save</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── Theme Toggle ──
+(function() {
+  var stored = localStorage.getItem('cutfinder-theme');
+  if (stored === 'dark') {
+    document.documentElement.setAttribute('data-theme', 'dark');
+    updateIcons(true);
+  }
+  function updateIcons(dark) {
+    document.querySelector('.sun-icon').style.display = dark ? '' : 'none';
+    document.querySelector('.moon-icon').style.display = dark ? 'none' : '';
+  }
+  document.getElementById('themeToggle').addEventListener('click', function() {
+    var isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+    var next = isDark ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', next);
+    localStorage.setItem('cutfinder-theme', next);
+    updateIcons(!isDark);
+  });
+})();
+
+// ── Generation Mode Toggle ──
+(function() {
+  var modeSelect = document.getElementById('gen-mode');
+  var maxRounds = document.getElementById('max-rounds');
+  var agentCatalog = document.getElementById('agent-catalog');
+  var criticCheck = document.getElementById('critic-box');
+  var visionLookups = document.getElementById('vision-lookups');
+
+  modeSelect.addEventListener('change', function() {
+    var isAgent = this.value === 'agent';
+    maxRounds.disabled = !isAgent;
+    agentCatalog.disabled = !isAgent;
+    criticCheck.style.opacity = isAgent ? '1' : '0.5';
+    visionLookups.disabled = false;
+  });
+})();
+
+// ── Checkbox Toggle ──
+(function() {
+  var checkboxGroup = document.querySelector('#critic-review');
+  var checkboxBox = document.getElementById('critic-box');
+  checkboxGroup.addEventListener('click', function(e) {
+    e.preventDefault();
+    var isChecked = checkboxBox.classList.toggle('checked');
+  });
+})();
+
+// ── Save ──
+(function() {
+  document.querySelector('.save-btn').addEventListener('click', function() {
+    var settings = {
+      mode: document.getElementById('gen-mode').value,
+      maxRounds: document.getElementById('max-rounds').value,
+      agentCatalog: document.getElementById('agent-catalog').value,
+      criticReview: document.getElementById('critic-box').classList.contains('checked'),
+      visionLookups: document.getElementById('vision-lookups').value,
+      fastCatalog: document.getElementById('fast-catalog').value,
+      directorPrompt: document.getElementById('director-prompt').value
+    };
+    localStorage.setItem('cutfinder-settings', JSON.stringify(settings));
+  });
+})();
+
+// ── Reset ──
+(function() {
+  document.getElementById('reset-btn').addEventListener('click', function() {
+    if (confirm('确定要重置所有设置为默认值吗？')) {
+      localStorage.removeItem('cutfinder-settings');
+      location.reload();
+    }
+  });
+})();
+
+// ── Load Saved Settings ──
+(function() {
+  var saved = localStorage.getItem('cutfinder-settings');
+  if (!saved) return;
+  try {
+    var s = JSON.parse(saved);
+    document.getElementById('gen-mode').value = s.mode || 'agent';
+    document.getElementById('max-rounds').value = s.maxRounds || 24;
+    document.getElementById('agent-catalog').value = s.agentCatalog || 50000;
+    if (s.criticReview) document.getElementById('critic-box').classList.add('checked');
+    document.getElementById('vision-lookups').value = s.visionLookups || 6;
+    document.getElementById('fast-catalog').value = s.fastCatalog || 40000;
+    if (s.directorPrompt) document.getElementById('director-prompt').value = s.directorPrompt;
+    // Trigger mode change handler
+    document.getElementById('gen-mode').dispatchEvent(new Event('change'));
+  } catch(e) {}
+})();
+</script>
+</body>
+</html>

@@ -21,9 +21,6 @@ import { useI18n } from '@/i18n'
 
 const basename = (p: string) => p.split('/').pop() || p
 
-// Format a seconds count as m:ss for the elapsed timer.
-const mmss = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
-
 // Percent at which the backend switches from vocal separation to transcription.
 // Mirrors `_SEPARATION_WEIGHT` (0.4) in the backend mlx_whisper.py adapter.
 const SEPARATION_WEIGHT_PCT = 40
@@ -69,7 +66,6 @@ export function SubtitlesPage({ onClose }: SubtitlesPageProps) {
   const [phase, setPhase] = useState<Phase>('idle')
   const [files, setFiles] = useState<string[]>([])
   const [jobId, setJobId] = useState<number | null>(null)
-  const [elapsed, setElapsed] = useState(0)
   const [progress, setProgress] = useState(0)
   // True when the speech model wasn't on disk at export time: the first export
   // blocks on a multi-GB download before transcription can start, so we surface
@@ -101,15 +97,6 @@ export function SubtitlesPage({ onClose }: SubtitlesPageProps) {
     return () => { cancelled = true }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
-
-  // Tick an elapsed timer while a job is running so the user sees it's working
-  // (Whisper transcription of a long video can take minutes with no sub-step).
-  useEffect(() => {
-    if (phase !== 'running') return
-    setElapsed(0)
-    const id = setInterval(() => setElapsed((s) => s + 1), 1000)
-    return () => clearInterval(id)
-  }, [phase])
 
   const formats = [itt ? 'itt' : null, srt ? 'srt' : null].filter(Boolean) as string[]
   const canExport = Boolean(videoPath) && Boolean(outDir) && formats.length > 0 && phase !== 'running'
@@ -180,132 +167,155 @@ export function SubtitlesPage({ onClose }: SubtitlesPageProps) {
     }
   }
 
+  // Build the readiness status text for the footer.
+  const statusText = canExport
+    ? t('subtitles.readyStatus', { formats: formats.join(' + ') })
+    : ''
+
   return (
     <div className="flex h-screen w-full flex-col bg-[--bg-canvas] text-[--text-primary]">
-      <header className="flex h-14 shrink-0 items-center justify-between border-b border-[--border] bg-[--surface-1] px-6">
+      {/* ── Top Bar ─────────────────────────────── */}
+      <header className="flex h-12 shrink-0 items-center border-b border-[--border] bg-[--surface-1] px-4">
         <h1 className="text-lg font-semibold tracking-tight">{t('subtitles.title')}</h1>
+        <span className="flex-1" />
         <button
           onClick={onClose}
           className="rounded-md p-1.5 text-[--text-secondary] hover:bg-[--surface-3] transition-colors"
           aria-label={t('subtitles.close')}
         >
-          <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24">
-            <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M6 18L18 6M6 6l12 12" />
+          <svg className="h-4 w-4" fill="none" viewBox="0 0 16 16">
+            <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 4l8 8M12 4l-8 8" />
           </svg>
         </button>
       </header>
 
-      <div className="flex-1 overflow-auto p-6">
-        <div className="mx-auto w-full max-w-2xl space-y-6">
-          <p className="text-sm text-[--text-secondary]">{t('subtitles.desc')}</p>
+      {/* ── Content ─────────────────────────────── */}
+      <div className="flex-1 overflow-auto px-6 py-6">
+        <div className="mx-auto w-full max-w-[640px] flex flex-col gap-5">
+          <p className="text-sm text-[--text-secondary] leading-relaxed">{t('subtitles.desc')}</p>
 
-          {/* ── Video ─────────────────────────────── */}
-          <fieldset className="rounded-lg border border-[--border] bg-[--surface-1] p-4">
-            <legend className="text-sm font-medium text-[--text-primary]">{t('subtitles.video')}</legend>
+          {/* ── Video Selection Card ──────────────── */}
+          <div className="rounded-lg border border-[--border] bg-[--surface-1] p-4 flex flex-col gap-3">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-semibold text-[--text-primary]">{t('subtitles.video')}</span>
+            </div>
             {videoPath ? (
-              <div className="mt-2">
-                <div className="truncate text-sm font-medium text-[--text-primary]">{basename(videoPath)}</div>
-                <div className="truncate text-xs text-[--text-muted]">{videoPath}</div>
+              <div className="flex flex-col gap-1">
+                <span className="text-sm font-medium text-[--text-primary]">{basename(videoPath)}</span>
+                <span className="font-mono text-xs text-[--text-muted]">{videoPath}</span>
               </div>
             ) : (
-              <p className="mt-2 text-sm text-[--text-muted]">{t('subtitles.noVideo')}</p>
+              <span className="text-xs text-[--text-muted] italic">{t('subtitles.noVideo')}</span>
             )}
             <button
               type="button"
               onClick={handlePickVideo}
-              className="mt-2 inline-flex items-center gap-1.5 rounded-md bg-[--surface-2] px-3 py-1.5 text-xs font-medium text-[--text-secondary] hover:bg-[--surface-3]"
+              className={`h-8 px-3 flex items-center justify-center text-sm font-medium rounded-md transition-colors ${
+                videoPath
+                  ? 'bg-[--success] text-white'
+                  : 'bg-[--primary] text-[--primary-fg] hover:bg-[--primary-hover]'
+              }`}
             >
-              {t('subtitles.chooseVideo')}
+              {videoPath ? t('subtitles.changeVideo') : t('subtitles.chooseVideo')}
             </button>
-          </fieldset>
+          </div>
 
-          {/* ── Output folder ─────────────────────── */}
-          <fieldset className="rounded-lg border border-[--border] bg-[--surface-1] p-4">
-            <legend className="text-sm font-medium text-[--text-primary]">{t('subtitles.folder')}</legend>
+          {/* ── Output Folder Card ────────────────── */}
+          <div className="rounded-lg border border-[--border] bg-[--surface-1] p-4 flex flex-col gap-3">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-semibold text-[--text-primary]">{t('subtitles.folder')}</span>
+            </div>
             {outDir ? (
-              <div className="mt-2 truncate text-sm text-[--text-primary]">{outDir}</div>
+              <span className="text-sm font-medium text-[--text-primary]">{outDir}</span>
             ) : (
-              <p className="mt-2 text-sm text-[--text-muted]">{t('subtitles.noFolder')}</p>
+              <span className="text-xs text-[--text-muted] italic">{t('subtitles.noFolder')}</span>
             )}
             <button
               type="button"
               onClick={handlePickFolder}
-              className="mt-2 inline-flex items-center gap-1.5 rounded-md bg-[--surface-2] px-3 py-1.5 text-xs font-medium text-[--text-secondary] hover:bg-[--surface-3]"
+              className={`h-8 px-3 flex items-center justify-center text-sm font-medium rounded-md transition-colors ${
+                outDir
+                  ? 'bg-[--success] text-white'
+                  : 'bg-[--primary] text-[--primary-fg] hover:bg-[--primary-hover]'
+              }`}
             >
-              {t('subtitles.chooseFolder')}
+              {outDir ? t('subtitles.changeFolder') : t('subtitles.chooseFolder')}
             </button>
-          </fieldset>
-
-          {/* ── Formats ───────────────────────────── */}
-          <fieldset className="rounded-lg border border-[--border] bg-[--surface-1] p-4">
-            <legend className="text-sm font-medium text-[--text-primary]">{t('subtitles.formats')}</legend>
-            <div className="mt-3 flex gap-6">
-              <label className="flex items-center gap-2 text-sm text-[--text-secondary]">
-                <input
-                  type="checkbox" checked={itt}
-                  onChange={(e) => setItt(e.target.checked)}
-                  className="h-4 w-4 rounded border-[--border] bg-[--surface-2]"
-                />
-                {t('subtitles.itt')}
-              </label>
-              <label className="flex items-center gap-2 text-sm text-[--text-secondary]">
-                <input
-                  type="checkbox" checked={srt}
-                  onChange={(e) => setSrt(e.target.checked)}
-                  className="h-4 w-4 rounded border-[--border] bg-[--surface-2]"
-                />
-                {t('subtitles.srt')}
-              </label>
-            </div>
-            <p className="mt-3 text-xs text-[--text-muted]">{t('subtitles.languageNote')}</p>
-
-            {/* Minimum on-screen seconds per cue */}
-            <div className="mt-4">
-              <label className="block text-sm text-[--text-secondary]">{t('subtitles.minDuration')}</label>
-              <p className="mb-1 text-xs text-[--text-muted]">{t('subtitles.minDurationDesc')}</p>
-              <input
-                type="number" min={0} max={10} step={0.5} value={minCueS}
-                onChange={(e) => setMinCueS(parseFloat(e.target.value) || 0)}
-                className="w-32 rounded-md border border-[--border] bg-[--surface-2] px-3 py-1.5 text-sm outline-none focus:border-[--primary]"
-              />
-            </div>
-          </fieldset>
-
-          {/* ── Export ────────────────────────────── */}
-          <div className="flex items-center gap-3">
-            <Button onClick={handleExport} disabled={!canExport}>
-              {phase === 'running' ? t('subtitles.exporting') : t('subtitles.export')}
-            </Button>
           </div>
 
-          {/* ── Progress (determinate, two phases: separation → transcription) ─ */}
-          {phase === 'running' && (
-            <div className="rounded-lg border border-[--border] bg-[--surface-1] p-4">
-              <div className="flex items-center justify-between gap-3">
-                <span className="flex items-center gap-2 text-sm font-medium text-[--text-primary]">
-                  <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-[1.5px] border-[--primary] border-t-transparent" />
-                  {t(
-                    modelDownloading
-                      ? 'subtitles.phaseDownloadingModel'
-                      : progress < SEPARATION_WEIGHT_PCT
-                        ? 'subtitles.phaseSeparating'
-                        : 'subtitles.phaseTranscribing',
-                  )}
-                </span>
-                <span className="number-tabular text-xs text-[--text-muted]">
-                  {t('subtitles.elapsed', { time: mmss(elapsed) })}
-                </span>
-              </div>
-              <div className="mt-3 flex items-center gap-3">
-                <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-[--surface-3]">
-                  <div className="h-full rounded-full bg-[--primary] transition-all duration-500 ease-out" style={{ width: `${progress}%` }} />
-                </div>
-                <span className="tabular-nums text-xs text-[--text-secondary]">{Math.round(progress)}%</span>
-              </div>
-              <p className="mt-2 text-xs text-[--text-muted]">
-                {t(modelDownloading ? 'subtitles.downloadingModelHint' : 'subtitles.progressHint')}
-              </p>
+          {/* ── Format Options Card ──────────────── */}
+          <div className="rounded-lg border border-[--border] bg-[--surface-1] p-4 flex flex-col gap-2.5">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-semibold text-[--text-primary]">{t('subtitles.formats')}</span>
             </div>
+            <div className="flex flex-col gap-2.5">
+              {/* iTT checkbox */}
+              <label className="flex items-center gap-2 cursor-pointer">
+                <span className="relative w-[18px] h-[18px] flex-shrink-0">
+                  <input
+                    type="checkbox"
+                    checked={itt}
+                    onChange={(e) => setItt(e.target.checked)}
+                    className="absolute opacity-0 w-full h-full cursor-pointer z-1 m-0"
+                  />
+                  <span
+                    className={`w-[18px] h-[18px] rounded-[4px] flex items-center justify-center transition-all duration-150 ${
+                      itt ? 'bg-[--primary] border-[--primary]' : 'border border-[--border] bg-[--surface-2]'
+                    }`}
+                  >
+                    <svg className="w-3 h-3 text-[--primary-fg]" style={{ opacity: itt ? 1 : 0, transition: 'opacity 150ms' }} viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth={2}>
+                      <path d="M2.5 6.5L4.5 8.5L9.5 3.5" />
+                    </svg>
+                  </span>
+                </span>
+                <span className="text-sm font-medium text-[--text-primary]">{t('subtitles.itt')}</span>
+              </label>
+              {/* SRT checkbox */}
+              <label className="flex items-center gap-2 cursor-pointer">
+                <span className="relative w-[18px] h-[18px] flex-shrink-0">
+                  <input
+                    type="checkbox"
+                    checked={srt}
+                    onChange={(e) => setSrt(e.target.checked)}
+                    className="absolute opacity-0 w-full h-full cursor-pointer z-1 m-0"
+                  />
+                  <span
+                    className={`w-[18px] h-[18px] rounded-[4px] flex items-center justify-center transition-all duration-150 ${
+                      srt ? 'bg-[--primary] border-[--primary]' : 'border border-[--border] bg-[--surface-2]'
+                    }`}
+                  >
+                    <svg className="w-3 h-3 text-[--primary-fg]" style={{ opacity: srt ? 1 : 0, transition: 'opacity 150ms' }} viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth={2}>
+                      <path d="M2.5 6.5L4.5 8.5L9.5 3.5" />
+                    </svg>
+                  </span>
+                </span>
+                <span className="text-sm font-medium text-[--text-primary]">{t('subtitles.srt')}</span>
+              </label>
+            </div>
+            <p className="text-xs text-[--text-muted] leading-relaxed -mt-0.5">{t('subtitles.languageNote')}</p>
+
+            {/* Minimum on-screen seconds per cue */}
+            <div className="flex items-center gap-2 pt-1 border-t border-[--border]">
+              <span className="text-xs font-medium text-[--text-secondary] whitespace-nowrap">{t('subtitles.minDuration')}</span>
+              <input
+                type="number"
+                min={0}
+                max={30}
+                step={0.5}
+                value={minCueS}
+                onChange={(e) => setMinCueS(parseFloat(e.target.value) || 0)}
+                className="w-[72px] h-8 text-center font-mono text-sm bg-[--surface-2] border border-[--border] rounded-md text-[--text-primary] outline-none transition-colors focus:border-[--primary] focus:shadow-[0_0_0_2px_var(--primary-soft)]"
+              />
+              <span className="text-xs text-[--text-muted]">s</span>
+            </div>
+            <p className="text-xs text-[--text-muted] leading-relaxed">{t('subtitles.minDurationDesc')}</p>
+          </div>
+
+          {/* ── Model download notice (shown in content while model loads) ─ */}
+          {phase === 'running' && modelDownloading && (
+            <p className="text-xs text-[--text-muted]">
+              {t('subtitles.downloadingModelHint')}
+            </p>
           )}
 
           {/* ── Result ────────────────────────────── */}
@@ -329,6 +339,46 @@ export function SubtitlesPage({ onClose }: SubtitlesPageProps) {
           )}
         </div>
       </div>
+
+      {/* ── Footer ──────────────────────────────── */}
+      <footer className="shrink-0 border-t border-[--border] bg-[--surface-1] py-3 flex flex-col">
+        {/* Progress bar — visible during export, takes full footer height */}
+        <div className={`px-6 flex flex-col gap-1 min-h-9 ${phase === 'running' ? '' : 'hidden'}`}>
+          <div className="h-[4px] w-full overflow-hidden rounded-[2px] bg-[--surface-3]">
+            <div className="h-full rounded-[2px] bg-[--primary] transition-all duration-300 ease-out" style={{ width: `${progress}%` }} />
+          </div>
+          <div className="flex-1 flex items-end justify-between">
+            <span className="text-xs text-[--text-muted]">
+              {t(
+                modelDownloading
+                  ? 'subtitles.phaseDownloadingModel'
+                  : progress < SEPARATION_WEIGHT_PCT
+                    ? 'subtitles.phaseSeparating'
+                    : 'subtitles.phaseTranscribing',
+              )}
+            </span>
+            <span className="font-mono text-xs text-[--text-muted]">{Math.round(progress)}%</span>
+          </div>
+        </div>
+        {/* Status + buttons row — hidden during export */}
+        <div className={`px-6 flex items-center justify-between ${phase === 'running' ? 'hidden' : ''}`}>
+          <span className="text-xs text-[--text-muted]">
+            {statusText}
+          </span>
+          <div className="flex gap-2">
+            <Button variant="secondary" onClick={onClose}>
+              {t('subtitles.close')}
+            </Button>
+            <button
+              onClick={handleExport}
+              disabled={!canExport}
+              className="h-9 px-5 flex items-center justify-center text-sm font-medium rounded-md bg-[--primary] text-[--primary-fg] hover:bg-[--primary-hover] transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:pointer-events-none"
+            >
+              {t('subtitles.export')}
+            </button>
+          </div>
+        </div>
+      </footer>
     </div>
   )
 }

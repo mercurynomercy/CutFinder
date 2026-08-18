@@ -3,7 +3,7 @@
  * Behavior-focused (rendered text/values + network calls), not exact classes.
  */
 
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
@@ -72,10 +72,10 @@ describe('SettingsPage', () => {
 
   it('renders the vocal-separation toggle reflecting the loaded value (off)', async () => {
     render(<SettingsPage />)
-    const toggle = await screen.findByRole('checkbox', {
+    const toggle = await screen.findByRole('switch', {
       name: /Separate vocals before A-roll transcription/i,
     })
-    expect((toggle as HTMLInputElement).checked).toBe(false)
+    expect(toggle.getAttribute('aria-checked')).toBe('false')
   })
 
   it('sends vocal_separation in the PUT payload when toggled on', async () => {
@@ -88,7 +88,7 @@ describe('SettingsPage', () => {
     )
 
     render(<SettingsPage />)
-    const toggle = await screen.findByRole('checkbox', {
+    const toggle = await screen.findByRole('switch', {
       name: /Separate vocals before A-roll transcription/i,
     })
     await userEvent.click(toggle)
@@ -119,9 +119,9 @@ describe('SettingsPage', () => {
     expect(saved!.photo_extensions).toEqual(['.jpg', '.jpeg', '.png', '.heic', '.webp'])
   })
 
-  it('tests the OMLX connection and shows success', async () => {
+  it('tests the OpenAI-compatible connection and shows success', async () => {
     server.use(
-      http.post(`${API}/settings/omlx/test`, () =>
+      http.post(`${API}/settings/openai/test`, () =>
         HttpResponse.json({ ok: true, models: ['Qwen3.6-35B-A3B'], missing: [] })),
     )
     render(<SettingsPage />)
@@ -130,13 +130,35 @@ describe('SettingsPage', () => {
     expect(await screen.findByText(/连接成功|Connected/)).toBeInTheDocument()
   })
 
-  it('shows the OMLX error when the key is invalid', async () => {
+  it('shows the OpenAI-compatible server error when the key is invalid', async () => {
     server.use(
-      http.post(`${API}/settings/omlx/test`, () =>
-        HttpResponse.json({ ok: false, error: 'OMLX returned HTTP 401: Invalid API key' })),
+      http.post(`${API}/settings/openai/test`, () =>
+        HttpResponse.json({ ok: false, error: 'OpenAI-compatible server returned HTTP 401: Invalid API key' })),
     )
     render(<SettingsPage />)
     await userEvent.click(await screen.findByRole('button', { name: /测试连接|Test connection/ }))
     expect(await screen.findByText(/Invalid API key/)).toBeInTheDocument()
+  })
+
+  it('renders a Maintenance section that calls the three callback props', async () => {
+    const onSuggest = vi.fn()
+    const onCleanup = vi.fn()
+    const onLogs = vi.fn()
+    render(
+      <SettingsPage
+        onSuggestAllKeyframes={onSuggest}
+        onCleanupLibrary={onCleanup}
+        onShowLogs={onLogs}
+      />,
+    )
+
+    await userEvent.click(await screen.findByRole('button', { name: /suggest keyframes for all clips/i }))
+    expect(onSuggest).toHaveBeenCalledTimes(1)
+
+    await userEvent.click(screen.getByRole('button', { name: /clean up deleted files/i }))
+    expect(onCleanup).toHaveBeenCalledTimes(1)
+
+    await userEvent.click(screen.getByRole('button', { name: /backend logs/i }))
+    expect(onLogs).toHaveBeenCalledTimes(1)
   })
 })

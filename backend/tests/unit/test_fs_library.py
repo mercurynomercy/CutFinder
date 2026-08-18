@@ -41,7 +41,7 @@ FakeLibraryWriter = _fake_mod.FakeLibraryWriter  # type: ignore[union-attr, name
 def _make_config(tmp_path: Path) -> AppConfig:
     """Create an AppConfig pointing at *tmp_path* as the library root."""
     return AppConfig(
-        env=EnvSettings(OMLX_BASE_URL="http://localhost:1235/v1", OMLX_API_KEY="test-key"),
+        env=EnvSettings(OPENAI_BASE_URL="http://localhost:1235/v1", OPENAI_API_KEY="test-key"),
         prefs=Prefs(library_path=str(tmp_path)),
     )
 

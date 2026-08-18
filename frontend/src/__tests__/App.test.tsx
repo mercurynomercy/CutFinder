@@ -1,9 +1,4 @@
-/** App-level tests for the header menu "Clean up deleted files" action.
- *
- * The library-cleanup flow lives in the overflow menu (not in Settings): it
- * lists orphaned catalog entries, confirms, then deletes them. A library that
- * is unreachable must be skipped (never wipe the catalog).
- */
+/** App-level tests for the top bar and launcher-loading navigation. */
 
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
@@ -11,11 +6,116 @@ import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
 
 import { server } from '@/test/mocks/server'
+import type { ClipSummary } from '@/api/client'
 import App from '@/App'
 
 const API = 'http://localhost:5080/api'
 
-describe('App — library cleanup from the header menu', () => {
+describe('App — top bar navigation', () => {
+  it('renders a global search box, task/rough-cut nav links, a settings icon, and a scan button — no overflow menu', async () => {
+    render(<App />)
+    await userEvent.click(await screen.findByRole('button', { name: /library/i }))
+
+    expect(screen.getByPlaceholderText('Search clips…')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /task queue/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /rough cut/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Settings' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Scan' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /menu/i })).not.toBeInTheDocument()
+  })
+})
+
+describe('App — navigating from the launcher while clips are still loading', () => {
+  it('lands on the target page (not the bare loading skeleton) when a launcher card is clicked before /api/clips resolves', async () => {
+    // Hold GET /api/clips open so `loading` stays true past the launcher click below.
+    let resolveClips: (clips: ClipSummary[]) => void = () => {}
+    const clipsPromise = new Promise<ClipSummary[]>((resolve) => { resolveClips = resolve })
+    server.use(
+      http.get(`${API}/clips`, async () => {
+        const clips = await clipsPromise
+        return HttpResponse.json(clips)
+      }),
+    )
+
+    render(<App />)
+    await userEvent.click(await screen.findByRole('button', { name: /settings/i }))
+
+    // Settings should render — not the header-less loading skeleton.
+    expect(await screen.findByRole('heading', { name: 'Settings' })).toBeInTheDocument()
+
+    // Let the deferred fetch resolve so it doesn't leak into later tests.
+    resolveClips([])
+  })
+})
+
+describe('App — filters sidebar collapse', () => {
+  it('shows an "expand filters" button in the gallery toolbar once the sidebar is collapsed', async () => {
+    render(<App />)
+    await userEvent.click(await screen.findByRole('button', { name: /library/i }))
+
+    await userEvent.click(await screen.findByLabelText('Collapse filters'))
+    expect(await screen.findByLabelText('Expand filters')).toBeInTheDocument()
+    expect(screen.queryByText('Filters')).not.toBeInTheDocument()
+  })
+})
+
+describe('App — full-screen clip detail', () => {
+  it('replaces the whole screen with DetailPanel when a clip is selected, and returns to the gallery on close', async () => {
+    server.use(
+      http.get(`${API}/clips`, () =>
+        HttpResponse.json([
+          { id: 1, source_path: '/a.mp4', roll_type: 'a', duration_s: 5, thumbnail_path: null, status: 'done', tags: [] },
+        ]),
+      ),
+    )
+    render(<App />)
+    await userEvent.click(await screen.findByRole('button', { name: /library/i }))
+
+    window.dispatchEvent(new CustomEvent('cutfinder:navigate', { detail: { clipId: 1 } }))
+
+    expect(await screen.findByText('Clip detail')).toBeInTheDocument()
+    // The gallery's top bar (with the Scan button) is gone — full-screen replacement, not an overlay.
+    expect(screen.queryByRole('button', { name: 'Scan' })).not.toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Back to gallery' }))
+    expect(await screen.findByRole('button', { name: 'Scan' })).toBeInTheDocument()
+  })
+})
+
+describe('App — filters/search stay visually in sync across the clip-detail round trip', () => {
+  it('keeps the active roll-type filter and search query shown after returning from the full-screen clip detail view', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    const user = userEvent.setup()
+    server.use(
+      http.get(`${API}/clips`, () =>
+        HttpResponse.json([
+          { id: 1, source_path: '/a.mp4', roll_type: 'a', duration_s: 5, thumbnail_path: null, status: 'done', tags: [] },
+        ]),
+      ),
+    )
+    render(<App />)
+    await user.click(await screen.findByRole('button', { name: /library/i }))
+
+    // Apply a roll-type filter and a search query — both are state App itself owns.
+    await user.click(screen.getByRole('button', { name: 'A-roll' }))
+    await user.type(screen.getByPlaceholderText('Search clips…'), 'sunset')
+    await vi.advanceTimersByTimeAsync(300) // let the search debounce fire
+
+    // Open the full-screen clip detail view — this unmounts Filters/Search.
+    window.dispatchEvent(new CustomEvent('cutfinder:navigate', { detail: { clipId: 1 } }))
+    expect(await screen.findByText('Clip detail')).toBeInTheDocument()
+
+    // Return to the gallery — Filters/Search remount fresh from App's still-applied state.
+    await user.click(screen.getByRole('button', { name: 'Back to gallery' }))
+
+    expect(await screen.findByRole('button', { name: 'A-roll' })).toHaveClass('bg-[--primary]')
+    expect(screen.getByPlaceholderText('Search clips…')).toHaveValue('sunset')
+
+    vi.useRealTimers()
+  })
+})
+
+describe('App — library cleanup from Settings', () => {
   it('finds orphaned entries and deletes them after confirmation', async () => {
     let deletedIds: number[] | null = null
     server.use(
@@ -32,8 +132,9 @@ describe('App — library cleanup from the header menu', () => {
     )
 
     render(<App />)
-    await userEvent.click(await screen.findByRole('button', { name: /menu/i }))
-    await userEvent.click(await screen.findByRole('menuitem', { name: /clean up deleted files/i }))
+    await userEvent.click(await screen.findByRole('button', { name: /library/i }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Settings' }))
+    await userEvent.click(await screen.findByRole('button', { name: /clean up deleted files/i }))
     await userEvent.click(await screen.findByRole('button', { name: 'OK' }))
 
     await waitFor(() => expect(deletedIds).toEqual([3]))
@@ -52,8 +153,9 @@ describe('App — library cleanup from the header menu', () => {
     )
 
     render(<App />)
-    await userEvent.click(await screen.findByRole('button', { name: /menu/i }))
-    await userEvent.click(await screen.findByRole('menuitem', { name: /clean up deleted files/i }))
+    await userEvent.click(await screen.findByRole('button', { name: /library/i }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Settings' }))
+    await userEvent.click(await screen.findByRole('button', { name: /clean up deleted files/i }))
 
     expect(await screen.findByText(/unreachable/i)).toBeInTheDocument()
     expect(delHit).not.toHaveBeenCalled()

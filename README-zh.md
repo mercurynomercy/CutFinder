@@ -23,7 +23,7 @@
 把一堆 A-roll（有中文解说）和 B-roll（纯空镜）自动**分类、打标签、生成简介与缩略图**，让你之后能按日期 / 类型 / 标签 / 台词快速找回任意一段素材。面向 macOS（Apple Silicon）+ Final Cut Pro 工作流，**全程离线、AI 全本地**。
 
 > ### ⚠️ 仅支持 Apple Silicon（M 系列）芯片的 Mac（M1 及以上）
-> CutFinder **只能跑在 M 系列芯片的 Mac 上**。因为所有模型都用 Apple 的 **MLX** 框架在本地运行 —— OMLX（文本/视觉）、`mlx-whisper` / Qwen3-ASR + ForcedAligner（语音）**都只支持 Apple Silicon**。Intel Mac、Windows、Linux **均不支持**。
+> CutFinder **只能跑在 M 系列芯片的 Mac 上**。所有模型都在本地运行 —— 文本/视觉模型经本地 **OpenAI 兼容推理服务器**（[OMLX](https://github.com/jundot/omlx) 是本项目开发时依据的参考实现，基于 MLX；LM Studio、Ollama 的 OpenAI 兼容接口、vLLM 同样可用），`mlx-whisper` / Qwen3-ASR + ForcedAligner（语音，基于 Apple 的 MLX 框架）**都只支持 Apple Silicon**。Intel Mac、Windows、Linux **均不支持**。
 
 ---
 
@@ -31,7 +31,7 @@
 
 推荐用原生的 **`CutFinder.app`** 来跑 CutFinder：一个用 Swift/AppKit 写的小外壳，把界面装进独立窗口（WKWebView，不开浏览器标签页），托管本地服务，并在**首次启动时自建所需的一切**。一条命令即可构建。
 
-> **有一个前置依赖装在 .app 之外：** [OMLX](https://github.com/jundot/omlx)，本地 Apple Silicon 模型服务器（菜单栏 App）。装好它并加载 `Qwen3.6-35B-A3B`（文本）+ `Qwen3-VL-8B`（视觉）。CutFinder 首次运行会检测它，**缺失时会引导你安装** —— 没有它，扫描 / 转写 / 缩略图仍可用，只有 A-roll 简介和 B-roll 打标需要它。
+> **有一个前置依赖装在 .app 之外：** 一个本地 **OpenAI 兼容模型服务器** —— [OMLX](https://github.com/jundot/omlx) 是本项目开发时依据的参考实现（LM Studio、Ollama 的 OpenAI 兼容接口、vLLM 同样可用）。装好其中一个并加载 `Qwen3.6-35B-A3B`（文本）+ `Qwen3-VL-8B`（视觉）。CutFinder 首次运行会检测它，**缺失时会引导你安装** —— 没有它，扫描 / 转写 / 缩略图仍可用，只有 A-roll 简介和 B-roll 打标需要它。
 
 ### 1. 构建 App
 
@@ -55,7 +55,7 @@ make app          # → dist/CutFinder.app（以及 dist/CutFinder.dmg）
 
 ### 3. 开始使用
 
-1. **配置 OMLX** —— **设置 → OMLX 连接** → 填入 Base URL / API key → 保存。存到 `~/.cutfinder/config.json`（**全机共享**；Whisper 模型、人声分离 / 自动关键帧开关也存在这里）。
+1. **配置 AI 服务** —— **设置 → OpenAI 兼容连接** → 填入 Base URL / API key → 保存。存到 `~/.cutfinder/config.json`（**全机共享**；Whisper 模型、人声分离 / 自动关键帧开关也存在这里）。
 2. **绑定素材库** —— **设置 → 设置素材库** → 用原生选择器选一个绝对路径。整理后的副本、缩略图和 SQLite 目录都放在这里（全在 `<library>/.cutfinder/` 下）。**改了无需重启**即时生效。
 3. **添加源文件夹并扫描** —— 把 CutFinder 指向你的素材文件夹，运行扫描。每个新片段会被判定 A-roll/B-roll、转写/打标、生成缩略图，并复制到 `<library>/YYYY-MM-DD/A-roll(或 B-roll)/`。**照片（`.jpg/.jpeg/.png/.heic`）也会一并入库** —— 作为独立的 **照片** 类型，复制到 `<library>/YYYY-MM-DD/photos/`。重新扫描只处理新文件（按指纹去重）—— 原始文件永不改动。
 4. **浏览、检索、纠正** —— 缩略图墙按拍摄日期分组；可按文件名、简介、标签、日期、类型检索/筛选。判错的 A/B 或标签可手动改 —— 改动会被记住。
@@ -67,6 +67,7 @@ make app          # → dist/CutFinder.app（以及 dist/CutFinder.dmg）
 
 ## 它能做什么
 
+- **启动器首页**：打开 CutFinder 先看到一个卡片式入口页（画廊 / 设置 / 任务 / 初剪 / 字幕）；从任意全屏页面点 Logo 可返回这里。
 - **自动区分 A-roll / B-roll**：检测有无人声解说（Silero VAD），可手动纠正且会被记住。
 - **A-roll 简介 + 标签**：由可选的语音引擎转写中文解说 → Qwen 文本模型总结，转写全文一并保存可搜索。
 - **语音引擎可选（Whisper 或 Qwen3-ASR + ForcedAligner）**：在「设置」里选择；该选择会作用于**所有** A-roll 语音处理（转写、关键帧、字幕导出）。中文 / 中英混合推荐用 Qwen 组合：文本更准，且经本地强制对齐得到真实的逐字时间戳（不会像 whisper 那样时间轴漂移），按 VAD 切段因此能处理超长视频。详见 [模型服务](#模型服务)。
@@ -76,14 +77,15 @@ make app          # → dist/CutFinder.app（以及 dist/CutFinder.dmg）
 - **AI 输出语言可选**：简介/画面描述可在「设置」页切换**中文 / 英文**（默认中文）。
 - **按拍摄日期 + 类型自动归档并重命名**：复制到 `库/YYYY-MM-DD/A-roll(或 B-roll)/`（照片在 `.../photos/`），并按类型顺序重命名为 `A-0001.ext` / `B-0001.ext` / `photo-0001.ext`（每个日期/类型目录各自计数）。即使 AI 分析失败，原文件仍按日期+类型归档（状态标为 `partial`），AI 简介/标签为尽力而为。详情面板显示新副本路径（File destination），原始源路径折叠在 Source file 里。
 - **缩略图墙 + 多维检索**：按拍摄日期**分组展示**（每个日期一个区块，带粘性日期标题），左侧侧栏内置搜索框（按文件名 / 简介 / 描述 / 标签即时过滤），并支持按日期 / 类型 / 标签筛选（可折叠过滤面板）与按拍摄日期的新/旧排序；标签过滤按使用频率排序、可搜索、超量折叠。分析未完成的片段（`partial`）在缩略图上有「部分」标记，一眼可辨。
+- **全屏片段详情**：点击缩略图打开的是全屏详情视图（不再是浮层/抽屉）；AI 简介/描述为只读，标签仍可编辑（增删），纠正会被记住。
 - **一键打开 / 在 Finder 中查看**：缩略图与详情面板可一键用默认播放器打开视频；日期分组标题可一键在 Finder 中打开该日期文件夹（macOS `open`）。
 - **重新分析单个片段**：换模型或结果不佳时一键重跑 AI，保留你的手动纠正与标签。分类判错时，可在详情面板切换 A/B 类型——副本会自动**移动**到正确的 A-roll/B-roll 目录并重命名，`library_path` 同步更新。
 - **关键帧推荐（剪辑切点 + 精选帧）**：为每段素材给出最多 N 条（默认 3，可配置）排序的剪辑建议——**A-roll 由文本模型基于转写选段**、**B-roll 由 Qwen3-VL 基于采样帧挑选**，每条含 in/out 时码、代表帧与一句理由。扫描完成后可自动排队（设置开关，**默认关**，因其最贵），也可在详情面板按需生成；画廊卡片有「已有建议」角标。
-- **初剪导演 —— 对话式分镜表（beta）**：在对话框里描述你想要的成片（日期范围、目标时长、画面比例、风格/节奏），本地 Qwen 文本模型就会基于已编目素材产出一份精确到片段内 in/out 的**分镜表**：**按拍摄日期分章**、每天内**按真实拍摄时间线排序**，以 A-roll 解说为叙事主线（依据转写选段）、配 B-roll 空镜插空。每行显示该片段的日期与文件名，方便快速找素材；整份可一键**复制为 Markdown** 贴进剪辑软件。日期/时长/比例等参数直接从你的消息里解析，生成时**每个拍摄日期跑一个 scoped 工具环**（按需深挖转写、现场看 B-roll 画面）以保证本地模型的稳定性，并**实时显示进度、已完成日期的分镜先展示**（跑完后进度轨迹折叠成一行「生成过程（N 步）」，可点开看完整日志）。后续多轮「增加某天 / 重做 5/3」会**并入**已有分镜表而非整体替换；还可开启**审片复检**（默认关）拼好后再评一遍主观质量并对点名日期重做一轮。**导演 Prompt** 与这些生成参数都在初剪页的「初剪设置」弹窗里编辑（并可一键恢复自带默认）。全程**只读编目**，不渲染、不导出剪辑工程。**目前为 beta，会持续改进。**
+- **初剪导演 —— 对话式分镜表（beta）**：在对话框里描述你想要的成片（日期范围、目标时长、画面比例、风格/节奏），本地 Qwen 文本模型就会基于已编目素材产出一份精确到片段内 in/out 的**分镜表**：**按拍摄日期分章**、每天内**按真实拍摄时间线排序**，以 A-roll 解说为叙事主线（依据转写选段）、配 B-roll 空镜插空。页面为**三栏布局**：左侧会话侧栏、中间对话区、右侧实时/完成后的按日期分章分镜面板。每行显示该片段的日期与文件名，方便快速找素材；整份可一键**复制为 Markdown** 贴进剪辑软件。日期/时长/比例等参数直接从你的消息里解析，生成时**每个拍摄日期跑一个 scoped 工具环**（按需深挖转写、现场看 B-roll 画面）以保证本地模型的稳定性，并**实时显示进度、已完成日期的分镜先展示**（跑完后进度轨迹折叠成一行「生成过程（N 步）」，可点开看完整日志）。**当请求存在歧义**（多日期素材库却没给日期范围，或没给目标时长）时，导演会以可点击的选项 chip 提出一个简短的澄清问题，而不是瞎猜；选中后会精确从该日期工具环暂停的位置继续生成。后续多轮「增加某天 / 重做 5/3」会**并入**已有分镜表而非整体替换；还可开启**审片复检**（默认关）拼好后再评一遍主观质量并对点名日期重做一轮。**导演 Prompt** 与这些生成参数都在独立的「初剪设置」页面里编辑（并可一键恢复自带默认）。全程**只读编目**，不渲染、不导出剪辑工程。**目前为 beta，会持续改进。**
 - **片段拍摄日期显示**：缩略图卡片和详情面板均展示片段的拍摄时间（优先使用嵌入 capture time，回退到文件创建时间）。
-- **任务队列管理**：单独的「任务队列」页可查看所有扫描/重分析任务，支持删除、重试失败项、全局暂停/恢复；队列暂停时扫描会自动提示并可选恢复。
+- **任务队列管理**：单独的「任务队列」页可查看所有扫描/重分析任务，支持删除、重试失败项、全局暂停/恢复；队列暂停时扫描会自动提示并可选恢复。任务进度（扫描、关键帧）与字幕导出进度都显示在**底部固定状态栏**里。
 - **进度条刷新后不丢**：刷新页面后，扫描/关键帧进度条与字幕导出进度条会自动重新挂接到后台仍在跑的任务（活儿没停，只是 UI 一度丢了引用），不必重新触发。
-- **素材库清理**：如果你直接在素材库目录里删了副本，顶部 **⋮ 菜单 →「清理已删除的文件」** 会在二次确认后清掉它们残留的目录记录（及缩略图/关键帧）；若素材库不可达（如外接盘未挂载）则跳过，绝不误删整个目录。原始源文件永不被动。
+- **设置 → 维护**：一个专门的分区集中了日常维护操作——**「清理已删除的文件」**会在二次确认后清掉你直接从素材库目录删除的副本所残留的目录记录（及缩略图/关键帧），若素材库不可达（如外接盘未挂载）则跳过而不是误删整个目录；这里还有一个进入全屏**日志**页的入口。原始源文件永不被动。（此前放在顶部的溢出菜单已移除——顶部栏现在只有导航链接和全局搜索。）
 - **原生文件夹选择**：设置页选「素材文件夹 / 素材库」时弹出 macOS 原生选择框，返回真实绝对路径（浏览器选择器拿不到绝对路径）。
 - **设置页绑定素材库**：首次使用选/填一个绝对路径即可绑定库，**运行时热生效、无需重启**（也支持 `CUTFINDER_LIBRARY` 环境变量）。设置页每项选项均有中文说明文字。
 - **扫描后自动刷新**：Scan 完成后自动轮询任务状态并刷新缩略图墙，无需手动操作。
@@ -107,29 +109,29 @@ API 层 (FastAPI，薄)                       :5081
    │  create_app() 把真实适配器装配到可变 LibraryContext（库可运行时热绑定）
 编排层 (Pipeline Orchestrator + 后台队列/SSE 进度)
    │  只依赖接口(Protocol)
-适配器层 ── ffmpeg/ffprobe · Silero VAD · mlx-whisper / Qwen3-ASR+ForcedAligner · OMLX(文本+视觉) · Pillow(照片) · SQLite
+适配器层 ── ffmpeg/ffprobe · Silero VAD · mlx-whisper / Qwen3-ASR+ForcedAligner · OpenAI 兼容服务端(文本+视觉) · Pillow(照片) · SQLite
 ```
 
 每个外部依赖都藏在接口后面，业务逻辑只依赖接口 → 模块可独立替换与测试。详见 [`docs/detailed-design.md`](./docs/detailed-design.md)。
 
 ### 模型服务
 
-| 用途                     | 模型（OMLX 上的 id）                                       | 运行方式                    |
+| 用途                     | 模型                                                        | 运行方式                    |
 | ------------------------ | ---------------------------------------------------------- | --------------------------- |
-| A-roll 简介/标签（文本） | `Qwen3.6-35B-A3B`                                          | OMLX（OpenAI 兼容接口）     |
-| B-roll 画面识别（视觉）  | `Qwen3-VL-8B`                                              | OMLX（同接口，base64 传帧） |
-| 照片描述 + 标签（视觉）  | `Qwen3-VL-8B`                                              | OMLX（照片的 JPEG 预览以 base64 传入） |
-| A-roll 语音转写          | **语音引擎，「设置」里可选：** `mlx-whisper`（默认 `mlx-community/whisper-large-v3-mlx`）**或** Qwen3-ASR + ForcedAligner（`mlx-community/Qwen3-ASR-1.7B-8bit` + `Qwen3-ForcedAligner-0.6B-8bit`） | 独立本地进程（OMLX 不托管音频） |
+| A-roll 简介/标签（文本） | `Qwen3.6-35B-A3B`                                          | 本地 OpenAI 兼容服务端（`/chat/completions`）|
+| B-roll 画面识别（视觉）  | `Qwen3-VL-8B`                                              | 同一服务端，base64 传帧 |
+| 照片描述 + 标签（视觉）  | `Qwen3-VL-8B`                                              | 同一服务端，照片的 JPEG 预览以 base64 传入 |
+| A-roll 语音转写          | **语音引擎，「设置」里可选：** `mlx-whisper`（默认 `mlx-community/whisper-large-v3-mlx`）**或** Qwen3-ASR + ForcedAligner（`mlx-community/Qwen3-ASR-1.7B-8bit` + `Qwen3-ForcedAligner-0.6B-8bit`） | 独立本地进程（服务端不托管音频） |
 | A/B 人声检测             | Silero VAD                                                 | 本地                        |
+
+文本与视觉模型都由**本地 OpenAI 兼容服务端**托管——任何暴露标准 `/chat/completions` 接口的服务端都可用。[OMLX](https://github.com/jundot/omlx) 是本项目开发时依据的参考实现（Apple Silicon 本地推理服务器，菜单栏 App）；LM Studio、Ollama 的 OpenAI 兼容接口、vLLM 同样可用。模型通过同一接口的 `model` 名切换，服务端负责加载/卸载与内存管理（LRU 淘汰、pin、按模型 TTL），因此两个模型可同时常驻。
 
 **语音引擎（设置 → 语音引擎）。** 一个选项决定**所有** A-roll 语音处理 —— 编目转写、关键帧推理、字幕导出：
 
 - **Whisper** —— `mlx-whisper` large-v3，英文较稳。
-- **Qwen3-ASR + ForcedAligner**（中文 / 中英混合推荐）—— Qwen3-ASR 的中文文本远比 whisper 准确，ForcedAligner 给出真实的逐字时间戳，因此长片段的字幕也不会像 whisper 那样越到后面越漂移。音频先按静音（Silero VAD）切成片段（默认 60 秒，上限 300 秒 —— 对齐器单段只能标注约 400 秒内的时间戳），所以能处理任意长度的视频。两个模型都通过 `mlx-audio` 本地运行（OMLX 无法经 HTTP 托管对齐器）。
+- **Qwen3-ASR + ForcedAligner**（中文 / 中英混合推荐）—— Qwen3-ASR 的中文文本远比 whisper 准确，ForcedAligner 给出真实的逐字时间戳，因此长片段的字幕也不会像 whisper 那样越到后面越漂移。音频先按静音（Silero VAD）切成片段（默认 60 秒，上限 300 秒 —— 对齐器单段只能标注约 400 秒内的时间戳），所以能处理任意长度的视频。两个模型都通过 `mlx-audio` 本地运行（OpenAI 兼容服务端无法经 HTTP 托管对齐器——`/audio/transcriptions` 没有 text 参数）。
 
-文本与视觉模型都由 [OMLX](https://github.com/jundot/omlx)（Apple Silicon 本地推理服务器，菜单栏 App）托管。
-
-> ⚠️ 模型名必须与你的 OMLX 实际加载的 id 完全一致。默认视觉模型为 `Qwen3-VL-8B`；如你的 OMLX 暴露的是带后缀的 id，请在「设置」页或 `<库>/.cutfinder/config.json` 里改 `vision_model` / `text_model`。
+> ⚠️ 模型名必须与你服务端实际加载的 id 完全一致。默认视觉模型为 `Qwen3-VL-8B`；如你的服务端暴露的是带后缀的 id，请在「设置」页或 `<库>/.cutfinder/config.json` 里改 `vision_model` / `text_model`。
 
 ---
 
@@ -140,7 +142,7 @@ API 层 (FastAPI，薄)                       :5081
 | 依赖                                                 | 说明                                                                                                           |
 | ---------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
 | **macOS + Apple Silicon**                            | AI 推理依赖 Metal GPU，无法在 Docker / x86_macOS 上运行                                                        |
-| [OMLX](https://github.com/jundot/omlx) ≥ 0.1         | Apple Silicon 本地模型服务器（菜单栏 App），需预加载 `Qwen3.6-35B-A3B`（文本）和 `Qwen3-VL-8B`（视觉）两个模型 |
+| 本地 **OpenAI 兼容模型服务器**                        | 暴露 `/chat/completions` 接口；[OMLX](https://github.com/jundot/omlx) ≥ 0.1 是参考实现（Apple Silicon 菜单栏 App），LM Studio / Ollama / vLLM 同样可用，需预加载 `Qwen3.6-35B-A3B`（文本）和 `Qwen3-VL-8B`（视觉）两个模型 |
 | [uv](https://docs.astral.sh/uv/)                     | Python 依赖管理（`pip install uv`）                                                                            |
 | **Python ≥ 3.12**                                    | uv 会自动按 `mise.toml` 拉取 3.12 虚拟环境                                                                     |
 | **Node.js ≥ 20** + `npm`                             | 前端开发服务器与构建工具                                                                                       |
@@ -149,7 +151,7 @@ API 层 (FastAPI，薄)                       :5081
 ### 可选
 
 - [mise](https://mise.jdx.dev/) — 自动管理 Python / Node 版本（`mise.toml`）
-- [Homebrew](https://brew.sh/) — 用于安装 ffmpeg / OMLX
+- [Homebrew](https://brew.sh/) — 用于安装 ffmpeg / OMLX（或你选用的 OpenAI 兼容服务端）
 
 > ⚠️ **AI 推理必须原生运行**，不能跑在 Docker 容器里。
 
@@ -166,7 +168,7 @@ git clone <repo> && cd CutFinder
 make setup                      # mise install + brew bundle + uv sync + npm install
 ```
 
-> OMLX 配置在**设置页**里填（见步骤 2），不用手改配置文件。
+> OpenAI 兼容服务端的连接配置在**设置页**里填（见步骤 2），不用手改配置文件。
 
 > 没有 mise？先 `brew install mise`，或手动执行：
 >
@@ -175,30 +177,30 @@ make setup                      # mise install + brew bundle + uv sync + npm ins
 > cd ../frontend && npm install   # Vite + React + Tailwind
 > ```
 
-### 2. 配置 OMLX 连接
+### 2. 配置 OpenAI 兼容连接
 
-配置两项：OMLX 地址和 API key。两种方式，任选其一：
+配置两项：服务端地址和 API key。两种方式，任选其一：
 
-- **设置页（推荐）**：启动后打开 http://localhost:5080 → 「设置」→ **OMLX connection** 填写 Base URL / API key → 保存。这些值存到 `~/.cutfinder/config.json`（**全机共用**，换素材库不用重填），保存即生效。
+- **设置页（推荐）**：启动后打开 http://localhost:5080 → 「设置」→ **OpenAI 兼容连接** 填写 Base URL / API key → 保存。这些值存到 `~/.cutfinder/config.json`（**全机共用**，换素材库不用重填），保存即生效。
 
-- **系统环境变量（可选）**：在 shell 里 `export OMLX_BASE_URL` / `OMLX_API_KEY`（适合 CI / 临时跑）：
+- **系统环境变量（可选）**：在 shell 里 `export OPENAI_BASE_URL` / `OPENAI_API_KEY`（适合 CI / 临时跑）：
 
   ```bash
-  export OMLX_BASE_URL=http://localhost:8000/v1
-  export OMLX_API_KEY=your-omlx-key
+  export OPENAI_BASE_URL=http://localhost:8000/v1
+  export OPENAI_API_KEY=your-api-key
   ```
 
 > **优先级**（高→低）：**设置页全局配置**（`~/.cutfinder/config.json`）> **系统环境变量**。设置页是权威来源——存进去的值始终生效，即使环境变量设了同一个键也不会被它盖掉；环境变量只用于填设置页尚未配置的键。（已不再使用 `.env` 文件。）
 
-### 3. 验证 OMLX 就绪
+### 3. 验证服务端就绪
 
 ```bash
-make check-omlx                 # 校验文本/视觉模型是否已加载
-# → OMLX OK — models: [...]
+make check-openai                # 校验文本/视觉模型是否已加载
+# → OpenAI-compatible server OK — models: [...]
 #   All required text/vision models are present.
 ```
 
-> `make check-omlx` 与应用用同一套优先级解析凭据（`~/.cutfinder/config.json` > 系统环境变量），所以无论你走 UI 还是环境变量配置都能用。
+> `make check-openai` 与应用用同一套优先级解析凭据（`~/.cutfinder/config.json` > 系统环境变量），所以无论你走 UI 还是环境变量配置都能用。
 
 ### 4. 启动开发服务器（推荐：一条命令同时起前后端）
 
@@ -222,7 +224,7 @@ make dev
 ### 手动分起（调试用）
 
 ```bash
-# 终端 1 — 后端（OMLX 配置来自 ~/.cutfinder/config.json 或 export 的环境变量）
+# 终端 1 — 后端（OpenAI 兼容服务端配置来自 ~/.cutfinder/config.json 或 export 的环境变量）
 cd backend
 CUTFINDER_LIBRARY=/path/to/library uv run uvicorn cutfinder.api.app:app --reload --port 5081
 
@@ -248,12 +250,12 @@ make models                     # 预下载 mlx-whisper large-v3-mlx + Demucs ht
 cd backend
 
 uv run pytest tests/unit             # 仅单元测试（515 项，无需外部服务，秒级）
-uv run pytest -m integration         # 集成测试（需真实 OMLX / ffmpeg / 样片）
+uv run pytest -m integration         # 集成测试（需真实 OpenAI 兼容服务端 / ffmpeg / 样片）
 uv run mypy cutfinder/               # 类型检查（strict，clean）
 uv run ruff check cutfinder/         # linting（clean）
 ```
 
-集成测试在缺少 OMLX / 样片时会**自动 skip**，不会误报失败。要真正跑 OMLX 链路，先配好 OMLX（设置页或环境变量），再：
+集成测试在缺少 OpenAI 兼容服务端 / 样片时会**自动 skip**，不会误报失败。要真正跑 AI 链路，先配好服务端连接（设置页或环境变量），再：
 
 ```bash
 cd backend
@@ -273,8 +275,8 @@ npx playwright test             # e2e（自动起 Vite dev server）
 
 ```bash
 make test-unit         # 后端单元测试（快，tests/unit，无外部依赖）—— 日常用这个
-make test              # 后端全量（含 -m integration；配好 OMLX 时会真跑，可能慢/挂起）
-make test-integration  # 仅跑 -m integration（需 ffmpeg + 已配置的 OMLX）
+make test              # 后端全量（含 -m integration；配好 OpenAI 兼容服务端时会真跑，可能慢/挂起）
+make test-integration  # 仅跑 -m integration（需 ffmpeg + 已配置的 OpenAI 兼容服务端）
 make e2e               # Playwright e2e
 ```
 
@@ -283,7 +285,7 @@ make e2e               # Playwright e2e
 ### 已知遗留项（不影响运行）
 
 - 真实集成测试中**视觉/文本打标的输出文本可能中英混杂**（Qwen3-VL-8B / 文本模型的模型/prompt 表现，非适配器 bug）；结构化结果（description/summary + tags）始终有效。
-- **AI 简介为非确定性**：OMLX 调用使用 `temperature=0.7`（并已去掉会让量化模型陷入复读循环的严格 `json_schema`，改为宽松解析），对清晰素材稳定，对**噪声/含糊音轨**的边缘片段可能无法生成简介 —— 此时片段仍会被归档（状态 `partial`），可手动重分析。
+- **AI 简介为非确定性**：调用 OpenAI 兼容服务端时使用 `temperature=0.7`（并已去掉会让量化模型陷入复读循环的严格 `json_schema`，改为宽松解析），对清晰素材稳定，对**噪声/含糊音轨**的边缘片段可能无法生成简介 —— 此时片段仍会被归档（状态 `partial`），可手动重分析。
 
 ---
 

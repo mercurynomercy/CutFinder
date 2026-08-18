@@ -55,7 +55,6 @@ interface FolderPickerButtonProps {
 }
 
 function FolderPickerButton({ label, icon = null, onChange }: FolderPickerButtonProps) {
-  const { t } = useI18n()
   const [picking, setPicking] = useState(false)
 
   const handlePick = async () => {
@@ -75,10 +74,10 @@ function FolderPickerButton({ label, icon = null, onChange }: FolderPickerButton
       type="button"
       onClick={handlePick}
       disabled={picking}
-      className="mt-2 inline-flex items-center gap-1.5 rounded-md bg-[--surface-2] px-3 py-1.5 text-xs font-medium text-[--text-secondary] hover:bg-[--surface-3] disabled:opacity-50"
+      aria-label={label}
+      className="inline-flex items-center justify-center rounded-md border border-[--border] bg-[--surface-2] px-2 py-1 text-[--text-secondary] transition-colors hover:bg-[--surface-3]"
     >
       {icon}
-      {picking ? t('settings.selecting') : label}
     </button>
   )
 }
@@ -88,14 +87,49 @@ function FolderPickerButton({ label, icon = null, onChange }: FolderPickerButton
 function ExtensionTag({ value, onRemove }: { value: string; onRemove: () => void }) {
   const { t } = useI18n()
   return (
-    <span className="inline-flex items-center gap-1 rounded bg-[--surface-3] px-2 py-0.5 text-xs font-mono">
+    <span className="inline-flex items-center gap-1 rounded border border-[--border] bg-[--surface-2] px-2 py-0.5 text-xs font-mono">
       {value}
-      <button onClick={onRemove} className="text-[--text-muted] hover:text-[--error]" aria-label={t('settings.remove', { name: value })}>
-        <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24">
-          <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-        </svg>
+      <button onClick={onRemove} className="flex size-3.5 items-center justify-center rounded text-[--text-muted] transition-colors hover:bg-[--surface-3] hover:text-[--text-primary]" aria-label={t('settings.remove', { name: value })}>
+        ×
       </button>
     </span>
+  )
+}
+
+// ── Toggle switch ────────────────────────────────────────────────
+
+// `label` is used for the accessible name only — callers embed Toggle inside
+// a Section whose title already shows the same text, so no visible label here.
+function Toggle({ checked, onChange, label }: { checked: boolean; onChange: (v: boolean) => void; label: string }) {
+  return (
+    <div className="flex items-center justify-end">
+      <button
+        type="button"
+        role="switch"
+        aria-checked={checked}
+        aria-label={label}
+        onClick={() => onChange(!checked)}
+        className="relative shrink-0 overflow-hidden rounded-full transition-colors duration-200 will-change-[background-color] hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[--primary-soft]"
+        style={{ width: '40px', height: '22px', backgroundColor: checked ? 'var(--primary)' : 'var(--border)' }}
+      >
+        <span
+          className="block size-4 rounded-full bg-white shadow transition-transform duration-200"
+          style={{ transform: checked ? 'translateX(18px)' : 'translateX(0)', marginTop: '3px', marginLeft: '3px' }}
+        />
+      </button>
+    </div>
+  )
+}
+
+// ── Section wrapper ──────────────────────────────────────────────
+
+function Section({ title, desc, children }: { title: string; desc: string; children: React.ReactNode }) {
+  return (
+    <div className="rounded-lg border border-[--border] bg-[--surface-1] p-4">
+      <h2 className="text-sm font-medium text-[--text-primary]">{title}</h2>
+      <p className="mt-1 text-xs leading-relaxed text-[--text-secondary]">{desc}</p>
+      {children}
+    </div>
   )
 }
 
@@ -104,9 +138,21 @@ function ExtensionTag({ value, onRemove }: { value: string; onRemove: () => void
 export interface SettingsPageProps {
   /** Called when settings are successfully saved. */
   onSave?: () => void
+  /** Called to trigger keyframe suggestion for every clip missing one. */
+  onSuggestAllKeyframes?: () => void
+  /** Called to open the library-cleanup confirmation flow. */
+  onCleanupLibrary?: () => void
+  /** Called to open the backend logs modal. */
+  onShowLogs?: () => void
+  /** Called to navigate back to the gallery/launcher. */
+  onClose?: () => void
+  /** Current theme. */
+  theme?: 'light' | 'dark'
+  /** Toggle theme. */
+  onToggleTheme?: () => void
 }
 
-export function SettingsPage({ onSave }: SettingsPageProps) {
+export function SettingsPage({ onSave, onSuggestAllKeyframes, onCleanupLibrary, onShowLogs, onClose, theme, onToggleTheme }: SettingsPageProps) {
   const { t, lang, setLang } = useI18n()
   const [prefs, setPrefs] = useState<UpdateSettingsBody | null>(null)
   const [loading, setLoading] = useState(true)
@@ -118,15 +164,15 @@ export function SettingsPage({ onSave }: SettingsPageProps) {
   const [extensions, setExtensions] = useState('')
   const [photoExtensions, setPhotoExtensions] = useState('')
 
-  // Machine-global env settings (OMLX endpoint/key, model names). These live
+  // Machine-global env settings (OpenAI-compatible endpoint/key, model names). These live
   // in ~/.cutfinder/config.json — no .env needed. The API key is write-only:
   // GET returns a mask, and we only send it when the user types a new value.
-  const [omlxBaseUrl, setOmlxBaseUrl] = useState('')
+  const [openaiBaseUrl, setOpenaiBaseUrl] = useState('')
   const [apiKeyInput, setApiKeyInput] = useState('')
   const [textModelGlobal, setTextModelGlobal] = useState('')
   const [visionModelGlobal, setVisionModelGlobal] = useState('')
   const [apiKeyConfigured, setApiKeyConfigured] = useState(false)
-  const [omlxTest, setOmlxTest] = useState<
+  const [openaiTest, setOpenaiTest] = useState<
     { state: 'idle' | 'testing' } |
     { state: 'ok'; models: string[]; missing: string[] } |
     { state: 'err'; error: string }
@@ -167,13 +213,13 @@ export function SettingsPage({ onSave }: SettingsPageProps) {
       setLibraryPath(lib.library_path)
       if (lib.library_path) {
         const data = await api.getSettings()
-        // Machine-global keys (OMLX endpoint/key, model names) are merged into
+        // Machine-global keys (OpenAI-compatible endpoint/key, model names) are merged into
         // the one prefs view now — there is no separate "env" grouping.
         setPrefs(data.prefs)
         setTextModelGlobal(data.prefs.TEXT_MODEL || '')
         setVisionModelGlobal(data.prefs.VISION_MODEL || '')
-        setOmlxBaseUrl(data.prefs.OMLX_BASE_URL || '')
-        setApiKeyConfigured(Boolean(data.prefs.OMLX_API_KEY))
+        setOpenaiBaseUrl(data.prefs.OPENAI_BASE_URL || '')
+        setApiKeyConfigured(Boolean(data.prefs.OPENAI_API_KEY))
         setApiKeyInput('')
       }
     } catch (err: unknown) {
@@ -276,11 +322,11 @@ export function SettingsPage({ onSave }: SettingsPageProps) {
       // Machine-global keys: always send the (non-secret) endpoint and model names; only send
       // the API key when the user typed a new one, so the stored secret is
       // never overwritten by the mask.
-      body.OMLX_BASE_URL = omlxBaseUrl.trim()
+      body.OPENAI_BASE_URL = openaiBaseUrl.trim()
       if (textModelGlobal) body.TEXT_MODEL = textModelGlobal
       else delete body.TEXT_MODEL  // clear: fall back to default
       if (visionModelGlobal) body.VISION_MODEL = visionModelGlobal
-      if (apiKeyInput.trim()) body.OMLX_API_KEY = apiKeyInput.trim()
+      if (apiKeyInput.trim()) body.OPENAI_API_KEY = apiKeyInput.trim()
       await api.putSettings(body)
       if (apiKeyInput.trim()) {
         setApiKeyConfigured(true)
@@ -294,22 +340,22 @@ export function SettingsPage({ onSave }: SettingsPageProps) {
     }
   }
 
-  // Probe the OMLX endpoint/key/models with the form's current (unsaved) values,
+  // Probe the OpenAI-compatible server's endpoint/key/models with the form's current (unsaved) values,
   // so "已配置" is verifiable before hitting Save.
   const handleTestConnection = async () => {
-    setOmlxTest({ state: 'testing' })
+    setOpenaiTest({ state: 'testing' })
     try {
       const body: Record<string, string> = {
-        OMLX_BASE_URL: omlxBaseUrl,
+        OPENAI_BASE_URL: openaiBaseUrl,
         TEXT_MODEL: textModelGlobal,
         VISION_MODEL: visionModelGlobal,
       }
-      if (apiKeyInput.trim()) body.OMLX_API_KEY = apiKeyInput.trim()
-      const res = await api.testOmlxConnection(body)
-      if (res.ok) setOmlxTest({ state: 'ok', models: res.models ?? [], missing: res.missing ?? [] })
-      else setOmlxTest({ state: 'err', error: res.error ?? t('settings.testFailed') })
+      if (apiKeyInput.trim()) body.OPENAI_API_KEY = apiKeyInput.trim()
+      const res = await api.testOpenAIConnection(body)
+      if (res.ok) setOpenaiTest({ state: 'ok', models: res.models ?? [], missing: res.missing ?? [] })
+      else setOpenaiTest({ state: 'err', error: res.error ?? t('settings.testFailed') })
     } catch (err: unknown) {
-      setOmlxTest({ state: 'err', error: err instanceof Error ? err.message : String(err) })
+      setOpenaiTest({ state: 'err', error: err instanceof Error ? err.message : String(err) })
     }
   }
 
@@ -350,368 +396,411 @@ export function SettingsPage({ onSave }: SettingsPageProps) {
   const photoExtDisplay = (prefs.photo_extensions || []).map((e: string) => e.startsWith('.') ? e : `.${e}`)
 
   return (
-    <div className="flex flex-1 overflow-auto p-6">
-      {/* Title + Back button — full width at top */}
-      <div className="mx-auto w-full max-w-5xl space-y-6">
-        <div className="flex items-center justify-between gap-4">
-          <h1 className="text-xl font-semibold tracking-tight text-[--text-primary]">{t('settings.title')}</h1>
-          <Button variant="ghost" size="sm" onClick={() => onSave?.()}>
-            {t('settings.backToGallery')}
-          </Button>
-        </div>
-
-        {/* ── Interface language (per-device UI pref, applies instantly) ─── */}
-        <fieldset className="rounded-lg border border-[--border] bg-[--surface-1] p-4">
-          <legend className="text-sm font-medium text-[--text-primary]">{t('settings.uiLanguage')}</legend>
-          <p className="mt-1 text-xs leading-relaxed text-[--text-secondary]">{t('settings.uiLanguageDesc')}</p>
-          <select
-            value={lang}
-            onChange={(e) => setLang(e.target.value as 'zh' | 'en')}
-            aria-label={t('settings.uiLanguage')}
-            className="mt-2 w-full max-w-xs rounded-md border border-[--border] bg-[--surface-2] px-3 py-1.5 text-sm outline-none focus:border-[--primary]"
+    <div className="flex h-screen w-full flex-col">
+      {/* ── Top Bar ─────────────────────────────────────────── */}
+      <header className="flex h-14 shrink-0 items-center justify-between border-b border-[--border] bg-[--surface-1] px-6">
+        <h1 className="text-lg font-semibold tracking-tight">{t('settings.title')}</h1>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={onToggleTheme}
+            aria-label={theme === 'dark' ? t('app.themeToLight') : t('app.themeToDark')}
+            className="rounded-md p-1.5 text-[--text-secondary] hover:bg-[--surface-3] transition-colors"
           >
-            <option value="en">{t('settings.langEn')}</option>
-            <option value="zh">{t('settings.langZh')}</option>
-          </select>
-        </fieldset>
+            {theme === 'dark' ? (
+              <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} aria-hidden="true">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v2.25m6.364.386l-1.591 1.591M21 12h-2.25m-.386 6.364l-1.591-1.591M12 18.75V21m-4.773-4.227l-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0z" />
+              </svg>
+            ) : (
+              <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} aria-hidden="true">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M21.752 15.002A9.718 9.718 0 0118 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 003 11.25C3 16.635 7.365 21 12.75 21a9.753 9.753 0 009.002-5.998z" />
+              </svg>
+            )}
+          </button>
+          <button
+            onClick={onClose}
+            className="rounded-md p-1.5 text-[--text-secondary] hover:bg-[--surface-3] transition-colors"
+            aria-label={t('common.close')}
+          >
+            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24">
+              <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+      </header>
+
+      {/* ── Content ─────────────────────────────────────────── */}
+      <div className="flex flex-1 overflow-auto">
+        <div className="mx-auto w-full max-w-5xl p-6">
 
         {/* Responsive two-column grid — single column on narrow screens */}
-        <form onSubmit={(e) => { e.preventDefault(); handleSave() }} className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
 
           {/* ── Column 1 ───────────────────────────────────── */}
-          <div className="space-y-6">
+          <div className="space-y-5">
+
+            {/* ── Interface language ─────────────────────── */}
+            <Section title={t('settings.uiLanguage')} desc={t('settings.uiLanguageDesc')}>
+              <div className="mt-3">
+                <select
+                  value={lang}
+                  onChange={(e) => setLang(e.target.value as 'zh' | 'en')}
+                  aria-label={t('settings.uiLanguage')}
+                  className="w-full max-w-xs rounded-md border border-[--border] bg-[--surface-2] px-3 py-1.5 text-sm outline-none focus:border-[--primary]"
+                >
+                  <option value="zh">{t('settings.langZh')}</option>
+                  <option value="en">{t('settings.langEn')}</option>
+                </select>
+              </div>
+            </Section>
 
             {/* ── Source folders ─────────────────────── */}
-            <fieldset className="rounded-lg border border-[--border] bg-[--surface-1] p-4">
-              <legend className="text-sm font-medium text-[--text-primary]">{t('settings.sourceFolders')}</legend>
-              <p className="mt-1 text-xs leading-relaxed text-[--text-secondary]">
-                {t('settings.sourceFoldersDesc')}
-              </p>
+            <Section title={t('settings.sourceFolders')} desc={t('settings.sourceFoldersDesc')}>
               <div className="mt-3 space-y-2">
                 {(prefs.source_folders || []).map((folder: string, i: number) => (
-                  <div key={i} className="flex items-center gap-2">
+                  <div key={i} className="flex items-center gap-1.5">
                     <input
                       type="text"
                       value={folder}
                       readOnly
-                      className="flex-1 rounded-md border border-[--border] bg-[--surface-3] px-3 py-1.5 text-sm outline-none opacity-70"
+                      className="flex-1 rounded-md border border-[--border] bg-[--surface-2] px-2.5 py-1 text-sm outline-none"
                     />
                     <button
                       type="button"
                       onClick={() => handleRemoveSourceFolder(folder)}
-                      className="shrink-0 rounded-md p-1 text-[--text-muted] hover:bg-[--surface-3] hover:text-[--error]"
+                      className="flex size-4 items-center justify-center rounded text-[--text-muted] transition-colors hover:bg-[--surface-3] hover:text-[--text-primary]"
                       aria-label={t('settings.remove', { name: folder })}
                     >
-                      <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24">
-                        <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      <svg className="size-3.5" fill="none" viewBox="0 0 16 16">
+                        <path stroke="currentColor" strokeWidth={1.5} d="M4 4l8 8M12 4l-8 8" />
                       </svg>
                     </button>
                   </div>
                 ))}
               </div>
-
-              {/* Hidden file input for folder picker — macOS only (webkitdirectory) */}
-              <FolderPickerButton
-                label={t('settings.addFolder')}
-                icon={
-                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24">
-                    <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 10.5v6m3-3H9m4.06-7.19-2.12-2.12a1.5 1.5 0 0 0-1.061-.44H4.5A2.25 2.25 0 0 0 2.25 6v12a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9a2.25 2.25 0 0 0-2.25-2.25h-5.379a1.5 1.5 0 0 1-1.06-.44Z" />
-                  </svg>
-                }
-                onChange={(folder) => {
-                  if (!prefs || (prefs.source_folders ?? []).includes(folder)) return
-                  updateField('source_folders', [...(prefs.source_folders || []), folder])
-                }}
-              />
-            </fieldset>
+              <div className="mt-2 flex items-center gap-1.5">
+                <FolderPickerButton
+                  label={t('settings.addFolder')}
+                  icon={
+                    <svg className="size-3.5" fill="none" viewBox="0 0 12 12">
+                      <path stroke="currentColor" strokeWidth={1.5} d="M6 2v8M2 6h8" />
+                    </svg>
+                  }
+                  onChange={(folder) => {
+                    if (!prefs || (prefs.source_folders ?? []).includes(folder)) return
+                    updateField('source_folders', [...(prefs.source_folders || []), folder])
+                  }}
+                />
+                <span className="text-sm text-[--text-secondary]">{t('settings.addFolder')}</span>
+              </div>
+            </Section>
 
             {/* ── Library path ─────────────────────── */}
-            <fieldset className="rounded-lg border border-[--border] bg-[--surface-1] p-4">
-              <legend className="text-sm font-medium text-[--text-primary]">{t('settings.libraryPath')}</legend>
-              <p className="mt-1 text-xs leading-relaxed text-[--text-secondary]">
-                {t('settings.libraryPathDesc')}
-              </p>
-              <div className="mt-2 flex gap-2">
+            <Section title={t('settings.libraryPath')} desc={t('settings.libraryPathDesc')}>
+              <div className="mt-3 flex items-center gap-1.5">
                 <input
                   type="text"
                   value={libraryPath || ''}
                   readOnly
-                  className="flex-1 rounded-md border border-[--border] bg-[--surface-3] px-3 py-1.5 text-sm outline-none opacity-70"
+                  className="flex-1 rounded-md border border-[--border] bg-[--surface-2] px-2.5 py-1 text-sm outline-none"
                 />
                 <FolderPickerButton
                   label={t('settings.choose')}
                   icon={
-                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24">
-                      <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3.75 9.776c.112-.017.227-.026.344-.026h15.812c.117 0 .232.009.344.026m-16.5 0a2.25 2.25 0 0 0-1.883 2.542l.857 6a2.25 2.25 0 0 0 2.227 1.932H19.05a2.25 2.25 0 0 0 2.227-1.932l.857-6a2.25 2.25 0 0 0-1.883-2.542m-16.5 0V6A2.25 2.25 0 0 1 6 3.75h3.879a1.5 1.5 0 0 1 1.06.44l2.122 2.12a1.5 1.5 0 0 0 1.06.44H18A2.25 2.25 0 0 1 20.25 9v.776" />
+                    <svg className="size-4" fill="none" viewBox="0 0 16 16">
+                      <path stroke="currentColor" strokeWidth={1.5} d="M1.5 4.5v7a1.5 1.5 0 0 0 1.5 1.5h10a1.5 1.5 0 0 0 1.5-1.5v-5a1.5 1.5 0 0 0-1.5-1.5h-5.5L7 3.5H3A1.5 1.5 0 0 0 1.5 5v-.5z" />
                     </svg>
                   }
                   onChange={(folder) => void handleSwitchLibrary(folder)}
                 />
+                <span className="text-sm text-[--text-secondary]">{t('settings.choose')}</span>
               </div>
-            </fieldset>
+            </Section>
 
-            {/* ── OMLX connection (machine-global) ─────── */}
-            <fieldset className="rounded-lg border border-[--border] bg-[--surface-1] p-4">
-              <legend className="text-sm font-medium text-[--text-primary]">{t('settings.omlxConnection')}</legend>
-              <p className="mt-1 text-xs leading-relaxed text-[--text-secondary]">
-                {t('settings.omlxConnectionDesc')}
-              </p>
+            {/* ── OpenAI-compatible connection (machine-global) ─────── */}
+            <Section title={t('settings.openaiConnection')} desc={t('settings.openaiConnectionDesc')}>
+              {/* Connection status indicator */}
+              {openaiTest.state === 'ok' && (
+                <div className="mt-3 flex items-center gap-1.5 text-sm" style={{ color: 'var(--success)' }}>
+                  <span className="size-2 rounded-full" style={{ background: 'var(--success)' }} />
+                  {openaiTest.missing.length === 0
+                    ? t('settings.testOk', { n: openaiTest.models.length })
+                    : t('settings.testMissing', { models: openaiTest.missing.join(', ') })}
+                </div>
+              )}
+              {openaiTest.state === 'err' && (
+                <p className="mt-2 text-xs text-[--error]">{openaiTest.error}</p>
+              )}
+              {openaiTest.state !== 'idle' && (
+                <button
+                  type="button"
+                  onClick={handleTestConnection}
+                  disabled={openaiTest.state === 'testing'}
+                  className="mt-2 rounded-md border border-[--border] bg-[--surface-2] px-3 py-1.5 text-sm hover:border-[--primary] disabled:opacity-60"
+                >
+                  {openaiTest.state === 'testing' ? t('settings.testing') : t('settings.testConnection')}
+                </button>
+              )}
+              {openaiTest.state === 'idle' && (
+                <button
+                  type="button"
+                  onClick={handleTestConnection}
+                  className="mt-2 rounded-md border border-[--border] bg-[--surface-2] px-3 py-1.5 text-sm hover:border-[--primary]"
+                >
+                  {t('settings.testConnection')}
+                </button>
+              )}
 
-              <label className="mt-3 block text-sm text-[--text-secondary]">{t('settings.baseUrl')}</label>
-              <input
-                type="text" value={omlxBaseUrl}
-                onChange={(e) => setOmlxBaseUrl(e.target.value)}
-                placeholder="http://localhost:8000/v1"
-                className="mt-1 w-full rounded-md border border-[--border] bg-[--surface-2] px-3 py-1.5 text-sm font-mono outline-none focus:border-[--primary]"
-              />
+              <div className="mt-3">
+                <label className="mb-1 block text-sm font-medium text-[--text-primary]">{t('settings.baseUrl')}</label>
+                <input
+                  type="text" value={openaiBaseUrl}
+                  onChange={(e) => setOpenaiBaseUrl(e.target.value)}
+                  placeholder="http://localhost:8000/v1"
+                  className="w-full rounded-md border border-[--border] bg-[--surface-2] px-2.5 py-1 text-xs font-mono outline-none focus:border-[--primary] focus:shadow-[0_0_0_2px_var(--primary-soft)]"
+                />
+              </div>
 
-              <label className="mt-3 block text-sm text-[--text-secondary]">{t('settings.apiKey')}</label>
-              <p className="mb-1 text-xs text-[--text-muted]">
-                {apiKeyConfigured ? t('settings.apiKeyConfigured') : t('settings.apiKeyNotConfigured')}
-              </p>
-              <input
-                type="password" value={apiKeyInput}
-                onChange={(e) => setApiKeyInput(e.target.value)}
-                placeholder={apiKeyConfigured ? t('settings.apiKeyPlaceholder') : 'omlx-…'}
-                autoComplete="new-password"
-                className="w-full rounded-md border border-[--border] bg-[--surface-2] px-3 py-1.5 text-sm font-mono outline-none focus:border-[--primary]"
-              />
-
-              <label className="mt-3 block text-sm text-[--text-secondary]">{t('settings.textModel')}</label>
-              <p className="mb-1 text-xs text-[--text-muted]">{t('settings.textModelDesc')}</p>
-              <input
-                type="text" value={textModelGlobal}
-                onChange={(e) => setTextModelGlobal(e.target.value)}
-                placeholder="Qwen3.6-35B-A3B"
-                className="w-full rounded-md border border-[--border] bg-[--surface-2] px-3 py-1.5 text-sm font-mono outline-none focus:border-[--primary]"
-              />
-
-              <label className="mt-3 block text-sm text-[--text-secondary]">{t('settings.visionModel')}</label>
-              <p className="mb-1 text-xs text-[--text-muted]">{t('settings.visionModelDesc')}</p>
-              <input
-                type="text" value={visionModelGlobal}
-                onChange={(e) => setVisionModelGlobal(e.target.value)}
-                placeholder="Qwen3-VL-8B"
-                className="w-full rounded-md border border-[--border] bg-[--surface-2] px-3 py-1.5 text-sm font-mono outline-none focus:border-[--primary]"
-              />
-
-              <button
-                type="button"
-                onClick={handleTestConnection}
-                disabled={omlxTest.state === 'testing'}
-                className="mt-3 rounded-md border border-[--border] bg-[--surface-2] px-3 py-1.5 text-sm hover:border-[--primary] disabled:opacity-60"
-              >
-                {omlxTest.state === 'testing' ? t('settings.testing') : t('settings.testConnection')}
-              </button>
-              {omlxTest.state === 'ok' && omlxTest.missing.length === 0 && (
-                <p className="mt-2 text-xs text-[--success]">
-                  ✅ {t('settings.testOk', { n: omlxTest.models.length })}
+              <div className="mt-3">
+                <label className="mb-1 block text-sm font-medium text-[--text-primary]">{t('settings.apiKey')}</label>
+                <p className="mb-1 text-xs text-[--text-secondary]">
+                  {apiKeyConfigured ? t('settings.apiKeyConfigured') : t('settings.apiKeyNotConfigured')}
                 </p>
+                <input
+                  type="password" value={apiKeyInput}
+                  onChange={(e) => setApiKeyInput(e.target.value)}
+                  placeholder={apiKeyConfigured ? t('settings.apiKeyPlaceholder') : 'sk-…'}
+                  autoComplete="new-password"
+                  className="w-full rounded-md border border-[--border] bg-[--surface-2] px-2.5 py-1 text-xs font-mono outline-none focus:border-[--primary] focus:shadow-[0_0_0_2px_var(--primary-soft)]"
+                />
+              </div>
+
+              <div className="mt-3">
+                <label className="mb-1 block text-sm font-medium text-[--text-primary]">{t('settings.textModel')}</label>
+                <p className="mb-1 text-xs text-[--text-secondary]">{t('settings.textModelDesc')}</p>
+                <input
+                  type="text" value={textModelGlobal}
+                  onChange={(e) => setTextModelGlobal(e.target.value)}
+                  placeholder="Qwen3.6-35B-A3B"
+                  className="w-full rounded-md border border-[--border] bg-[--surface-2] px-2.5 py-1 text-xs font-mono outline-none focus:border-[--primary] focus:shadow-[0_0_0_2px_var(--primary-soft)]"
+                />
+              </div>
+
+              <div className="mt-3">
+                <label className="mb-1 block text-sm font-medium text-[--text-primary]">{t('settings.visionModel')}</label>
+                <p className="mb-1 text-xs text-[--text-secondary]">{t('settings.visionModelDesc')}</p>
+                <input
+                  type="text" value={visionModelGlobal}
+                  onChange={(e) => setVisionModelGlobal(e.target.value)}
+                  placeholder="Qwen3-VL-8B"
+                  className="w-full rounded-md border border-[--border] bg-[--surface-2] px-2.5 py-1 text-xs font-mono outline-none focus:border-[--primary] focus:shadow-[0_0_0_2px_var(--primary-soft)]"
+                />
+              </div>
+            </Section>
+
+            {/* ── Speech engine ─────────────────────── */}
+            <Section title={t('settings.whisperTitle')} desc={t('settings.whisperDesc')}>
+              <div className="mt-3">
+                <label className="mb-1 block text-sm font-medium text-[--text-primary]">{t('settings.speechEngine')}</label>
+                <p className="mb-1 text-xs text-[--text-secondary]">{t('settings.speechEngineDesc')}</p>
+                <select
+                  value={prefs.transcription_engine ?? 'whisper'}
+                  onChange={(e) => updateField('transcription_engine', e.target.value as 'whisper' | 'qwen')}
+                  aria-label={t('settings.speechEngine')}
+                  className="w-full rounded-md border border-[--border] bg-[--surface-2] px-2.5 py-1 text-sm outline-none focus:border-[--primary]"
+                >
+                  <option value="whisper">{t('settings.engineWhisper')}</option>
+                  <option value="qwen">{t('settings.engineQwen')}</option>
+                </select>
+              </div>
+
+              {(prefs.transcription_engine ?? 'whisper') === 'whisper' ? (
+                <div className="mt-3">
+                  <label className="mb-1 block text-sm font-medium text-[--text-primary]">{t('settings.whisperModel')}</label>
+                  <input
+                    type="text" value={prefs.whisper_model}
+                    onChange={(e) => updateField('whisper_model', e.target.value)}
+                    className="w-full rounded-md border border-[--border] bg-[--surface-2] px-2.5 py-1 text-xs font-mono outline-none focus:border-[--primary]"
+                  />
+                </div>
+              ) : (
+                <>
+                  <div className="mt-3">
+                    <label className="mb-1 block text-sm font-medium text-[--text-primary]">{t('settings.qwenAsrModel')}</label>
+                    <input
+                      type="text" value={prefs.qwen_asr_model ?? ''}
+                      onChange={(e) => updateField('qwen_asr_model', e.target.value)}
+                      className="w-full rounded-md border border-[--border] bg-[--surface-2] px-2.5 py-1 text-xs font-mono outline-none focus:border-[--primary]"
+                    />
+                  </div>
+                  <div className="mt-3">
+                    <label className="mb-1 block text-sm font-medium text-[--text-primary]">{t('settings.qwenAlignerModel')}</label>
+                    <input
+                      type="text" value={prefs.qwen_aligner_model ?? ''}
+                      onChange={(e) => updateField('qwen_aligner_model', e.target.value)}
+                      className="w-full rounded-md border border-[--border] bg-[--surface-2] px-2.5 py-1 text-xs font-mono outline-none focus:border-[--primary]"
+                    />
+                  </div>
+                  <div className="mt-3">
+                    <label className="mb-1 block text-sm font-medium text-[--text-primary]">{t('settings.qwenMaxChunk')}</label>
+                    <p className="mb-1 text-xs text-[--text-secondary]">{t('settings.qwenMaxChunkDesc')}</p>
+                    <input
+                      type="number" min={5} max={300} step={5} value={prefs.qwen_max_chunk_s ?? 60}
+                      onChange={(e) => updateField('qwen_max_chunk_s', parseFloat(e.target.value))}
+                      className="w-24 rounded-md border border-[--border] bg-[--surface-2] px-2.5 py-1 text-sm outline-none focus:border-[--primary]"
+                    />
+                  </div>
+                </>
               )}
-              {omlxTest.state === 'ok' && omlxTest.missing.length > 0 && (
-                <p className="mt-2 text-xs text-[--warning]">
-                  ⚠️ {t('settings.testMissing', { models: omlxTest.missing.join(', ') })}
-                </p>
-              )}
-              {omlxTest.state === 'err' && (
-                <p className="mt-2 max-w-full break-words text-xs text-[--error]">❌ {omlxTest.error}</p>
-              )}
-            </fieldset>
+            </Section>
 
           </div>
 
           {/* ── Column 2 ───────────────────────────────────── */}
-          <div className="space-y-6">
+          <div className="space-y-5">
 
-            {/* ── Whisper (speech-to-text) ─────────────── */}
-            <fieldset className="rounded-lg border border-[--border] bg-[--surface-1] p-4">
-              <legend className="text-sm font-medium text-[--text-primary]">{t('settings.whisperTitle')}</legend>
-              <p className="mt-1 text-xs leading-relaxed text-[--text-secondary]">
-                {t('settings.whisperDesc')}
-              </p>
-              <div className="mt-3 space-y-4">
-                {/* Engine selector — governs all A-roll speech work */}
-                <div>
-                  <label className="block text-sm text-[--text-secondary]">{t('settings.speechEngine')}</label>
-                  <p className="mb-1 text-xs text-[--text-muted]">{t('settings.speechEngineDesc')}</p>
-                  <select
-                    value={prefs.transcription_engine ?? 'whisper'}
-                    onChange={(e) => updateField('transcription_engine', e.target.value as 'whisper' | 'qwen')}
-                    aria-label={t('settings.speechEngine')}
-                    className="w-full rounded-md border border-[--border] bg-[--surface-2] px-3 py-1.5 text-sm outline-none focus:border-[--primary]"
-                  >
-                    <option value="whisper">{t('settings.engineWhisper')}</option>
-                    <option value="qwen">{t('settings.engineQwen')}</option>
-                  </select>
-                </div>
-
-                {(prefs.transcription_engine ?? 'whisper') === 'whisper' ? (
-                  <div>
-                    <label className="block text-sm text-[--text-secondary]">{t('settings.whisperModel')}</label>
-                    <p className="mb-1 text-xs text-[--text-muted]">{t('settings.whisperModelDesc')}</p>
-                    <input
-                      type="text" value={prefs.whisper_model}
-                      onChange={(e) => updateField('whisper_model', e.target.value)}
-                      className="w-full rounded-md border border-[--border] bg-[--surface-2] px-3 py-1.5 text-sm outline-none focus:border-[--primary]"
-                    />
-                  </div>
-                ) : (
-                  <>
-                    <div>
-                      <label className="block text-sm text-[--text-secondary]">{t('settings.qwenAsrModel')}</label>
-                      <input
-                        type="text" value={prefs.qwen_asr_model ?? ''}
-                        onChange={(e) => updateField('qwen_asr_model', e.target.value)}
-                        className="mt-1 w-full rounded-md border border-[--border] bg-[--surface-2] px-3 py-1.5 text-sm font-mono outline-none focus:border-[--primary]"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm text-[--text-secondary]">{t('settings.qwenAlignerModel')}</label>
-                      <input
-                        type="text" value={prefs.qwen_aligner_model ?? ''}
-                        onChange={(e) => updateField('qwen_aligner_model', e.target.value)}
-                        className="mt-1 w-full rounded-md border border-[--border] bg-[--surface-2] px-3 py-1.5 text-sm font-mono outline-none focus:border-[--primary]"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm text-[--text-secondary]">{t('settings.qwenMaxChunk')}</label>
-                      <p className="mb-1 text-xs text-[--text-muted]">{t('settings.qwenMaxChunkDesc')}</p>
-                      <input
-                        type="number" min={5} max={300} step={5} value={prefs.qwen_max_chunk_s ?? 60}
-                        onChange={(e) => updateField('qwen_max_chunk_s', parseFloat(e.target.value))}
-                        className="w-full rounded-md border border-[--border] bg-[--surface-2] px-3 py-1.5 text-sm outline-none focus:border-[--primary]"
-                      />
-                    </div>
-                  </>
-                )}
-              </div>
-            </fieldset>
-
-            {/* ── Processing options ─────────────────── */}
-            <fieldset className="rounded-lg border border-[--border] bg-[--surface-1] p-4">
-              <legend className="text-sm font-medium text-[--text-primary]">{t('settings.processingOptions')}</legend>
-
-              {/* Extensions */}
+            {/* ── Processing options (extensions only) ─── */}
+            <Section title={t('settings.processingOptions')} desc={t('settings.supportedExtensionsDesc')}>
+              {/* Video extensions */}
               <div className="mt-3">
-                <label className="mb-1 block text-sm text-[--text-secondary]">{t('settings.supportedExtensions')}</label>
-                <p className="mb-1 text-xs text-[--text-muted]">{t('settings.supportedExtensionsDesc')}</p>
-                <div className="mb-2 flex gap-1.5">
+                <label className="mb-1 block text-sm font-medium text-[--text-primary]">{t('settings.supportedExtensions')}</label>
+                <div className="mb-2 flex flex-wrap gap-1">
                   {extDisplay.map((ext, i) => (
                     <ExtensionTag key={i} value={ext} onRemove={() => handleRemoveExtension(ext)} />
                   ))}
                 </div>
-                <div className="flex gap-2">
+                <div className="flex gap-1.5">
                   <input
                     type="text" value={extensions} onChange={(e) => setExtensions(e.target.value)}
                     onKeyDown={(e) => { if (e.key === 'Enter') handleAddExtension() }}
                     placeholder=".webm"
-                    className="flex-1 rounded-md border border-[--border] bg-[--surface-2] px-3 py-1.5 text-sm font-mono outline-none focus:border-[--primary]"
+                    className="flex-1 rounded-md border border-[--border] bg-[--surface-2] px-2.5 py-1 text-xs font-mono outline-none focus:border-[--primary]"
                   />
-                  <Button size="sm" variant="secondary" onClick={handleAddExtension}>+</Button>
+                  <button type="button" onClick={handleAddExtension} className="flex size-8 items-center justify-center rounded-md border border-[--border] bg-[--surface-2] text-[--text-secondary] transition-colors hover:bg-[--surface-3]">
+                    +
+                  </button>
                 </div>
               </div>
 
               {/* Photo extensions */}
               <div className="mt-4">
-                <label className="mb-1 block text-sm text-[--text-secondary]">{t('settings.photoExtensions')}</label>
-                <p className="mb-1 text-xs text-[--text-muted]">{t('settings.photoExtensionsDesc')}</p>
-                <div className="mb-2 flex flex-wrap gap-1.5">
+                <label className="mb-1 block text-sm font-medium text-[--text-primary]">{t('settings.photoExtensions')}</label>
+                <p className="mb-1 text-xs text-[--text-secondary]">{t('settings.photoExtensionsDesc')}</p>
+                <div className="mb-2 flex flex-wrap gap-1">
                   {photoExtDisplay.map((ext, i) => (
                     <ExtensionTag key={i} value={ext} onRemove={() => handleRemovePhotoExtension(ext)} />
                   ))}
                 </div>
-                <div className="flex gap-2">
+                <div className="flex gap-1.5">
                   <input
                     type="text" value={photoExtensions} onChange={(e) => setPhotoExtensions(e.target.value)}
                     onKeyDown={(e) => { if (e.key === 'Enter') handleAddPhotoExtension() }}
                     placeholder=".webp"
-                    className="flex-1 rounded-md border border-[--border] bg-[--surface-2] px-3 py-1.5 text-sm font-mono outline-none focus:border-[--primary]"
+                    className="flex-1 rounded-md border border-[--border] bg-[--surface-2] px-2.5 py-1 text-xs font-mono outline-none focus:border-[--primary]"
                   />
-                  <Button size="sm" variant="secondary" onClick={handleAddPhotoExtension}>+</Button>
+                  <button type="button" onClick={handleAddPhotoExtension} className="flex size-8 items-center justify-center rounded-md border border-[--border] bg-[--surface-2] text-[--text-secondary] transition-colors hover:bg-[--surface-3]">
+                    +
+                  </button>
                 </div>
               </div>
+            </Section>
 
-              {/* B-roll frame count */}
-              <label className="mt-4 block text-sm text-[--text-secondary]">{t('settings.brollFrameCount')}</label>
-              <p className="mb-1 text-xs text-[--text-muted]">{t('settings.brollFrameCountDesc')}</p>
-              <input
-                type="number" min={1} step={1} value={prefs.broll_frame_count}
-                onChange={(e) => updateField('broll_frame_count', parseInt(e.target.value, 10))}
-                className="w-full rounded-md border border-[--border] bg-[--surface-2] px-3 py-1.5 text-sm outline-none focus:border-[--primary]"
-              />
-
-              {/* VAD threshold */}
-              <label className="mt-4 block text-sm text-[--text-secondary]">{t('settings.vadThreshold')}</label>
-              <p className="mb-1 text-xs text-[--text-muted]">{t('settings.vadThresholdDesc')}</p>
-              <input
-                type="number" min={0} max={1} step={0.05} value={prefs.vad_threshold}
-                onChange={(e) => updateField('vad_threshold', parseFloat(e.target.value))}
-                className="w-full rounded-md border border-[--border] bg-[--surface-2] px-3 py-1.5 text-sm outline-none focus:border-[--primary]"
-              />
-
-              {/* Separate vocals before A-roll transcription */}
-              <label className="mt-4 flex items-center gap-2 text-sm text-[--text-secondary]">
+            {/* ── B-roll frame count ─────────────── */}
+            <Section title={t('settings.brollFrameCount')} desc={t('settings.brollFrameCountDesc')}>
+              <div className="mt-3">
                 <input
-                  type="checkbox" checked={prefs.vocal_separation ?? false}
-                  onChange={(e) => updateField('vocal_separation', e.target.checked)}
-                  className="h-4 w-4 rounded border-[--border] bg-[--surface-2]"
+                  type="number" min={1} max={20} step={1} value={prefs.broll_frame_count}
+                  onChange={(e) => updateField('broll_frame_count', parseInt(e.target.value, 10))}
+                  className="w-24 rounded-md border border-[--border] bg-[--surface-2] px-2.5 py-1 text-sm outline-none focus:border-[--primary]"
                 />
-                {t('settings.vocalSeparation')}
-              </label>
-              <p className="mb-1 mt-1 text-xs text-[--text-muted]">{t('settings.vocalSeparationDesc')}</p>
+              </div>
+            </Section>
 
-              {/* AI output language */}
-              <label className="mt-4 block text-sm text-[--text-secondary]">{t('settings.aiOutputLanguage')}</label>
-              <p className="mb-1 text-xs text-[--text-muted]">{t('settings.aiOutputLanguageDesc')}</p>
-              <select
-                value={prefs.output_language}
-                onChange={(e) => updateField('output_language', e.target.value as 'zh' | 'en')}
-                aria-label={t('settings.aiOutputLanguage')}
-                className="w-full rounded-md border border-[--border] bg-[--surface-2] px-3 py-1.5 text-sm outline-none focus:border-[--primary]"
-              >
-                <option value="zh">{t('settings.langZh')}</option>
-                <option value="en">{t('settings.langEn')}</option>
-              </select>
-
-              {/* Keyframe suggestions per clip */}
-              <label className="mt-4 block text-sm text-[--text-secondary]">{t('settings.keyframeCount')}</label>
-              <p className="mb-1 text-xs text-[--text-muted]">{t('settings.keyframeCountDesc')}</p>
-              <input
-                type="number" min={1} max={10} step={1} value={prefs.keyframe_count ?? 3}
-                onChange={(e) => updateField('keyframe_count', parseInt(e.target.value, 10))}
-                className="w-full rounded-md border border-[--border] bg-[--surface-2] px-3 py-1.5 text-sm outline-none focus:border-[--primary]"
-              />
-
-              {/* Auto-suggest keyframes after scan */}
-              <label className="mt-4 flex items-center gap-2 text-sm text-[--text-secondary]">
+            {/* ── VAD threshold ─────────────── */}
+            <Section title={t('settings.vadThreshold')} desc={t('settings.vadThresholdDesc')}>
+              <div className="mt-3">
                 <input
-                  type="checkbox" checked={prefs.keyframe_auto ?? false}
-                  onChange={(e) => updateField('keyframe_auto', e.target.checked)}
-                  className="h-4 w-4 rounded border-[--border] bg-[--surface-2]"
+                  type="number" min={0} max={1} step={0.01} value={prefs.vad_threshold}
+                  onChange={(e) => updateField('vad_threshold', parseFloat(e.target.value))}
+                  className="w-24 rounded-md border border-[--border] bg-[--surface-2] px-2.5 py-1 text-sm outline-none focus:border-[--primary]"
                 />
-                {t('settings.keyframeAuto')}
-              </label>
-              <p className="mb-1 mt-1 text-xs text-[--text-muted]">{t('settings.keyframeAutoDesc')}</p>
+              </div>
+            </Section>
 
-              {/* Rough-cut generation knobs (critic review, vision budget) live
-                  on the 初剪 page's "初剪设置" modal, not here — they're per-cut. */}
+            {/* ── Vocal separation toggle ─────────────── */}
+            <Section title={t('settings.vocalSeparation')} desc={t('settings.vocalSeparationDesc')}>
+              <div className="mt-3 pt-2.5">
+                <Toggle
+                  checked={prefs.vocal_separation ?? false}
+                  onChange={(v) => updateField('vocal_separation', v)}
+                  label={t('settings.vocalSeparation')}
+                />
+              </div>
+            </Section>
 
-              {/* Field errors */}
-              {fieldErrors.map((err) => (
-                <p key={err.field} className="mt-1 text-xs text-[--error]">{t(err.messageKey)}</p>
-              ))}
-            </fieldset>
+            {/* ── AI output language ─────────────── */}
+            <Section title={t('settings.aiOutputLanguage')} desc={t('settings.aiOutputLanguageDesc')}>
+              <div className="mt-3">
+                <select
+                  value={prefs.output_language}
+                  onChange={(e) => updateField('output_language', e.target.value as 'zh' | 'en')}
+                  aria-label={t('settings.aiOutputLanguage')}
+                  className="w-full rounded-md border border-[--border] bg-[--surface-2] px-2.5 py-1.5 text-sm outline-none focus:border-[--primary]"
+                >
+                  <option value="zh">{t('settings.langZh')}</option>
+                  <option value="en">{t('settings.langEn')}</option>
+                </select>
+              </div>
+            </Section>
+
+            {/* ── Keyframe suggestions per clip ─────── */}
+            <Section title={t('settings.keyframeCount')} desc={t('settings.keyframeCountDesc')}>
+              <div className="mt-3">
+                <input
+                  type="number" min={1} max={10} step={1} value={prefs.keyframe_count ?? 3}
+                  onChange={(e) => updateField('keyframe_count', parseInt(e.target.value, 10))}
+                  className="w-24 rounded-md border border-[--border] bg-[--surface-2] px-2.5 py-1 text-sm outline-none focus:border-[--primary]"
+                />
+              </div>
+            </Section>
+
+            {/* ── Auto-suggest keyframes ─────────────── */}
+            <Section title={t('settings.keyframeAuto')} desc={t('settings.keyframeAutoDesc')}>
+              <div className="mt-3 pt-2.5">
+                <Toggle
+                  checked={prefs.keyframe_auto ?? false}
+                  onChange={(v) => updateField('keyframe_auto', v)}
+                  label={t('settings.keyframeAuto')}
+                />
+              </div>
+            </Section>
+
+            {/* ── System tools ─────────────── */}
+            <Section title={t('settings.maintenanceTitle')} desc={t('settings.maintenanceDesc')}>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button type="button" onClick={() => onSuggestAllKeyframes?.()} className="inline-flex items-center gap-1 rounded-md border border-[--border] bg-[--surface-2] px-3 py-1 text-sm text-[--text-secondary] transition-colors hover:bg-[--surface-3]">
+                  {t('settings.suggestAllKeyframes')}
+                </button>
+                <button type="button" onClick={() => onCleanupLibrary?.()} className="inline-flex items-center gap-1 rounded-md border border-[--border] bg-[--surface-2] px-3 py-1 text-sm text-[--text-secondary] transition-colors hover:bg-[--surface-3]">
+                  {t('settings.cleanupDeleted')}
+                </button>
+                <button type="button" onClick={() => onShowLogs?.()} className="inline-flex items-center gap-1 rounded-md border border-[--border] bg-[--surface-2] px-3 py-1 text-sm text-[--text-secondary] transition-colors hover:bg-[--surface-3]">
+                  <svg className="size-3.5" fill="none" viewBox="0 0 16 16">
+                    <path stroke="currentColor" strokeWidth={1.5} d="M3 3h10v10H3z" />
+                    <path stroke="currentColor" strokeWidth={1.5} d="M5 6h6M5 8h6M5 10h3" />
+                  </svg>
+                  {t('app.logs')}
+                </button>
+              </div>
+            </Section>
 
           </div>
 
-        </form>
-
-        {/* ── Save button — full width, below grid ─────────── */}
-        <div className="flex justify-end pt-4">
-          <Button type="submit" onClick={handleSave} disabled={saving}>
-            {saving ? t('settings.saving') : t('settings.save')}
-          </Button>
         </div>
+
+        {/* Field errors */}
+        {fieldErrors.map((err) => (
+          <p key={err.field} className="mt-2 text-xs text-[--error]">{t(err.messageKey)}</p>
+        ))}
 
         {/* Library switch confirmation dialog */}
         <ConfirmDialog
@@ -721,6 +810,16 @@ export function SettingsPage({ onSave }: SettingsPageProps) {
           onConfirm={handleConfirmSwitch}
           onCancel={handleCancelSwitch}
         />
+      </div>
+      </div>
+
+      {/* ── Save bar ─────────────────────────────────────────── */}
+      <div className="shrink-0 border-t border-[--border] bg-[--surface-1]">
+        <div className="mx-auto flex max-w-5xl justify-end px-6 py-3">
+          <Button onClick={handleSave} disabled={saving}>
+            {saving ? t('settings.saving') : t('settings.save')}
+          </Button>
+        </div>
       </div>
     </div>
   )

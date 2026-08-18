@@ -111,8 +111,8 @@ def _build_into(ctx: LibraryContext, library_path: Union[str, Path]) -> None:
     )
 
     # Config — bootstrap default prefs on first run (load_config requires a
-    # persisted library_path pref; default it to this directory). OMLX creds
-    # may still be unset here — the user fills them in via the Settings UI.
+    # persisted library_path pref; default it to this directory). OpenAI-compatible
+    # server creds may still be unset here — the user fills them in via the Settings UI.
     try:
         config = load_config(lib_dir)
     except ValueError as exc:
@@ -133,8 +133,8 @@ def _build_into(ctx: LibraryContext, library_path: Union[str, Path]) -> None:
     from cutfinder.adapters.ffmpeg_probe import FfmpegProbe
     from cutfinder.adapters.fs_library import FsLibraryWriter
     from cutfinder.adapters.mlx_whisper import MlxWhisperTranscriber
-    from cutfinder.adapters.omlx_text import OmlxSummarizer
-    from cutfinder.adapters.omlx_vision import OmlxVisionTagger
+    from cutfinder.adapters.openai_text import OpenAITextSummarizer
+    from cutfinder.adapters.openai_vision import OpenAIVisionTagger
     from cutfinder.adapters.silero_vad import SileroSpeechDetector
     from cutfinder.adapters.sqlite_repo import SqliteRepository
     from cutfinder.pipeline.orchestrator import Orchestrator
@@ -193,8 +193,8 @@ def _build_into(ctx: LibraryContext, library_path: Union[str, Path]) -> None:
         transcriber=_make_transcriber(
             vocal_separator if prefs.vocal_separation else None
         ),
-        summarizer=OmlxSummarizer(config),
-        vision_tagger=OmlxVisionTagger(config),
+        summarizer=OpenAITextSummarizer(config),
+        vision_tagger=OpenAIVisionTagger(config),
         repository=repository,
         library_writer=FsLibraryWriter(config),
         num_frames=prefs.broll_frame_count,
@@ -208,7 +208,7 @@ def _build_into(ctx: LibraryContext, library_path: Union[str, Path]) -> None:
 
     # Surface each per-clip pipeline step (probe/thumbnail/vad/analysis/copy)
     # into the log buffer so the UI's log viewer shows processing progress, not
-    # just the OMLX HTTP calls.
+    # just the HTTP calls to the OpenAI-compatible server.
     orchestrator.progress_callback = _log_progress_event
 
     # Standalone subtitle export: re-transcribes a chosen video on its own
@@ -222,7 +222,7 @@ def _build_into(ctx: LibraryContext, library_path: Union[str, Path]) -> None:
     # Shares the catalog connection; reads the catalog read-only via the
     # retriever, and may live-inspect B-roll frames via the vision model.
     from cutfinder.adapters.broll_inspector import CatalogBrollInspector
-    from cutfinder.adapters.omlx_agent import OmlxAgentClient
+    from cutfinder.adapters.openai_agent import OpenAIAgentClient
     from cutfinder.adapters.sqlite_cutplan import SqliteCutSessionStore
     from cutfinder.adapters.sqlite_footage import CatalogFootageRetriever
     from cutfinder.cutplan.director import CutDirector
@@ -234,13 +234,14 @@ def _build_into(ctx: LibraryContext, library_path: Union[str, Path]) -> None:
     n_cut_paused = cut_store.reset_interrupted_sessions()
     if n_cut_paused:
         logger.info("Reset %d interrupted cut session(s) at bind", n_cut_paused)
+    cut_retriever = CatalogFootageRetriever(repository)
     cut_director = CutDirector(
-        OmlxAgentClient(config),
-        CatalogFootageRetriever(repository),
+        OpenAIAgentClient(config),
+        cut_retriever,
         CatalogBrollInspector(
             repository,
             FfmpegFrameExtractor(default_count=prefs.broll_frame_count),
-            OmlxVisionTagger(config),
+            OpenAIVisionTagger(config),
             num_frames=prefs.broll_frame_count,
         ),
         mode=prefs.cut_director_mode,
@@ -251,11 +252,13 @@ def _build_into(ctx: LibraryContext, library_path: Union[str, Path]) -> None:
         staged_token_budget=prefs.cut_staged_token_budget,
         ui_language=prefs.ui_language,
     )
-    cutplan_service = CutPlanService(cut_store, cut_director, ui_language=prefs.ui_language)
+    cutplan_service = CutPlanService(
+        cut_store, cut_director, retriever=cut_retriever, ui_language=prefs.ui_language,
+    )
 
     # When the work queue drains, unload the in-process models (whisper +
     # demucs) so they stop occupying RAM while idle. They reload lazily on
-    # the next job. (OMLX-served models are managed by OMLX itself.)
+    # the next job. (Models served by the OpenAI-compatible server are managed by it.)
     def _release_idle_models() -> None:
         if use_qwen:
             from cutfinder.adapters.qwen_transcriber import QwenTranscriber
@@ -286,7 +289,7 @@ async def rebind_library(ctx: LibraryContext, library_path: Union[str, Path]) ->
     old_worker = ctx.worker_queue
     if old_worker is not None:
         # Time-box the graceful stop: if the worker is blocked on a long /
-        # hung job (e.g. an OMLX cutplan turn), draining it could take forever
+        # hung job (e.g. a cutplan turn against the OpenAI-compatible server), draining it could take forever
         # and would hang the settings-save PUT that triggered this rebind. Fall
         # back to a cancel so the rebind always completes.
         import asyncio as _asyncio

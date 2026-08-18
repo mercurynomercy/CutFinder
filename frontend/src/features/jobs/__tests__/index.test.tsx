@@ -1,4 +1,4 @@
-/** Tests for the JobsPanel feature — task list + toast notifications.
+/** Tests for the JobsPanel feature — task list + toast notifications + fixed-bottom status bar.
  *
  * Behavior-focused: asserts rendered text/state, not exact Tailwind classes.
  */
@@ -14,6 +14,8 @@ import { server } from '@/test/mocks/server'
 const useJobEventsMock = vi.hoisted(() => vi.fn())
 vi.mock('@/api/sse', () => ({ useJobEvents: useJobEventsMock }))
 
+const API = 'http://localhost:5080/api'
+
 describe('JobsPanel', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -28,7 +30,7 @@ describe('JobsPanel', () => {
   it('renders the clip path in the progress card when a clip_done event arrives', async () => {
     // The card hides once the polled job status is terminal, so keep job 1 running.
     server.use(
-      http.get('http://localhost:5080/api/jobs/1', () =>
+      http.get(`${API}/jobs/1`, () =>
         HttpResponse.json({ id: 1, kind: 'scan', status: 'running', total: 10, done: 4, failed: 0, started_at: null }),
       ),
     )
@@ -88,5 +90,24 @@ describe('JobsPanel', () => {
     rerender(<JobsPanel activeJobId={1} />)
 
     await waitFor(() => expect(screen.getByText('/a.mp4')).toBeInTheDocument())
+  })
+
+  it('renders a fixed-bottom status bar (not a top progress bar) while a job is running', async () => {
+    server.use(
+      http.get(`${API}/jobs/1`, () =>
+        HttpResponse.json({ id: 1, kind: 'scan', status: 'running', total: 40, done: 18, error: null }),
+      ),
+    )
+    useJobEventsMock.mockReturnValue({
+      loading: false,
+      error: null,
+      events: [],
+    })
+    render(<JobsPanel activeJobId={1} />)
+
+    const statusbar = await screen.findByTestId('statusbar')
+    expect(statusbar.className).toContain('bottom-0')
+    expect(document.querySelector('[class*="top-0"][class*="fixed"]')).not.toBeInTheDocument()
+    expect(screen.getByText('18/40')).toBeInTheDocument()
   })
 })

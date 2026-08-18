@@ -16,6 +16,10 @@ import { useI18n } from '@/i18n'
 export interface SearchProps {
   /** Called with the current query string (may be empty). */
   onSearch: (query: string) => void
+  /** Initial/current query value (e.g. the parent's already-active search query).
+   *  Used to seed the input so it reflects reality after a remount; typing after
+   *  that continues to be tracked as local state as before. Omit for an empty start. */
+  query?: string
 }
 
 /** Debounce helper — returns a function that only calls `fn` after `ms` ms
@@ -36,9 +40,9 @@ export function useDebounce<A extends unknown[]>(
   }
 }
 
-export function Search({ onSearch }: SearchProps) {
+export function Search({ onSearch, query: queryProp }: SearchProps) {
   const { t } = useI18n()
-  const [query, setQuery] = useState('')
+  const [query, setQuery] = useState(queryProp ?? '')
 
   // Debounced search — fires 300ms after the user stops typing
   const debouncedSearch = useDebounce((q: string) => {

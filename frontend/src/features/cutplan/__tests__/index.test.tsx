@@ -17,6 +17,7 @@ const PLAN = {
       clip_id: 1, roll: 'a', in_s: 0, out_s: 12, content: '开场白',
       rationale: '叙事开场', chapter: '开场', clip_label: 'A-0001.mov',
       clip_path: '/lib/A-0001.mov', thumb_ref: '/api/clips/1/thumbnail',
+      clip_date: '2026-04-25',
     },
   ],
   chapters: ['开场'],
@@ -42,13 +43,13 @@ describe('CutplanPage', () => {
       ),
     )
 
-    render(<CutplanPage onClose={() => {}} />)
+    render(<CutplanPage onClose={() => {}} onOpenSettings={() => {}} theme="light" onToggleTheme={() => {}} />)
 
     await userEvent.click(await screen.findByText('周末 vlog'))
 
     // Conversation + shot list both render.
     expect(await screen.findByText('好的，这是分镜')).toBeInTheDocument()
-    expect(screen.getByText('开场')).toBeInTheDocument() // chapter heading
+    expect(screen.getByText('2026-04-25')).toBeInTheDocument() // date grouping heading
     expect(screen.getByText('A-0001.mov')).toBeInTheDocument()
     expect(screen.getByText('开场白')).toBeInTheDocument()
   })
@@ -81,7 +82,7 @@ describe('CutplanPage', () => {
       ),
     )
 
-    render(<CutplanPage onClose={() => {}} />)
+    render(<CutplanPage onClose={() => {}} onOpenSettings={() => {}} theme="light" onToggleTheme={() => {}} />)
 
     const box = await screen.findByPlaceholderText(/Make a 15/)
     await user.type(box, '剪 15 分钟')
@@ -107,7 +108,7 @@ describe('CutplanPage', () => {
       ),
     )
 
-    render(<CutplanPage onClose={() => {}} />)
+    render(<CutplanPage onClose={() => {}} onOpenSettings={() => {}} theme="light" onToggleTheme={() => {}} />)
 
     // Auto-restored — the shot list shows up with no interaction.
     expect(await screen.findByText('A-0001.mov')).toBeInTheDocument()
@@ -135,48 +136,66 @@ describe('CutplanPage', () => {
       }),
     )
 
-    render(<CutplanPage onClose={() => {}} />)
+    render(<CutplanPage onClose={() => {}} onOpenSettings={() => {}} theme="light" onToggleTheme={() => {}} />)
 
-    // First load: running → thinking indicator visible.
-    expect(await screen.findByText('Director is working…')).toBeInTheDocument()
+    // First load: running → user message and generation process header visible.
+    expect(await screen.findByText('剪一条')).toBeInTheDocument()
+    // Generation process panel is shown (the header button contains the step count text)
+    expect(await screen.findByText('Generation process (0 steps)', {}, { timeout: 3000 })).toBeInTheDocument()
     // After the resume poll: assistant reply + plan appear.
     expect(await screen.findByText('完成了', {}, { timeout: 4000 })).toBeInTheDocument()
     expect(screen.getByText('A-0001.mov')).toBeInTheDocument()
   })
 
-  it('edits generation options in the 初剪设置 modal and saves them via PUT /settings', async () => {
-    let putBody: Record<string, unknown> | null = null
+  it('shows a real day-based percentage in the topbar while running', async () => {
     server.use(
-      http.get(`${API}/cut/sessions`, () => HttpResponse.json({ sessions: [] })),
-      http.get(`${API}/cut/prompt`, () =>
-        HttpResponse.json({ prompt: '你是导演…', default: '你是导演…', is_default: true }),
+      http.get(`${API}/cut/sessions`, () =>
+        HttpResponse.json({ sessions: [{ id: 7, title: 't', status: 'running', created_at: null, updated_at: null }] }),
       ),
-      http.put(`${API}/cut/prompt`, () =>
-        HttpResponse.json({ prompt: '你是导演…', default: '你是导演…', is_default: true }),
+      http.get(`${API}/cut/sessions/7`, () =>
+        HttpResponse.json({
+          session: { id: 7, title: 't', status: 'running', day_index: 2, day_total: 5, created_at: null, updated_at: null },
+          messages: [{ role: 'user', content: '剪一条', created_at: null }],
+          plan: null,
+        }),
       ),
-      http.put(`${API}/settings`, async ({ request }) => {
-        putBody = (await request.json()) as Record<string, unknown>
-        return HttpResponse.json({ status: 'ok' })
+    )
+
+    render(<CutplanPage onClose={() => {}} onOpenSettings={() => {}} theme="light" onToggleTheme={() => {}} />)
+
+    expect(await screen.findByText('Generating · 2/5')).toBeInTheDocument()
+  })
+
+  it('sets the tab title with day progress while generating, then reverts', async () => {
+    let calls = 0
+    server.use(
+      http.get(`${API}/cut/sessions`, () =>
+        HttpResponse.json({ sessions: [{ id: 11, title: 't', status: 'running', created_at: null, updated_at: null }] }),
+      ),
+      http.get(`${API}/cut/sessions/11`, () => {
+        calls += 1
+        const running = calls <= 2
+        return HttpResponse.json({
+          session: {
+            id: 11, title: 't', status: running ? 'running' : 'idle',
+            day_index: running ? 1 : null, day_total: running ? 2 : null,
+            created_at: null, updated_at: null,
+          },
+          messages: running
+            ? [{ role: 'user', content: '剪一条', created_at: null }]
+            : [{ role: 'user', content: '剪一条', created_at: null }, { role: 'assistant', content: '完成了', created_at: null }],
+          plan: null,
+        })
       }),
     )
 
-    render(<CutplanPage onClose={() => {}} />)
+    render(<CutplanPage onClose={() => {}} onOpenSettings={() => {}} theme="light" onToggleTheme={() => {}} />)
 
-    // Open the "Rough-cut settings" modal from the composer toolbar.
-    await userEvent.click(await screen.findByRole('button', { name: 'Rough-cut settings' }))
-
-    // The critic toggle reflects the loaded value (off) — flip it on.
-    const critic = await screen.findByRole('checkbox', { name: 'Critic review pass' })
-    expect((critic as HTMLInputElement).checked).toBe(false)
-    await userEvent.click(critic)
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
-
-    await waitFor(() => expect(putBody).not.toBeNull())
-    expect(putBody!.cut_critic_enabled).toBe(true)
-    expect(putBody!.cut_vision_budget).toBe(6)
-    // Director mode + max tool rounds round-trip through the same modal.
-    expect(putBody!.cut_director_mode).toBe('agent')
-    expect(putBody!.cut_max_tool_rounds).toBe(24)
+    await waitFor(() => expect(document.title.startsWith('(1/2)')).toBe(true))
+    // The revert only lands after resumePoll's next 1500ms tick confirms the
+    // turn ended, so give this wait the same generous timeout the existing
+    // "resumes when restored" test uses for the same poll interval.
+    await waitFor(() => expect(document.title.startsWith('(1/2)')).toBe(false), { timeout: 4000 })
   })
 
   it('deletes a conversation', async () => {
@@ -191,7 +210,7 @@ describe('CutplanPage', () => {
       }),
     )
 
-    render(<CutplanPage onClose={() => {}} />)
+    render(<CutplanPage onClose={() => {}} onOpenSettings={() => {}} theme="light" onToggleTheme={() => {}} />)
 
     // Reveal the row, then click its delete button (hidden until hover, but present in DOM).
     await screen.findByText('to delete')
@@ -217,7 +236,7 @@ describe('CutplanPage', () => {
       ),
     )
 
-    render(<CutplanPage onClose={() => {}} />)
+    render(<CutplanPage onClose={() => {}} onOpenSettings={() => {}} theme="light" onToggleTheme={() => {}} />)
 
     const label = await screen.findByText('A-0001.mov')
     await userEvent.click(label.closest('button')!)
@@ -226,7 +245,7 @@ describe('CutplanPage', () => {
     openSpy.mockRestore()
   })
 
-  it('renders a photo shot with the photo badge, not B-roll', async () => {
+  it('renders a photo shot with a Photo label, not B-roll', async () => {
     const photoPlan = {
       ...PLAN,
       shots: [{
@@ -248,11 +267,104 @@ describe('CutplanPage', () => {
       ),
     )
 
-    render(<CutplanPage onClose={() => {}} />)
+    render(<CutplanPage onClose={() => {}} onOpenSettings={() => {}} theme="light" onToggleTheme={() => {}} />)
 
     await screen.findByText('photo-0008.JPG')
     // The default test locale is English → 'Photo'; assert we never render the raw 'photo'.
-    expect(screen.getByText('Photo')).toBeInTheDocument()
-    expect(screen.queryByText('photo')).not.toBeInTheDocument()
+    expect(screen.getByText('[Photo]')).toBeInTheDocument()
+    expect(screen.queryByText('[photo]')).not.toBeInTheDocument()
+    expect(screen.queryByText('[B-roll]')).not.toBeInTheDocument()
+  })
+
+  it('renders clarifying-question option chips and sends the chosen one', async () => {
+    const user = userEvent.setup()
+    const sentTexts: string[] = []
+    let calls = 0
+
+    server.use(
+      http.get(`${API}/cut/sessions`, () =>
+        HttpResponse.json({ sessions: [{ id: 3, title: 't', status: 'waiting_for_input', created_at: null, updated_at: null }] }),
+      ),
+      http.get(`${API}/cut/sessions/3`, () => {
+        calls += 1
+        // First GET (initial load): waiting_for_input with the date-range question.
+        // Second GET (after send, via resumePoll): idle — the turn resolved and
+        // polling should stop immediately.
+        if (calls === 1) {
+          return HttpResponse.json({
+            session: {
+              id: 3, title: 't', status: 'waiting_for_input', created_at: null, updated_at: null,
+              pending: { kind: 'preflight_date', question: '请指定日期范围', options: ['2026-04-25', '2026-04-26'] },
+            },
+            messages: [
+              { role: 'user', content: '帮我剪个 vlog', created_at: null },
+              { role: 'assistant', content: '请指定日期范围', created_at: null },
+            ],
+            plan: null,
+          })
+        }
+        return HttpResponse.json({
+          session: { id: 3, title: 't', status: 'idle', created_at: null, updated_at: null, pending: null },
+          messages: [
+            { role: 'user', content: '帮我剪个 vlog', created_at: null },
+            { role: 'assistant', content: '请指定日期范围', created_at: null },
+            { role: 'user', content: '2026-04-25', created_at: null },
+            { role: 'assistant', content: '好的', created_at: null },
+          ],
+          plan: null,
+        })
+      }),
+      http.post(`${API}/cut/sessions/3/messages`, async ({ request }) => {
+        const body = (await request.json()) as { text: string }
+        sentTexts.push(body.text)
+        return HttpResponse.json({ job_id: 1, session_id: 3 })
+      }),
+    )
+
+    render(<CutplanPage onClose={() => {}} onOpenSettings={() => {}} theme="light" onToggleTheme={() => {}} />)
+
+    await screen.findByText('请指定日期范围')
+    const chip = await screen.findByRole('button', { name: '2026-04-25' })
+    await user.click(chip)
+
+    await waitFor(() => expect(sentTexts).toContain('2026-04-25'))
+  })
+
+  it('renders a day_ask_user pause the same way as a pre-flight question', async () => {
+    server.use(
+      http.get(`${API}/cut/sessions`, () =>
+        HttpResponse.json({ sessions: [{ id: 9, title: 't', status: 'waiting_for_input', created_at: null, updated_at: null }] }),
+      ),
+      http.get(`${API}/cut/sessions/9`, () =>
+        HttpResponse.json({
+          session: {
+            id: 9, title: 't', status: 'waiting_for_input', created_at: null, updated_at: null,
+            pending: { kind: 'day_ask_user', question: '这天有两条可能的开场，选哪条？', options: ['A-0004', 'A-0011'] },
+          },
+          messages: [
+            { role: 'user', content: '剪一条', created_at: null },
+            { role: 'assistant', content: '这天有两条可能的开场，选哪条？', created_at: null },
+          ],
+          plan: null,
+        }),
+      ),
+    )
+
+    render(<CutplanPage onClose={() => {}} onOpenSettings={() => {}} theme="light" onToggleTheme={() => {}} />)
+
+    await screen.findByText('这天有两条可能的开场，选哪条？')
+    expect(await screen.findByRole('button', { name: 'A-0004' })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'A-0011' })).toBeInTheDocument()
+  })
+
+  it('centers the empty-conversation hint in the thread pane instead of leaving a bare gap above it', async () => {
+    server.use(http.get(`${API}/cut/sessions`, () => HttpResponse.json({ sessions: [] })))
+
+    render(<CutplanPage onClose={() => {}} onOpenSettings={() => {}} theme="light" onToggleTheme={() => {}} />)
+
+    const hint = await screen.findByText(
+      'Describe the cut you want — date range (full year-month-day, e.g. 2026/04/25), length, style, rhythm.',
+    )
+    expect(hint.parentElement).toHaveClass('items-center', 'justify-center')
   })
 })

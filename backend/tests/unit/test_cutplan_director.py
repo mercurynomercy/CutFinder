@@ -285,6 +285,60 @@ def test_generate_one_call_per_date_with_date_chapters() -> None:
     assert result.plan.total_s == 22.0                 # 12 + 10
 
 
+def test_generate_drops_shot_with_clip_id_from_another_day() -> None:
+    # Regression: a per-day completion that hallucinates a clip_id belonging
+    # to a *different* shooting date must not leak that clip into this day's
+    # chapter — chapter is forced to the day being generated (_normalize_day),
+    # so an unvalidated clip_id shows the wrong footage under the wrong date.
+    llm = ScriptedCompleteLLM([
+        '{"shots": [{"clip_id": 1, "roll": "a", "in_s": 0, "out_s": 12},'
+        ' {"clip_id": 3, "roll": "a", "in_s": 0, "out_s": 10}]}',  # clip 3 is 05-09's, not 04-25's
+        '{"shots": [{"clip_id": 3, "roll": "a", "in_s": 0, "out_s": 10}]}',
+    ])
+    briefs = [
+        ClipBrief(clip_id=1, roll="a", has_transcript=True, capture_time="2026-04-25T09:00:00"),
+        ClipBrief(clip_id=3, roll="a", has_transcript=True, capture_time="2026-05-09T09:00:00"),
+    ]
+    details = {
+        1: ClipDetail(clip_id=1, roll="a", duration_s=60.0, capture_time="2026-04-25T09:00:00",
+                      segments=[Segment(start_s=0, end_s=12, text="第一天")]),
+        3: ClipDetail(clip_id=3, roll="a", duration_s=60.0, capture_time="2026-05-09T09:00:00",
+                      segments=[Segment(start_s=0, end_s=10, text="第二天")]),
+    }
+    director = CutDirector(llm, FakeRetriever(briefs, details))
+    result = director.generate(
+        RoughCutRequest(date_from="2026-04-25", date_to="2026-05-11"), [], "按日期剪",
+    )
+    assert result.plan is not None
+    # Clip 3 must only ever appear under its real shooting date's chapter —
+    # not duplicated into 04-25's chapter too (a dict keyed by clip_id would
+    # hide the duplicate by letting the later, correct entry overwrite it).
+    pairs = sorted((s.clip_id, s.chapter) for s in result.plan.shots)
+    assert pairs == [(1, "2026-04-25"), (3, "2026-05-09")]
+
+
+def test_generate_reports_day_index_and_total() -> None:
+    briefs = [
+        ClipBrief(clip_id=1, roll="a", capture_time="2026-04-25T09:00:00"),
+        ClipBrief(clip_id=2, roll="a", capture_time="2026-04-26T09:00:00"),
+    ]
+    llm = FakeAgentLLM([
+        AgentStep(content="ok", tool_calls=[_tc("emit_plan", {"shots": [
+            {"clip_id": 1, "roll": "a", "in_s": 0, "out_s": 5},
+        ]})]),
+        AgentStep(content="ok", tool_calls=[_tc("emit_plan", {"shots": [
+            {"clip_id": 2, "roll": "a", "in_s": 0, "out_s": 5},
+        ]})]),
+    ])
+    director = CutDirector(llm, FakeRetriever(briefs, _details()))
+    seen: list[tuple[int, int]] = []
+    director.generate(
+        RoughCutRequest(), [], "剪一条",
+        on_day=lambda idx, n: seen.append((idx, n)),
+    )
+    assert seen == [(1, 2), (2, 2)]
+
+
 def test_generate_groups_days_by_local_capture_date() -> None:
     """Regression: day chapters follow the *local* shooting date, not the UTC one.
 
@@ -414,6 +468,15 @@ def test_generate_fills_clip_date_and_uses_custom_prompt(
 
 # ── per-day mini-agent (mode="agent", task 26) ──────────────────
 
+def test_day_tools_include_ask_user_but_run_tools_do_not() -> None:
+    from cutfinder.cutplan.prompts import DAY_TOOLS, TOOLS
+
+    day_names = {t["function"]["name"] for t in DAY_TOOLS}
+    run_names = {t["function"]["name"] for t in TOOLS}
+    assert day_names == {"get_clip_detail", "inspect_broll", "emit_plan", "ask_user"}
+    assert "ask_user" not in run_names
+
+
 class FakeAgentLLM:
     """run() pops scripted AgentSteps; complete() returns canned JSON (fallback)."""
 
@@ -421,11 +484,13 @@ class FakeAgentLLM:
         self._steps = steps
         self.raw = raw
         self.run_calls = 0
+        self.run_msgs: list[list[dict[str, Any]]] = []
         self.complete_calls = 0
         self.complete_msgs: list[list[dict[str, Any]]] = []
 
     def run(self, messages: list[dict[str, Any]], tools: list[dict[str, Any]]) -> AgentStep:
         self.run_calls += 1
+        self.run_msgs.append([dict(m) for m in messages])
         self.tools_seen = tools
         return self._steps.pop(0) if self._steps else AgentStep(content="done")
 
@@ -435,7 +500,7 @@ class FakeAgentLLM:
         return self.raw
 
     def count_tokens(self, text: str) -> int:
-        # Deterministic stand-in for OMLX count_tokens: ~2 chars per token.
+        # Deterministic stand-in for the server's count_tokens: ~2 chars per token.
         self.count_calls = getattr(self, "count_calls", 0) + 1
         return (len(text) + 1) // 2
 
@@ -456,9 +521,9 @@ def test_generate_agent_mode_converges_via_tool_loop() -> None:
     assert result.plan.total_s == 12.0
     assert result.plan.chapters == ["2026-04-25"]
     assert llm.complete_calls == 0  # converged via tools, no staged fall back
-    # Worker is not given search_footage (only detail / inspect / emit).
+    # Worker is not given search_footage (only detail / inspect / emit / ask_user).
     assert {t["function"]["name"] for t in llm.tools_seen} == {
-        "get_clip_detail", "inspect_broll", "emit_plan",
+        "get_clip_detail", "inspect_broll", "emit_plan", "ask_user",
     }
 
 
@@ -495,6 +560,27 @@ def test_run_day_dedups_repeated_tool_calls() -> None:
     assert result.plan is not None
     assert inspector.count == 1  # second identical inspect_broll deduped, not re-run
     assert llm.complete_calls == 0
+
+
+def test_run_day_pauses_on_ask_user() -> None:
+    llm = FakeAgentLLM([
+        AgentStep(tool_calls=[_tc("ask_user", {
+            "question": "这天有两条可能的开场，选哪条？", "options": ["A-0004", "A-0011"],
+        }, cid="call-1")]),
+    ])
+    briefs = [ClipBrief(clip_id=1, roll="a", capture_time="2026-04-25T09:00:00")]
+    director = CutDirector(llm, FakeRetriever(briefs, _details()))
+
+    result = director.generate(RoughCutRequest(date_from="2026-04-25"), [], "剪一条")
+
+    assert result.plan is None
+    assert result.pending is not None
+    assert result.pending.kind == "day_ask_user"
+    assert result.pending.question == "这天有两条可能的开场，选哪条？"
+    assert result.pending.options == ["A-0004", "A-0011"]
+    assert result.pending.resume_state["day"] == "2026-04-25"
+    assert result.pending.resume_state["tool_call_id"] == "call-1"
+    assert llm.complete_calls == 0  # paused, not fallen back to staged
 
 
 def test_generate_staged_mode_skips_tool_loop() -> None:
@@ -856,3 +942,179 @@ def test_default_prompt_is_chinese_by_default() -> None:
     director = CutDirector(FakeCompleteLLM("{}"), FakeRetriever([], []))
     prompt = director._default_prompt()
     assert "初剪" in prompt or "粗剪" in prompt
+
+
+def test_resume_day_continues_paused_conversation_and_finishes() -> None:
+    llm = FakeAgentLLM([
+        AgentStep(tool_calls=[_tc("ask_user", {
+            "question": "选哪条开场？", "options": ["A-0004", "A-0011"],
+        }, cid="call-1")]),
+    ])
+    briefs = [ClipBrief(clip_id=1, roll="a", capture_time="2026-04-25T09:00:00")]
+    director = CutDirector(llm, FakeRetriever(briefs, _details()))
+    paused = director.generate(RoughCutRequest(date_from="2026-04-25"), [], "剪一条")
+    assert paused.pending is not None
+
+    # The model, now told the user picked A-0004, finalizes the day.
+    llm._steps.append(AgentStep(content="好的", tool_calls=[_tc("emit_plan", {"shots": [
+        {"clip_id": 1, "roll": "a", "in_s": 0, "out_s": 12, "content": "A-0004"},
+    ]})]))
+
+    result = director.resume_day(
+        RoughCutRequest(date_from="2026-04-25"), paused.pending.resume_state, "A-0004",
+    )
+
+    assert result.pending is None
+    assert result.plan is not None
+    assert result.plan.total_s == 12.0
+    # The tool result for the paused ask_user call carries the user's answer.
+    last_call_messages = llm.calls if hasattr(llm, "calls") else None  # FakeAgentLLM has no .calls; use run() count
+    assert llm.run_calls == 2  # one before the pause, one after resume
+
+
+def test_resume_day_continues_to_remaining_dates() -> None:
+    llm = FakeAgentLLM([
+        AgentStep(tool_calls=[_tc("ask_user", {"question": "选哪条？", "options": ["x"]}, cid="call-1")]),
+    ])
+    briefs = [
+        ClipBrief(clip_id=1, roll="a", capture_time="2026-04-25T09:00:00"),
+        ClipBrief(clip_id=2, roll="a", capture_time="2026-04-26T09:00:00"),
+    ]
+    director = CutDirector(llm, FakeRetriever(briefs, _details()))
+    paused = director.generate(RoughCutRequest(date_from="2026-04-25", date_to="2026-04-26"), [], "剪一条")
+    assert paused.pending is not None
+    assert paused.pending.resume_state["remaining_dates"] == ["2026-04-26"]
+
+    llm._steps.extend([
+        AgentStep(content="ok", tool_calls=[_tc("emit_plan", {"shots": [
+            {"clip_id": 1, "roll": "a", "in_s": 0, "out_s": 10},
+        ]})]),
+        AgentStep(content="ok", tool_calls=[_tc("emit_plan", {"shots": [
+            {"clip_id": 2, "roll": "a", "in_s": 0, "out_s": 5},
+        ]})]),
+    ])
+
+    result = director.resume_day(
+        RoughCutRequest(date_from="2026-04-25", date_to="2026-04-26"),
+        paused.pending.resume_state, "答案",
+    )
+
+    assert result.plan is not None
+    assert result.plan.chapters == ["2026-04-25", "2026-04-26"]
+    assert result.plan.total_s == 15.0
+    # The remaining date (2026-04-26) is generated with a fresh _day_tool_loop
+    # call, so its first run() call is the last one made overall — prove the
+    # deserialized history/user_text from resume_state actually reached it,
+    # rather than an empty placeholder.
+    remaining_day_first_call = llm.run_msgs[-1]
+    assert any("剪一条" in str(m.get("content", "")) for m in remaining_day_first_call)
+
+
+def test_resume_day_handles_second_pause_in_same_day() -> None:
+    llm = FakeAgentLLM([
+        AgentStep(tool_calls=[_tc("ask_user", {"question": "q1", "options": ["a"]}, cid="call-1")]),
+    ])
+    briefs = [ClipBrief(clip_id=1, roll="a", capture_time="2026-04-25T09:00:00")]
+    director = CutDirector(llm, FakeRetriever(briefs, _details()))
+    paused = director.generate(RoughCutRequest(date_from="2026-04-25"), [], "剪一条")
+    assert paused.pending is not None
+
+    llm._steps.append(AgentStep(tool_calls=[_tc("ask_user", {"question": "q2", "options": ["b"]}, cid="call-2")]))
+    paused2 = director.resume_day(
+        RoughCutRequest(date_from="2026-04-25"), paused.pending.resume_state, "答案1",
+    )
+    assert paused2.pending is not None
+    assert paused2.pending.resume_state["day_idx"] == paused.pending.resume_state.get("day_idx", 1)
+    assert paused2.pending.resume_state["n_days"] == 1
+
+    llm._steps.append(AgentStep(content="ok", tool_calls=[_tc("emit_plan", {"shots": [
+        {"clip_id": 1, "roll": "a", "in_s": 0, "out_s": 8},
+    ]})]))
+    result = director.resume_day(
+        RoughCutRequest(date_from="2026-04-25"), paused2.pending.resume_state, "答案2",
+    )
+    assert result.pending is None
+    assert result.plan is not None
+    assert result.plan.total_s == 8.0
+
+
+def test_resume_day_seeds_from_prior_plan_for_earlier_completed_days() -> None:
+    # A 2-day turn where day 1 finished normally (would already be persisted
+    # by the service as prior_plan) and day 2 paused. Resuming must keep day 1.
+    llm = FakeAgentLLM([
+        AgentStep(content="ok", tool_calls=[_tc("emit_plan", {"shots": [
+            {"clip_id": 1, "roll": "a", "in_s": 0, "out_s": 10},
+        ]})]),
+        AgentStep(tool_calls=[_tc("ask_user", {"question": "?", "options": []}, cid="call-1")]),
+    ])
+    briefs = [
+        ClipBrief(clip_id=1, roll="a", capture_time="2026-04-25T09:00:00"),
+        ClipBrief(clip_id=2, roll="a", capture_time="2026-04-26T09:00:00"),
+    ]
+    director = CutDirector(llm, FakeRetriever(briefs, _details()))
+    paused = director.generate(RoughCutRequest(date_from="2026-04-25", date_to="2026-04-26"), [], "剪一条")
+    assert paused.pending is not None
+    assert paused.pending.resume_state["day"] == "2026-04-26"
+
+    from cutfinder.domain.models import CutPlan, Shot
+    prior_plan = CutPlan(
+        shots=[Shot(clip_id=1, roll="a", in_s=0, out_s=10, chapter="2026-04-25", clip_date="2026-04-25")],
+        chapters=["2026-04-25"], total_s=10.0,
+    )
+    llm._steps.append(AgentStep(content="ok", tool_calls=[_tc("emit_plan", {"shots": [
+        {"clip_id": 2, "roll": "a", "in_s": 0, "out_s": 5},
+    ]})]))
+
+    result = director.resume_day(
+        RoughCutRequest(date_from="2026-04-25", date_to="2026-04-26"),
+        paused.pending.resume_state, "答案", prior_plan=prior_plan,
+    )
+
+    assert result.plan is not None
+    assert sorted(result.plan.chapters) == ["2026-04-25", "2026-04-26"]
+    assert result.plan.total_s == 15.0  # 10 (seeded from prior_plan) + 5 (resumed day)
+
+
+def test_resume_day_falls_back_to_staged_and_tracks_failure_on_nonconvergence() -> None:
+    """Regression for the final-review's Ruling 5 (Important): a resumed day
+    that doesn't converge to emit_plan must fall back to _staged_day and, if
+    that also produces nothing, be recorded as failed — mirroring generate()'s
+    fallback pattern — rather than silently vanishing with no user-visible
+    indication.
+    """
+    llm = FakeAgentLLM([
+        AgentStep(tool_calls=[_tc("ask_user", {"question": "?", "options": ["x"]}, cid="call-1")]),
+    ], raw="{}")  # staged fallback JSON has no "shots" key → also fails
+    briefs = [
+        ClipBrief(clip_id=1, roll="a", capture_time="2026-04-25T09:00:00"),
+        ClipBrief(clip_id=2, roll="a", capture_time="2026-04-26T09:00:00"),
+    ]
+    director = CutDirector(llm, FakeRetriever(briefs, _details()), max_tool_rounds=3)
+    paused = director.generate(RoughCutRequest(date_from="2026-04-25", date_to="2026-04-26"), [], "剪一条")
+    assert paused.pending is not None
+    assert paused.pending.resume_state["day"] == "2026-04-25"
+    assert paused.pending.resume_state["remaining_dates"] == ["2026-04-26"]
+
+    # The resumed day's tool loop never converges to emit_plan (two
+    # non-tool-call, non-salvageable replies exhaust the round cap).
+    llm._steps.extend([
+        AgentStep(content="嗯…"),
+        AgentStep(content="还是不确定"),
+    ])
+    # The remaining date (2026-04-26) then converges normally via a fresh loop.
+    llm._steps.append(AgentStep(content="ok", tool_calls=[_tc("emit_plan", {"shots": [
+        {"clip_id": 2, "roll": "a", "in_s": 0, "out_s": 5},
+    ]})]))
+
+    result = director.resume_day(
+        RoughCutRequest(date_from="2026-04-25", date_to="2026-04-26"),
+        paused.pending.resume_state, "答案",
+    )
+
+    assert result.plan is not None
+    # Only day 2 made it into the plan — day 1 (resumed) failed both agent
+    # convergence and the staged fallback, so it must not appear as a chapter.
+    assert result.plan.chapters == ["2026-04-26"]
+    assert result.plan.total_s == 5.0
+    # The failed resumed day is surfaced to the user, not silently dropped.
+    assert "2026-04-25" in result.assistant_text

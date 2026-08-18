@@ -44,7 +44,7 @@ enum DependencyChecker {
         return OMLXProbe.evaluate(responseData: data, required: AppConfig.requiredOMLXModels)
     }
 
-    /// Blocking GET of `<OMLX_BASE_URL>/models`; returns the body or nil.
+    /// Blocking GET of `<OPENAI_BASE_URL>/models`; returns the body or nil.
     static func fetchOMLXModels(timeout: TimeInterval) -> Data? {
         guard let url = URL(string: AppConfig.omlxBaseURL + "/models") else { return nil }
         var request = URLRequest(url: url)

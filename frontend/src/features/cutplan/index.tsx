@@ -1,20 +1,21 @@
 /** Rough-cut director page (§3.15).
  *
- * Left: collapsible conversation list (new / delete) + chat thread + input.
- * Right: live shot list preview (chapters + thumbnails), expandable to full screen.
+ * Three-column layout: sidebar (conversation list) | chat panel | shot list.
+ * Top bar with generation status pill, theme toggle, and close.
  *
  * On open it restores the last active conversation; if its turn is still running
  * in the backend it shows the "thinking" indicator and resumes polling.
  *
- * Usage: <CutplanPage onClose={() => ...} />
+ * Usage: <CutplanPage onClose={() => ...} onOpenSettings={() => ...} theme={...} onToggleTheme={() => ...} />
  */
 
 import { Fragment, useEffect, useRef, useState } from 'react'
 
-import type { CutMessage, CutPlan, CutSession } from '@/api/client'
+import type { CutMessage, CutPending, CutPlan, CutSession } from '@/api/client'
 import { api } from '@/api/client'
 import { useI18n } from '@/i18n'
 import { ConfirmDialog } from '@/components'
+import type { Theme } from '@/theme'
 
 const ACTIVE_KEY = 'cutfinder:cut-active-session'
 
@@ -50,11 +51,21 @@ function ThinkingDots() {
   )
 }
 
-export interface CutplanPageProps {
-  onClose: () => void
+// Mini spinner for active step
+function MiniSpinner() {
+  return (
+    <span className="inline-block h-3 w-3 animate-spin rounded-full border-[1.5px] border-[--border] border-t-[--primary]" />
+  )
 }
 
-export function CutplanPage({ onClose }: CutplanPageProps) {
+export interface CutplanPageProps {
+  onClose: () => void
+  onOpenSettings: () => void
+  theme: Theme
+  onToggleTheme: () => void
+}
+
+export function CutplanPage({ onClose, onOpenSettings, theme, onToggleTheme }: CutplanPageProps) {
   const { t } = useI18n()
   const [sessions, setSessions] = useState<CutSession[]>([])
   const [activeId, setActiveId] = useState<number | null>(null)
@@ -73,22 +84,18 @@ export function CutplanPage({ onClose }: CutplanPageProps) {
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null)
   const [listCollapsed, setListCollapsed] = useState(false)
   const [planFullscreen, setPlanFullscreen] = useState(false)
-  const [promptOpen, setPromptOpen] = useState(false)
-  const [promptText, setPromptText] = useState('')
-  const [promptDefault, setPromptDefault] = useState('')
-  const [promptIsDefault, setPromptIsDefault] = useState(true)
-  const [promptSaved, setPromptSaved] = useState(false)
-  // Per-generation knobs, edited in the same "初剪设置" modal and persisted as
-  // machine-global prefs (PUT /settings rebuilds the director so they take effect).
-  const [directorMode, setDirectorMode] = useState<'agent' | 'staged'>('agent')
-  const [maxToolRounds, setMaxToolRounds] = useState(24)
-  const [criticEnabled, setCriticEnabled] = useState(false)
-  const [visionBudget, setVisionBudget] = useState(6)
-  const [leanTokenBudget, setLeanTokenBudget] = useState(50000)
-  const [stagedTokenBudget, setStagedTokenBudget] = useState(40000)
+  // Elapsed time tracking for generation
+  const [elapsedSeconds, setElapsedSeconds] = useState(0)
+  const [generationStarted, setGenerationStarted] = useState(false)
+  // Real day-based progress from the backend (day_index/day_total), e.g. "day 2 of 5".
+  const [dayIndex, setDayIndex] = useState<number | null>(null)
+  const [dayTotal, setDayTotal] = useState<number | null>(null)
+  // Pending clarifying question from the backend (waiting_for_input), if any.
+  const [pending, setPending] = useState<CutPending | null>(null)
 
   const threadRef = useRef<HTMLDivElement>(null)
   const progressRef = useRef<HTMLDivElement>(null)
+  const elapsedTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   // Tracks the currently-open session so resume polling can bail if the user
   // switches away mid-poll. Set explicitly (not on render) so async guards see
   // the new value immediately.
@@ -98,6 +105,10 @@ export function CutplanPage({ onClose }: CutplanPageProps) {
   const pushProgress = (p: string) =>
     setProgressLog((prev) => (!p || prev[prev.length - 1] === p ? prev : [...prev, p]))
   const lastProgress = progressLog[progressLog.length - 1] ?? ''
+  const currentStepIndex = progressLog.length
+  const dayPct = dayIndex != null && dayTotal != null
+    ? Math.round(dayTotal > 0 ? (dayIndex / dayTotal) * 100 : 0)
+    : null
 
   const persistActive = (id: number | null) => {
     try {
@@ -118,6 +129,31 @@ export function CutplanPage({ onClose }: CutplanPageProps) {
     }
   }
 
+  // Start elapsed time timer
+  const startElapsedTimer = () => {
+    setElapsedSeconds(0)
+    setGenerationStarted(true)
+    if (elapsedTimerRef.current) clearInterval(elapsedTimerRef.current)
+    elapsedTimerRef.current = setInterval(() => {
+      setElapsedSeconds((s) => s + 1)
+    }, 1000)
+  }
+
+  // Stop elapsed time timer
+  const stopElapsedTimer = () => {
+    if (elapsedTimerRef.current) {
+      clearInterval(elapsedTimerRef.current)
+      elapsedTimerRef.current = null
+    }
+    setGenerationStarted(false)
+  }
+
+  const fmtElapsed = (s: number): string => {
+    const m = Math.floor(s / 60)
+    const sec = s % 60
+    return m > 0 ? `${m}m${String(sec).padStart(2, '0')}s` : `${sec}s`
+  }
+
   // Poll a still-running session until it goes idle/error, live-updating the
   // partial plan + the director's current step on every tick (so completed
   // dates and "查看片段 #N" status show while the rest still generates).
@@ -133,11 +169,16 @@ export function CutplanPage({ onClose }: CutplanPageProps) {
         if (activeRef.current !== id) return
         if (detail.plan) setPlan(detail.plan)          // show completed dates early
         pushProgress(detail.session.progress ?? '')     // live "正在查看…" trajectory
+        setDayIndex(detail.session.day_index ?? null)
+        setDayTotal(detail.session.day_total ?? null)
         if (detail.session.status !== 'running') {
           setMessages(detail.messages)                  // restore the assistant reply
           setPlan(detail.plan)
+          setPending(detail.session.pending ?? null)
           setBusy(false)
           setProgressOpen(false)                        // collapse the finished log
+          setDayIndex(null); setDayTotal(null)
+          stopElapsedTimer()
           return                                        // keep progressLog for review
         }
       } catch {
@@ -159,6 +200,7 @@ export function CutplanPage({ onClose }: CutplanPageProps) {
       }
       setBusy(false)
       setProgressOpen(false)
+      stopElapsedTimer()
     }
   }
 
@@ -172,11 +214,14 @@ export function CutplanPage({ onClose }: CutplanPageProps) {
     setMessages([])
     setBusy(false)
     setProgressLog([])
+    setDayIndex(null); setDayTotal(null); setPending(null)
+    stopElapsedTimer()
     try {
       const detail = await api.getCutSession(id)
       if (activeRef.current !== id) return
       setMessages(detail.messages)
       setPlan(detail.plan)
+      setPending(detail.session.status === 'waiting_for_input' ? (detail.session.pending ?? null) : null)
       if (detail.session.status === 'running') {
         pushProgress(detail.session.progress ?? '')
         setBusy(true)
@@ -221,14 +266,28 @@ export function CutplanPage({ onClose }: CutplanPageProps) {
     }
   }, [progressLog, busy, progressOpen])
 
+  // Update the tab title with day progress while generating, so it's visible
+  // even when the user has switched away from this tab.
+  useEffect(() => {
+    const base = document.title.replace(/^\(\d+\/\d+\)\s*/, '')
+    if (busy && dayIndex != null && dayTotal != null) {
+      document.title = `(${dayIndex}/${dayTotal}) ${base}`
+    } else {
+      document.title = base
+    }
+    return () => {
+      document.title = document.title.replace(/^\(\d+\/\d+\)\s*/, '')
+    }
+  }, [busy, dayIndex, dayTotal])
+
   const newSession = async () => {
     const s = await api.createCutSession('')
     await loadSessions()
     await openSession(s.id)
   }
 
-  const send = async () => {
-    const text = input.trim()
+  const send = async (overrideText?: string) => {
+    const text = (overrideText ?? input).trim()
     if (!text || busy) return
 
     let sessionId = activeId
@@ -244,16 +303,19 @@ export function CutplanPage({ onClose }: CutplanPageProps) {
     // Optimistically show the user's message.
     setMessages((prev) => [...prev, { role: 'user', content: text, created_at: null }])
     setInput('')
+    setPending(null)
     setBusy(true)
     setProgressLog([])
+    setDayIndex(null); setDayTotal(null)
     setProgressOpen(true)
+    startElapsedTimer()
     try {
       // The route marks the session 'running' synchronously, so we can poll the
       // session directly — resumePoll live-updates the partial plan + progress
       // and finalizes when it goes idle/error.
       await api.sendCutMessage(sessionId, text)
       await resumePoll(sessionId)
-      await loadSessions() // refresh titles / updated_at ordering
+      await loadSessions() // refresh title / updated_at ordering
     } catch (err) {
       console.error('Rough-cut turn failed:', err)
     } finally {
@@ -280,62 +342,6 @@ export function CutplanPage({ onClose }: CutplanPageProps) {
     }
   }
 
-  const openPrompt = async () => {
-    setPromptOpen(true)
-    try {
-      const r = await api.getCutPrompt()
-      setPromptText(r.prompt)
-      setPromptDefault(r.default)
-      setPromptIsDefault(r.is_default)
-    } catch (err) {
-      console.error('Load director prompt failed:', err)
-    }
-    // Generation options live in machine-global prefs; pull current values so
-    // the toggles reflect what's actually in effect.
-    try {
-      const data = await api.getSettings()
-      setDirectorMode(data.prefs.cut_director_mode ?? 'agent')
-      setMaxToolRounds(data.prefs.cut_max_tool_rounds ?? 24)
-      setCriticEnabled(data.prefs.cut_critic_enabled ?? false)
-      setVisionBudget(data.prefs.cut_vision_budget ?? 6)
-      setLeanTokenBudget(data.prefs.cut_lean_token_budget ?? 50000)
-      setStagedTokenBudget(data.prefs.cut_staged_token_budget ?? 40000)
-    } catch {
-      /* no library bound / unreachable — keep defaults */
-    }
-  }
-
-  const savePrompt = async () => {
-    try {
-      const r = await api.setCutPrompt(promptText)
-      setPromptText(r.prompt)
-      setPromptIsDefault(r.is_default)
-      // Persist the generation options too (a partial PUT — only these keys).
-      await api.putSettings({
-        cut_director_mode: directorMode,
-        cut_max_tool_rounds: maxToolRounds,
-        cut_critic_enabled: criticEnabled,
-        cut_vision_budget: visionBudget,
-        cut_lean_token_budget: leanTokenBudget,
-        cut_staged_token_budget: stagedTokenBudget,
-      })
-      setPromptSaved(true)
-      setTimeout(() => setPromptSaved(false), 1500)
-    } catch (err) {
-      console.error('Save rough-cut settings failed:', err)
-    }
-  }
-
-  const resetPrompt = async () => {
-    try {
-      const r = await api.resetCutPrompt()
-      setPromptText(r.prompt)
-      setPromptIsDefault(r.is_default)
-    } catch (err) {
-      console.error('Reset director prompt failed:', err)
-    }
-  }
-
   const copyMarkdown = async () => {
     if (!plan?.markdown) return
     try {
@@ -347,6 +353,18 @@ export function CutplanPage({ onClose }: CutplanPageProps) {
     }
   }
 
+  const cancelGeneration = () => {
+    // The backend has no turn-cancel endpoint, so the turn keeps running there.
+    // Detach from it the same way switching sessions does — activeRef is the
+    // guard resumePoll checks before every tick, so this stops the next poll
+    // from repopulating progressLog/plan out from under the cleared panel.
+    activeRef.current = null
+    setBusy(false)
+    setProgressLog([])
+    setDayIndex(null); setDayTotal(null); setPending(null)
+    stopElapsedTimer()
+  }
+
   // The progress trajectory belongs to the latest turn: while it runs it trails
   // the last (user) message; once the assistant reply lands it sits *between* the
   // request and that reply (anchored just before the trailing assistant message),
@@ -354,114 +372,226 @@ export function CutplanPage({ onClose }: CutplanPageProps) {
   const showProgress = busy || progressLog.length > 0
   const lastIsAssistant = messages.length > 0 && messages[messages.length - 1].role === 'assistant'
   const progressAnchor = !busy && lastIsAssistant ? messages.length - 1 : messages.length
+
+  // Generation process panel node
   const progressNode = (
     <div className="text-left">
-      <div className="inline-flex max-w-[90%] flex-col gap-1 rounded-lg bg-[--surface-2] px-3 py-2 text-sm text-[--text-secondary]">
-        {busy && progressLog.length === 0 ? (
-          <div className="inline-flex items-center gap-2">
-            <ThinkingDots />
-            <span>{t('roughcut.thinking')}</span>
-          </div>
-        ) : (
-          <>
+      <div className="inline-flex max-w-full flex-col rounded-lg border border-[--border] bg-[--surface-1] text-sm text-[--text-secondary] shadow-[var(--shadow-2)]">
+        {/* Header — clickable to toggle steps */}
+        <div className="flex items-center justify-between px-4 pt-3 pb-2.5">
+          <button
+            type="button"
+            onClick={() => setProgressOpen((v) => !v)}
+            className="inline-flex items-center gap-1.5 text-sm font-semibold text-[--text-secondary] hover:text-[--text-primary]"
+          >
+            {busy && <span className="h-1.5 w-1.5 rounded-full bg-[--primary] animate-pulse" />}
+            <span>{t('roughcut.generatingSteps', { n: progressLog.length })}</span>
+          </button>
+          {busy && (
             <button
               type="button"
-              onClick={() => setProgressOpen((v) => !v)}
-              className="inline-flex items-center gap-1.5 text-xs text-[--text-muted] hover:text-[--text-secondary]"
+              onClick={cancelGeneration}
+              className="h-5 rounded px-2 text-[10px] font-medium text-[--text-muted] hover:bg-[--surface-3] hover:text-[--error]"
             >
-              <span aria-hidden="true">{progressOpen ? '▾' : '▸'}</span>
-              <span>{t('roughcut.progressTitle', { n: progressLog.length })}</span>
-              {busy && <ThinkingDots />}
+              {t('roughcut.cancel')}
             </button>
-            {progressOpen && (
-              <div ref={progressRef} className="mt-1 flex max-h-48 flex-col gap-1 overflow-y-auto pr-1">
-                {progressLog.map((p, i, arr) => {
-                  const isLast = i === arr.length - 1
-                  return (
-                    <div
-                      key={`${i}-${p}`}
-                      className={`inline-flex items-center gap-2 ${busy && isLast ? '' : 'text-xs text-[--text-muted]'}`}
-                    >
-                      {busy && isLast ? <ThinkingDots /> : <span aria-hidden="true">·</span>}
-                      <span>{p}</span>
-                    </div>
-                  )
-                })}
+          )}
+        </div>
+
+        {/* Current step line — always visible */}
+        <div className="flex items-baseline gap-2 px-4 pb-2.5">
+          <span className="flex-1 min-w-0 truncate text-xs text-[--text-secondary]">
+            {busy && progressLog.length > 0 ? lastProgress : (busy ? t('roughcut.thinking') : '完成')}
+          </span>
+          {generationStarted && (
+            <span className="font-mono text-[10px] text-[--text-muted] shrink-0">
+              {fmtElapsed(elapsedSeconds)}
+            </span>
+          )}
+        </div>
+
+        {/* Steps list — collapsible */}
+        {progressOpen && (
+          <div ref={progressRef} className="flex max-h-48 flex-col gap-1 overflow-y-auto px-4 pb-3">
+            {progressLog.length === 0 && busy ? (
+              <div className="flex items-center gap-2 text-xs text-[--text-muted]">
+                <ThinkingDots />
+                <span>{t('roughcut.thinking')}</span>
               </div>
+            ) : (
+              progressLog.map((p, i) => {
+                const isLast = i === progressLog.length - 1
+                const isDone = !busy || !isLast
+                return (
+                  <div
+                    key={`${i}-${p}`}
+                    className={`flex items-start gap-2 text-xs leading-relaxed py-1 ${
+                      isDone ? 'text-[--text-muted]' : 'text-[--text-secondary]'
+                    }`}
+                  >
+                    <span className="w-4 shrink-0 flex items-center justify-center mt-0.5">
+                      {isDone ? (
+                        <span className="text-[--success]">
+                          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="M2.5 6.5L4.5 8.5L9.5 3.5" />
+                          </svg>
+                        </span>
+                      ) : busy ? (
+                        <MiniSpinner />
+                      ) : (
+                        <span className="text-[--text-muted]">·</span>
+                      )}
+                    </span>
+                    <span>{p}</span>
+                  </div>
+                )
+              })
             )}
-          </>
+          </div>
+        )}
+
+        {/* Progress bar footer — indeterminate: the director doesn't report a
+            known step total, so this shows activity rather than a fake percent */}
+        {busy && (
+          <div className="flex items-center gap-2 px-4 pb-3 pt-2">
+            <div className="h-[3px] flex-1 overflow-hidden rounded-full bg-[--surface-3]">
+              <div className="h-full w-1/3 animate-[cf-slide_1.4s_ease-in-out_infinite] rounded-full bg-[--primary]" />
+            </div>
+            <span className="font-mono text-[10px] text-[--text-muted]">
+              {currentStepIndex}
+            </span>
+            <style>{`@keyframes cf-slide{0%{transform:translateX(-120%)}100%{transform:translateX(420%)}}`}</style>
+          </div>
         )}
       </div>
     </div>
   )
 
   return (
-    <div className="flex h-screen w-full flex-col bg-[--bg-canvas] text-[--text-primary]">
-      {/* Header */}
-      <header className="flex h-14 shrink-0 items-center justify-between border-b border-[--border] bg-[--surface-1] px-6">
-        <h1 className="text-sm font-semibold">{t('roughcut.title')}</h1>
-        <button
-          onClick={onClose}
-          className="rounded-md border border-[--border] px-3 py-1.5 text-sm text-[--text-secondary] hover:bg-[--surface-3]"
-        >
-          {t('roughcut.close')}
-        </button>
+    <div className="flex h-screen w-full flex-col overflow-hidden bg-[--bg-canvas] text-[--text-primary]">
+      {/* ── Top Bar ── */}
+      <header className="flex h-12 shrink-0 items-center gap-3 border-b border-[--border] bg-[--surface-1] px-4 z-50">
+        <h1 className="text-base font-semibold tracking-tight">{t('roughcut.title')}</h1>
+
+        {/* Generation status pill */}
+        {busy && (
+          <div className="flex h-[26px] items-center gap-1.5 rounded-full bg-[--primary-soft] px-2.5 pl-1 animate-[status-fade-in_200ms_ease]" role="status" aria-live="polite">
+            <span className="h-[15px] w-[15px] shrink-0" aria-hidden="true">
+              <svg viewBox="0 0 16 16" className="h-full w-full" style={{ transform: 'rotate(-90deg)' }}>
+                <circle cx="8" cy="8" r="7" fill="none" stroke="var(--primary-soft)" strokeWidth="2.5" />
+                <circle
+                  cx="8" cy="8" r="7" fill="none" stroke="var(--primary)" strokeWidth="2.5"
+                  strokeLinecap="round"
+                  strokeDasharray="44"
+                  strokeDashoffset={dayPct != null ? 44 * (1 - dayPct / 100) : 11}
+                  className={dayPct == null ? 'animate-spin' : undefined}
+                  style={dayPct != null ? { transition: 'stroke-dashoffset 400ms ease' } : undefined}
+                />
+              </svg>
+            </span>
+            <span className="text-[10px] font-semibold text-[--primary] font-variant-numeric-tabular-nums whitespace-nowrap">
+              {dayIndex != null && dayTotal != null
+                ? t('roughcut.generatingDay', { idx: String(dayIndex), n: String(dayTotal) })
+                : t('roughcut.generating', { n: String(currentStepIndex) })}
+            </span>
+          </div>
+        )}
+
+        <span className="flex-1" />
+
+        <div className="flex items-center gap-1">
+          {/* Theme toggle */}
+          <button
+            type="button"
+            onClick={onToggleTheme}
+            className="flex h-8 w-8 items-center justify-center rounded text-[--text-secondary] hover:bg-[--surface-3] hover:text-[--text-primary]"
+            aria-label={theme === 'dark' ? t('app.themeToLight') : t('app.themeToDark')}
+          >
+            {theme === 'dark' ? (
+              <svg className="h-5 w-5" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
+                <circle cx="8" cy="8" r="3" />
+                <path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.1 3.1l1.4 1.4M11.5 11.5l1.4 1.4M12.9 3.1l-1.4 1.4M4.5 11.5l-1.4 1.4" />
+              </svg>
+            ) : (
+              <svg className="h-5 w-5" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
+                <path d="M13.5 9.5A5.5 5.5 0 0 1 6.5 2.5a5.5 5.5 0 1 0 7 7Z" />
+              </svg>
+            )}
+          </button>
+
+          {/* Close button */}
+          <button
+            onClick={onClose}
+            className="flex h-8 w-8 items-center justify-center rounded text-[--text-secondary] hover:bg-[--surface-3] hover:text-[--text-primary]"
+            aria-label={t('roughcut.close')}
+          >
+            <svg className="h-5 w-5" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
+              <path d="M4 4l8 8M12 4l-8 8" />
+            </svg>
+          </button>
+        </div>
       </header>
 
-      <div className="flex min-h-0 flex-1">
-        {/* Sessions sidebar (collapsible) */}
+      {/* ── Main 3-Column ── */}
+      <div className="flex flex-1 overflow-hidden">
+        {/* ── Column 1: Sidebar ── */}
         {listCollapsed ? (
-          <aside className="flex w-10 shrink-0 flex-col items-center bg-[--surface-1] py-2">
+          <aside className="flex w-10 shrink-0 flex-col items-center bg-[--surface-1] border-r border-[--border] py-2">
             <button
               onClick={() => setListCollapsed(false)}
               aria-label={t('roughcut.expandList')}
               title={t('roughcut.expandList')}
-              className="rounded-md p-1.5 text-[--text-secondary] hover:bg-[--surface-3]"
+              className="rounded-md p-1.5 text-[--text-muted] hover:bg-[--surface-3]"
             >
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" aria-hidden="true">
-                <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M9 5l7 7-7 7" />
+              <svg className="h-4 w-4" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                <path d="M10 4L6 8l4 4" />
               </svg>
             </button>
           </aside>
         ) : (
-          <aside className="flex w-56 shrink-0 flex-col bg-[--surface-1]">
-            <div className="flex items-center gap-1 p-2">
+          <aside className="flex w-[220px] shrink-0 flex-col bg-[--surface-1] border-r border-[--border]">
+            <div className="flex items-center p-3">
               <button
                 onClick={newSession}
-                className="flex-1 rounded-md bg-[--primary] px-3 py-2 text-sm font-medium text-white hover:bg-[--primary]/90"
+                className="flex flex-1 h-[30px] items-center justify-center gap-1 text-sm font-medium bg-[--primary] text-[--primary-fg] rounded-md hover:bg-[--primary-hover]"
               >
-                + {t('roughcut.newSession')}
+                <svg className="h-3 w-3" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
+                  <path d="M6 2v8M2 6h8" />
+                </svg>
+                {t('roughcut.newSession')}
               </button>
               <button
                 onClick={() => setListCollapsed(true)}
                 aria-label={t('roughcut.collapseList')}
                 title={t('roughcut.collapseList')}
-                className="rounded-md p-1.5 text-[--text-secondary] hover:bg-[--surface-3]"
+                className="flex h-7 w-7 items-center justify-center rounded text-[--text-muted] hover:bg-[--surface-3] ml-2"
               >
-                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" aria-hidden="true">
-                  <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M15 5l-7 7 7 7" />
+                <svg className="h-3.5 w-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                  <path d="M10 4L6 8l4 4" />
                 </svg>
               </button>
             </div>
-            <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
+            <div className="min-h-0 flex-1 overflow-y-auto px-2">
               {sessions.length === 0 ? (
                 <p className="px-2 py-4 text-xs text-[--text-muted]">{t('roughcut.noSessions')}</p>
               ) : (
                 sessions.map((s) => (
-                  <div
-                    key={s.id}
-                    className={`group flex items-center justify-between rounded-md px-2 py-1.5 text-sm ${
-                      s.id === activeId ? 'bg-[--surface-3] text-[--text-primary]' : 'text-[--text-secondary] hover:bg-[--surface-2]'
-                    }`}
-                  >
-                    <button className="min-w-0 flex-1 truncate text-left" onClick={() => openSession(s.id)}>
-                      {s.title || t('roughcut.untitled')}
-                    </button>
+                  <div key={s.id} className="group relative">
+                    <div
+                      className={`flex items-center rounded-md px-2.5 py-2 text-sm cursor-pointer transition-colors ${
+                        s.id === activeId
+                          ? 'bg-[--primary-soft] text-[--primary] font-medium'
+                          : 'text-[--text-secondary] hover:bg-[--surface-3] hover:text-[--text-primary]'
+                      }`}
+                      onClick={() => openSession(s.id)}
+                    >
+                      <span className="truncate">{s.title || <span className="italic text-[--text-muted]">{t('roughcut.untitled')}</span>}</span>
+                    </div>
                     <button
                       onClick={() => setConfirmDeleteId(s.id)}
                       aria-label={t('roughcut.deleteSession')}
                       title={t('roughcut.deleteSession')}
-                      className="ml-1 hidden rounded p-1 text-[--text-muted] hover:text-[--error] group-hover:block"
+                      className="absolute right-1 top-1/2 -translate-y-1/2 rounded p-1 text-[--text-muted] hover:text-[--error] opacity-0 group-hover:opacity-100"
                     >
                       <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" aria-hidden="true">
                         <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.6} d="M6 7h12M9 7V5h6v2m-7 0 .8 12a1 1 0 0 0 1 1h4.4a1 1 0 0 0 1-1L16 7" />
@@ -474,11 +604,13 @@ export function CutplanPage({ onClose }: CutplanPageProps) {
           </aside>
         )}
 
-        {/* Conversation column */}
-        <section className="flex min-w-0 flex-[2] flex-col border-r border-[--border/60] bg-[--surface-1]/50">
-          <div ref={threadRef} className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
+        {/* ── Column 2: Chat ── */}
+        <div className="flex w-[420px] shrink-0 flex-col bg-[--bg-canvas] border-r border-[--border]">
+          <div ref={threadRef} className="min-h-0 flex-1 overflow-y-auto p-4">
             {messages.length === 0 && !showProgress ? (
-              <p className="text-sm text-[--text-muted]">{t('roughcut.emptyConvo')}</p>
+              <div className="flex h-full items-center justify-center">
+                <p className="max-w-xs text-center text-sm text-[--text-muted]">{t('roughcut.emptyConvo')}</p>
+              </div>
             ) : (
               <>
                 {messages.map((m, i) => (
@@ -486,10 +618,10 @@ export function CutplanPage({ onClose }: CutplanPageProps) {
                     {showProgress && i === progressAnchor && progressNode}
                     <div className={m.role === 'user' ? 'text-right' : 'text-left'}>
                       <div
-                        className={`inline-block max-w-[85%] whitespace-pre-wrap rounded-lg px-3 py-2 text-left text-sm ${
+                        className={`inline-block max-w-[90%] break-words rounded-lg px-4 py-2.5 text-sm leading-relaxed ${
                           m.role === 'user'
-                            ? 'bg-[--primary] text-white'
-                            : 'bg-[--surface-2] text-[--text-primary]'
+                            ? 'bg-[--primary] text-[--primary-fg] rounded-br-sm'
+                            : 'bg-[--surface-1] border border-[--border] rounded-bl-sm'
                         }`}
                       >
                         {m.content}
@@ -498,73 +630,114 @@ export function CutplanPage({ onClose }: CutplanPageProps) {
                   </Fragment>
                 ))}
                 {showProgress && progressAnchor >= messages.length && progressNode}
+                {pending && !busy && (
+                  <div className="mt-2 flex flex-wrap gap-1.5" data-testid="pending-options">
+                    {pending.options.map((opt) => (
+                      <button
+                        key={opt}
+                        type="button"
+                        onClick={() => send(opt)}
+                        className="h-7 rounded-full bg-[--primary-soft] px-3 text-xs font-medium text-[--primary] transition-colors hover:bg-[--primary] hover:text-[--primary-fg]"
+                      >
+                        {opt}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </>
             )}
           </div>
-          <div className="shrink-0 border-t border-[--border] p-3">
+
+          {/* Chat Input */}
+          <div className="shrink-0 border-t border-[--border] bg-[--surface-1] p-3">
             <textarea
+              ref={(el) => {
+                if (el) {
+                  el.style.height = 'auto'
+                  el.style.height = Math.min(el.scrollHeight, 120) + 'px'
+                }
+              }}
               value={input}
-              onChange={(e) => setInput(e.target.value)}
+              onChange={(e) => {
+                setInput(e.target.value)
+                // Auto-resize
+                if (e.target) {
+                  e.target.style.height = 'auto'
+                  e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px'
+                }
+              }}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
                   e.preventDefault()
                   send()
                 }
               }}
-              rows={3}
+              rows={1}
               placeholder={t('roughcut.placeholder')}
-              className="w-full resize-none rounded-md border border-[--border] bg-[--surface-2] px-3 py-2 text-sm outline-none focus:border-[--primary]"
+              className="w-full min-h-[36px] max-h-[120px] resize-none rounded-md border border-[--border] bg-[--surface-2] px-3 py-2 text-sm text-[--text-primary] outline-none placeholder:text-[--text-muted] focus:border-[--primary] focus:shadow-[0_0_0_2px_var(--primary-soft)] transition-[border-color,box-shadow]"
             />
-            <div className="mt-2 flex items-center justify-between">
+            <div className="mt-1.5 flex items-center justify-between gap-2">
               <button
-                onClick={openPrompt}
+                onClick={onOpenSettings}
                 aria-label={t('roughcut.promptSettings')}
                 title={t('roughcut.promptSettings')}
-                className="inline-flex items-center gap-1.5 rounded-md border border-[--border] px-2.5 py-1.5 text-xs text-[--text-secondary] hover:bg-[--surface-3]"
+                className="flex h-[26px] items-center gap-1 rounded-md border border-[--border] bg-[--surface-2] px-2 text-[10px] font-medium text-[--text-secondary] hover:bg-[--surface-3]"
               >
-                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} aria-hidden="true">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 6h9.75M10.5 6a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0ZM3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m-9.75 0h9.75" />
+                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" aria-hidden="true">
+                  <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.24-.438.613-.431.992a6.759 6.759 0 010 .255c-.007.378.138.75.43.99l1.005.828c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.02-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.992a6.932 6.932 0 010-.255c.007-.378-.138-.75-.43-.99l-1.004-.828a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.49l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.281z" />
+                  <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                 </svg>
                 {t('roughcut.promptSettings')}
               </button>
               <button
-                onClick={send}
+                onClick={() => send()}
                 disabled={busy || !input.trim()}
-                className="inline-flex items-center gap-2 rounded-md bg-[--primary] px-4 py-1.5 text-sm font-medium text-white hover:bg-[--primary]/90 disabled:opacity-50"
+                className="flex h-[26px] shrink-0 items-center justify-center rounded-md bg-[--primary] px-4 text-sm font-semibold text-[--primary-fg] hover:bg-[--primary-hover] disabled:opacity-40 disabled:cursor-not-allowed transition-[background,opacity]"
               >
-                {busy && <ThinkingDots />}
                 {t('roughcut.send')}
               </button>
             </div>
           </div>
-        </section>
+        </div>
 
-        {/* Shot list preview */}
-        <section className="flex w-[46%] min-w-0 shrink-0 flex-col border-l border-[--border/60] bg-[--surface-1]">
-          <div className="flex h-11 shrink-0 items-center justify-between border-b border-[--border] px-4">
-            <span className="text-xs font-medium text-[--text-secondary]">{t('roughcut.planTitle')}</span>
-            <div className="flex items-center gap-2">
+        {/* ── Column 3: Shot Panel ── */}
+        <div className="flex flex-1 flex-col overflow-hidden bg-[--bg-canvas]">
+          <div className="relative flex h-11 shrink-0 items-center justify-between border-b border-[--border] bg-[--surface-1] px-5">
+            <span className="text-sm font-semibold">{t('roughcut.planTitle')}</span>
+            <div className="flex items-center gap-1">
+              {plan && (
+                <button
+                  onClick={copyMarkdown}
+                  className="flex h-7 items-center gap-1 rounded-md border border-[--border] bg-[--surface-2] px-2 text-[10px] font-medium text-[--text-secondary] hover:bg-[--surface-3]"
+                >
+                  <svg className="h-3 w-3" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
+                    <rect x="5" y="5" width="9" height="9" rx="1.5" />
+                    <path d="M11 5V3.5A1.5 1.5 0 0 0 9.5 2h-6A1.5 1.5 0 0 0 2 3.5v6A1.5 1.5 0 0 0 3.5 11H5" />
+                  </svg>
+                  {copied ? t('roughcut.copied') : t('roughcut.copyMarkdown')}
+                </button>
+              )}
               <button
                 onClick={() => setPlanFullscreen(true)}
                 aria-label={t('roughcut.fullscreen')}
                 title={t('roughcut.fullscreen')}
-                className="rounded border border-[--border] p-1 text-[--text-secondary] hover:bg-[--surface-3]"
+                className="flex h-7 items-center justify-center rounded-md border border-[--border] bg-[--surface-2] p-1 text-[--text-secondary] hover:bg-[--surface-3]"
               >
-                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" aria-hidden="true">
-                  <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" />
+                <svg className="h-3.5 w-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
+                  <path d="M10 2h4v4M14 2L8 8M2 6v8a1 1 0 0 0 1 1h8" />
                 </svg>
               </button>
-              {plan && (
-                <button
-                  onClick={copyMarkdown}
-                  className="rounded border border-[--border] px-2 py-1 text-xs text-[--text-secondary] hover:bg-[--surface-3]"
-                >
-                  {copied ? t('roughcut.copied') : t('roughcut.copyMarkdown')}
-                </button>
-              )}
+            </div>
+            {/* Progress bar on header bottom edge */}
+            <div className={`absolute left-0 right-0 bottom-0 h-0.5 overflow-hidden bg-[--surface-3] transition-opacity ${busy ? 'opacity-100' : 'opacity-0'}`}>
+              <div
+                className="h-full bg-[--primary] transition-[width] duration-500"
+                style={{ width: dayPct != null ? `${dayPct}%` : (busy ? '60%' : '0%') }}
+              />
             </div>
           </div>
-          <div className="min-h-0 flex-1 overflow-y-auto p-4">
+
+          <div className="min-h-0 flex-1 overflow-y-auto p-5">
             {!plan ? (
               <p className="text-sm text-[--text-muted]">{t('roughcut.noPlan')}</p>
             ) : (
@@ -579,7 +752,7 @@ export function CutplanPage({ onClose }: CutplanPageProps) {
               </>
             )}
           </div>
-        </section>
+        </div>
       </div>
 
       {/* Fullscreen shot list overlay */}
@@ -610,133 +783,6 @@ export function CutplanPage({ onClose }: CutplanPageProps) {
         </div>
       )}
 
-      {/* Director prompt settings modal */}
-      {promptOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="flex max-h-[85vh] w-full max-w-2xl flex-col rounded-lg border border-[--border] bg-[--surface-1] shadow-xl">
-            <div className="flex items-center justify-between border-b border-[--border] px-5 py-3">
-              <span className="text-sm font-semibold">{t('roughcut.settingsTitle')}</span>
-              <span className={`text-xs ${promptIsDefault ? 'text-[--text-muted]' : 'text-[--primary]'}`}>
-                {promptIsDefault ? t('roughcut.promptDefault') : t('roughcut.promptCustom')}
-              </span>
-            </div>
-            <div className="min-h-0 flex-1 overflow-y-auto p-5">
-              {/* ── Generation options ─────────────────────── */}
-              <p className="mb-3 text-xs font-medium text-[--text-secondary]">{t('roughcut.genOptions')}</p>
-
-              <label className="block text-sm text-[--text-secondary]">{t('roughcut.directorMode')}</label>
-              <select
-                value={directorMode}
-                onChange={(e) => setDirectorMode(e.target.value as 'agent' | 'staged')}
-                aria-label={t('roughcut.directorMode')}
-                className="mt-1 w-full max-w-xs rounded-md border border-[--border] bg-[--surface-2] px-3 py-1.5 text-sm outline-none focus:border-[--primary]"
-              >
-                <option value="agent">{t('roughcut.modeAgent')}</option>
-                <option value="staged">{t('roughcut.modeStaged')}</option>
-              </select>
-              <p className="mt-1 text-xs text-[--text-muted]">{t('roughcut.directorModeDesc')}</p>
-
-              {directorMode === 'agent' && (
-                <>
-                  <label className="mt-3 block text-sm text-[--text-secondary]">{t('roughcut.maxRounds')}</label>
-                  <input
-                    type="number"
-                    min={1}
-                    max={200}
-                    step={1}
-                    value={maxToolRounds}
-                    onChange={(e) => setMaxToolRounds(parseInt(e.target.value, 10) || 1)}
-                    className="mt-1 w-28 rounded-md border border-[--border] bg-[--surface-2] px-3 py-1.5 text-sm outline-none focus:border-[--primary]"
-                  />
-                  <p className="mt-1 text-xs text-[--text-muted]">{t('roughcut.maxRoundsDesc')}</p>
-
-                  <label className="mt-3 block text-sm text-[--text-secondary]">{t('roughcut.leanBudget')}</label>
-                  <input
-                    type="number"
-                    min={1000}
-                    max={200000}
-                    step={1000}
-                    value={leanTokenBudget}
-                    onChange={(e) => setLeanTokenBudget(parseInt(e.target.value, 10) || 1000)}
-                    className="mt-1 w-32 rounded-md border border-[--border] bg-[--surface-2] px-3 py-1.5 text-sm outline-none focus:border-[--primary]"
-                  />
-                  <p className="mt-1 text-xs text-[--text-muted]">{t('roughcut.leanBudgetDesc')}</p>
-                </>
-              )}
-
-              <label className="mt-3 flex items-center gap-2 text-sm text-[--text-primary]">
-                <input
-                  type="checkbox"
-                  checked={criticEnabled}
-                  onChange={(e) => setCriticEnabled(e.target.checked)}
-                  className="h-4 w-4 rounded border-[--border] bg-[--surface-2]"
-                />
-                {t('roughcut.critic')}
-              </label>
-              <p className="mb-3 mt-1 text-xs text-[--text-muted]">{t('roughcut.criticDesc')}</p>
-
-              <label className="block text-sm text-[--text-secondary]">{t('roughcut.visionBudget')}</label>
-              <input
-                type="number"
-                min={0}
-                step={1}
-                value={visionBudget}
-                onChange={(e) => setVisionBudget(parseInt(e.target.value, 10) || 0)}
-                className="mt-1 w-28 rounded-md border border-[--border] bg-[--surface-2] px-3 py-1.5 text-sm outline-none focus:border-[--primary]"
-              />
-              <p className="mt-1 text-xs text-[--text-muted]">{t('roughcut.visionBudgetDesc')}</p>
-
-              <label className="mt-3 block text-sm text-[--text-secondary]">{t('roughcut.stagedBudget')}</label>
-              <input
-                type="number"
-                min={1000}
-                max={200000}
-                step={1000}
-                value={stagedTokenBudget}
-                onChange={(e) => setStagedTokenBudget(parseInt(e.target.value, 10) || 1000)}
-                className="mt-1 w-32 rounded-md border border-[--border] bg-[--surface-2] px-3 py-1.5 text-sm outline-none focus:border-[--primary]"
-              />
-              <p className="mt-1 text-xs text-[--text-muted]">{t('roughcut.stagedBudgetDesc')}</p>
-
-              {/* ── Director prompt ────────────────────────── */}
-              <hr className="my-5 border-[--border]" />
-              <p className="mb-2 text-xs font-medium text-[--text-secondary]">{t('roughcut.promptSection')}</p>
-              <p className="mb-2 text-xs text-[--text-muted]">{t('roughcut.promptHelp')}</p>
-              <textarea
-                value={promptText}
-                onChange={(e) => setPromptText(e.target.value)}
-                rows={12}
-                spellCheck={false}
-                className="w-full resize-y rounded-md border border-[--border] bg-[--surface-2] px-3 py-2 font-mono text-xs leading-relaxed outline-none focus:border-[--primary]"
-              />
-            </div>
-            <div className="flex items-center justify-between border-t border-[--border] px-5 py-3">
-              <button
-                onClick={resetPrompt}
-                disabled={promptIsDefault && promptText === promptDefault}
-                className="rounded-md border border-[--border] px-3 py-1.5 text-sm text-[--text-secondary] hover:bg-[--surface-3] disabled:opacity-40"
-              >
-                {t('roughcut.reset')}
-              </button>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setPromptOpen(false)}
-                  className="rounded-md border border-[--border] px-3 py-1.5 text-sm text-[--text-secondary] hover:bg-[--surface-3]"
-                >
-                  {t('roughcut.cancel')}
-                </button>
-                <button
-                  onClick={savePrompt}
-                  className="rounded-md bg-[--primary] px-4 py-1.5 text-sm font-medium text-white hover:bg-[--primary]/90"
-                >
-                  {promptSaved ? t('roughcut.saved') : t('roughcut.save')}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
       <ConfirmDialog
         open={confirmDeleteId !== null}
         title={t('roughcut.deleteSession')}
@@ -750,40 +796,93 @@ export function CutplanPage({ onClose }: CutplanPageProps) {
 
 function ShotList({ plan }: { plan: CutPlan }) {
   const { t } = useI18n()
-  const chapters = plan.chapters.length ? plan.chapters : ['']
+
+  // Group shots by date (clip_date)
+  const dateGroups: Record<string, typeof plan.shots> = {}
+  plan.shots.forEach((shot) => {
+    const date = shot.clip_date || '__unknown__'
+    if (!dateGroups[date]) dateGroups[date] = []
+    dateGroups[date].push(shot)
+  })
+
+  // Sort dates chronologically
+  const sortedDates = Object.keys(dateGroups).sort()
+
   let index = 0
   return (
     <div className="space-y-5" data-testid="shot-list">
-      {chapters.map((chapter) => {
-        const shots = plan.shots.filter((s) => (s.chapter || '') === (chapter || ''))
+      {sortedDates.map((date) => {
+        const shots = dateGroups[date]
         if (!shots.length) return null
         return (
-          <div key={chapter || '__none'}>
-            <h3 className="mb-2 text-sm font-semibold text-[--text-primary]">{chapter || '未分章'}</h3>
+          <div key={date}>
+            <h3 className="mb-2 border-b border-[--border] pb-2 text-sm font-semibold text-[--text-secondary]">
+              {date}
+            </h3>
             <div className="space-y-2">
               {shots.map((s) => {
                 index += 1
                 return (
-                  <div key={index} className="flex gap-3 rounded-md border border-[--border] bg-[--surface-2] p-3">
-                    <div className="flex flex-col items-center justify-start gap-0.5">
-                      <span className="text-xs font-mono text-[--text-muted]">{index}</span>
-                      <span className={`rounded px-1 text-[9px] font-bold ${s.roll === 'a' ? 'bg-[--roll-a-soft] text-[--roll-a]' : s.roll === 'b' ? 'bg-[--roll-b-soft] text-[--roll-b]' : s.roll === 'photo' ? 'bg-[--roll-photo-soft] text-[--roll-photo]' : 'bg-gray-400/20 text-[--text-secondary]'}`}>
-                        {s.roll === 'a' ? 'A' : s.roll === 'b' ? 'B' : s.roll === 'photo' ? t('card.photo') : s.roll}
-                      </span>
+                  <div
+                    key={`${date}-${index}`}
+                    className="flex gap-3 rounded-md border border-[--border] bg-[--surface-1] p-3 transition-shadow hover:shadow-[var(--shadow-1)]"
+                  >
+                    {/* Left: shot number */}
+                    <div className="flex flex-col items-center gap-1 shrink-0">
+                      <span className="font-mono text-[10px] text-[--text-muted]">{index}</span>
                     </div>
-                    <button type="button" onClick={() => { if (s.clip_path) api.openPath(s.clip_path).catch((err) => console.error('Failed to open path:', err)) }} className={`flex flex-col items-center gap-0.5 ${s.clip_path ? 'cursor-pointer' : ''}`}>
-                      {s.thumb_ref ? (
-                        <img src={s.thumb_ref} alt="" className="h-16 w-24 shrink-0 rounded object-cover" />
-                      ) : (
-                        <div className="h-16 w-24 shrink-0 rounded bg-[--surface-3]" />
-                      )}
-                      <span className="text-[10px] text-[--text-muted]">{s.clip_date}</span>
-                      <span className="max-w-20 truncate text-[10px] text-[--text-muted]">{s.clip_label}</span>
+
+                    {/* Thumbnail */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (s.clip_path) api.openPath(s.clip_path).catch((err) => console.error('Failed to open path:', err))
+                      }}
+                      className={`flex flex-col items-center gap-0.5 shrink-0 ${s.clip_path ? 'cursor-pointer' : ''}`}
+                    >
+                      <div className="h-[68px] w-[120px] overflow-hidden rounded bg-[--surface-2]">
+                        {s.thumb_ref ? (
+                          <img src={s.thumb_ref} alt="" className="h-full w-full object-cover" />
+                        ) : (
+                          <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-[--surface-2] to-[--surface-3]">
+                            <svg className="h-5 w-5 text-[--text-muted] opacity-30" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1" aria-hidden="true">
+                              <rect x="2" y="2" width="12" height="12" rx="2" />
+                              <circle cx="6.5" cy="6" r="1.2" />
+                              <path d="M2 11l3.5-3L8 10.5 10.5 8.5 14 11" />
+                            </svg>
+                          </div>
+                        )}
+                      </div>
+                      <span className="max-w-[120px] truncate text-center font-mono text-[10px] text-[--text-muted]">
+                        {s.clip_label || ''}
+                      </span>
                     </button>
-                    <div className="min-w-0 flex-1 space-y-1.5">
-                      <span className="block font-mono text-[11px] leading-none tracking-tight text-[--text-secondary]">{fmtTimecode(s.in_s)}–{fmtTimecode(s.out_s)}</span>
-                      {s.content && <p className="text-[13px] leading-relaxed text-[--text-primary]">{s.content}</p>}
-                      {s.rationale && <p className="text-xs leading-relaxed text-[--text-muted]">{s.rationale}</p>}
+
+                    {/* Info */}
+                    <div className="min-w-0 flex-1">
+                      <span className="font-mono text-[10px] font-medium text-[--text-secondary]">
+                        {fmtTimecode(s.in_s)} – {fmtTimecode(s.out_s)}
+                      </span>
+                      {s.content && (
+                        <p className="text-sm font-semibold leading-relaxed mt-1">
+                          <span className={`text-[10px] font-medium mr-1 ${
+                            s.roll === 'a' ? 'text-[--roll-a]' : s.roll === 'b' ? 'text-[--roll-b]' : ''
+                          }`}>
+                            [{s.roll === 'a' ? 'A-roll' : s.roll === 'b' ? 'B-roll' : s.roll === 'photo' ? t('card.photo') : s.roll}]
+                          </span>
+                          {s.content}
+                        </p>
+                      )}
+                      {s.rationale && (
+                        <p className="text-[10px] leading-relaxed text-[--text-secondary] mt-1">
+                          {s.rationale}
+                        </p>
+                      )}
+                      {s.clip_path && (
+                        <p className="font-mono text-[10px] text-[--text-muted] mt-1">
+                          File: {s.clip_label || s.clip_path.split('/').pop()}
+                        </p>
+                      )}
                     </div>
                   </div>
                 )
@@ -792,6 +891,8 @@ function ShotList({ plan }: { plan: CutPlan }) {
           </div>
         )
       })}
+
+      {/* Duration summary */}
       <div className={`text-sm font-medium ${plan.within_target ? 'text-[--text-secondary]' : 'text-[--error]'}`}>
         {`总时长：${fmtDuration(plan.total_s)}`}
         {plan.target_min_s != null && plan.target_max_s != null &&

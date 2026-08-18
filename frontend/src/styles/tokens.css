@@ -36,6 +36,7 @@
 
   /* Status */
   --success: #15803D;
+  --success-soft: rgba(21, 128, 61, 0.12);
   --warning: #B45309;
   --error:   #DC2626;
 
@@ -95,6 +96,7 @@
 
   /* Status */
   --success: #22C55E;
+  --success-soft: rgba(34, 197, 94, 0.16);
   --warning: #F59E0B;
   --error:   #EF4444;
 }

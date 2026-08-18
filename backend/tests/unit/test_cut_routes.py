@@ -62,6 +62,17 @@ def test_get_session_returns_messages_and_plan() -> None:
     assert "## 开场" in body["plan"]["markdown"]
 
 
+def test_get_session_includes_day_progress_fields() -> None:
+    store = MemoryCutSessionStore()
+    s = store.create_session()
+    store.set_session_day_progress(s.id, 2, 5)
+    client = _client(store)
+
+    body = client.get(f"/api/cut/sessions/{s.id}").json()
+    assert body["session"]["day_index"] == 2
+    assert body["session"]["day_total"] == 5
+
+
 def test_get_session_404() -> None:
     client = _client(MemoryCutSessionStore())
     assert client.get("/api/cut/sessions/999").status_code == 404
@@ -164,3 +175,30 @@ def test_get_plan_endpoint() -> None:
 def test_503_when_store_unavailable() -> None:
     client = _client(store=None)
     assert client.get("/api/cut/sessions").status_code == 503
+
+
+def test_get_session_includes_pending_question() -> None:
+    from cutfinder.domain.models import PendingClarification
+
+    store = MemoryCutSessionStore()
+    s = store.create_session()
+    store.set_session_pending(
+        s.id,
+        PendingClarification(
+            kind="preflight_date", question="请指定日期范围",
+            options=["2026-04-25", "2026-04-26"],
+            resume_state={"secret": "should not reach the client"},
+        ),
+    )
+    store.set_session_status(s.id, "waiting_for_input")
+    client = _client(store)
+
+    body = client.get(f"/api/cut/sessions/{s.id}").json()
+    assert body["session"]["status"] == "waiting_for_input"
+    assert body["session"]["pending"] == {
+        "kind": "preflight_date",
+        "question": "请指定日期范围",
+        "options": ["2026-04-25", "2026-04-26"],
+    }
+    assert "resume_state" not in body["session"]["pending"]
+    assert "secret" not in str(body["session"]["pending"])

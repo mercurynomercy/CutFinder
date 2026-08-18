@@ -42,7 +42,7 @@ def _build_router(ctx: Any, rebind_fn: Any) -> APIRouter:
         try:
             await rebind_fn(ctx, path.strip())
         except ValueError as exc:
-            # e.g. missing OMLX env vars surfaced by config loading.
+            # e.g. missing OpenAI-compatible server env vars surfaced by config loading.
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         except OSError as exc:
             raise HTTPException(

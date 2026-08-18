@@ -38,9 +38,9 @@ describe('ThumbnailCard', () => {
     expect(screen.getByText('vlog.mp4')).toBeInTheDocument()
   })
 
-  it('shows a keyframe badge when hasKeyframes is set', () => {
+  it('does not show a keyframe badge, regardless of hasKeyframes', () => {
     const { rerender } = render(<ThumbnailCard {...baseProps} hasKeyframes />)
-    expect(screen.getByLabelText('Has cut suggestions')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Has cut suggestions')).not.toBeInTheDocument()
     rerender(<ThumbnailCard {...baseProps} hasKeyframes={false} />)
     expect(screen.queryByLabelText('Has cut suggestions')).not.toBeInTheDocument()
   })
@@ -141,6 +141,21 @@ describe('ThumbnailCard', () => {
     render(<ThumbnailCard {...baseProps} />)
     expect(screen.queryByText('A-roll')).toBeNull()
     expect(screen.queryByText('B-roll')).toBeNull()
+  })
+
+  it('renders the roll-type badge inside the thumbnail wrapper, not the info row', () => {
+    const container = render(<ThumbnailCard {...baseProps} rollType="a" thumbnailUrl="/thumb.jpg" />)
+    const thumbWrapper = container.container.querySelector('div[class*="pb-[56.25%]"]') as HTMLElement | null
+    expect(thumbWrapper).toBeTruthy()
+    const badgeInThumb = thumbWrapper!.querySelector('span')
+    expect(badgeInThumb?.textContent).toBe('A-roll')
+  })
+
+  it('does not render a roll-type badge in the info row anymore', () => {
+    const container = render(<ThumbnailCard {...baseProps} rollType="b" />)
+    const infoRow = container.container.querySelector('p[class*="truncate"]')!.parentElement!
+    const badgeInInfoRow = [...infoRow.querySelectorAll('span')].find((s) => s.textContent === 'B-roll')
+    expect(badgeInInfoRow).toBeUndefined()
   })
 
   // ── Duration label ────────────────────────────────────────

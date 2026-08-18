@@ -143,13 +143,41 @@ TOOLS: list[dict[str, Any]] = [
     },
 ]
 
+# ask_user (task 29/B2): only offered to the per-day agent loop, never to the
+# legacy TOOLS list run() uses — a mid-loop pause/resume only exists for the
+# per-day generate() path (see director.py's _day_tool_loop).
+_ASK_USER_TOOL: dict[str, Any] = {
+    "type": "function",
+    "function": {
+        "name": "ask_user",
+        "description": (
+            "Pause and ask the user a short clarifying question, when the footage "
+            "itself presents a genuine ambiguity the catalog can't resolve on its "
+            "own (e.g. two clips that could both be the narrative opener, or "
+            "conflicting instructions). Use sparingly — most editorial choices "
+            "should be made directly, not deferred to the user."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "question": {"type": "string"},
+                "options": {
+                    "type": "array", "items": {"type": "string"},
+                    "description": "2-4 short choices the user can pick from",
+                },
+            },
+            "required": ["question"],
+        },
+    },
+}
+
 # Tools a per-day worker may call (task 26). It does **not** get search_footage:
 # the day's clips are already retrieved deterministically and fed in the prompt,
 # so the worker's value-add is deep-diving transcript (get_clip_detail), looking
 # at B-roll frames (inspect_broll), and finalizing (emit_plan) — not re-searching.
 DAY_TOOLS: list[dict[str, Any]] = [
     t for t in TOOLS if t["function"]["name"] in ("get_clip_detail", "inspect_broll", "emit_plan")
-]
+] + [_ASK_USER_TOOL]
 
 
 # ── bilingual message catalog ────────────────────────────────────
@@ -240,11 +268,16 @@ _MESSAGES: dict[str, tuple[str, str]] = {
         "get_clip_detail(clip_id) 获取**，再据此把 in/out 落在 segment 边界上。"
         "请**只通过工具推进**：用 get_clip_detail 读取你想用的 A-roll 台词、"
         "必要时用 inspect_broll 现场看 B-roll 画面（尽量少用），"
-        "**最后必须调用 emit_plan 工具**给出这一天的最终分镜表，不要用纯文字回答。",
+        "**最后必须调用 emit_plan 工具**给出这一天的最终分镜表，不要用纯文字回答。"
+        "如果这一天的素材存在你无法从目录信息判断的真正歧义（而不是你自己该做的创作判断），"
+        "可以调用 ask_user 工具向用户提问，但请谨慎使用。",
         "The list above gives only summaries for A-roll. For clips marked [has transcript],\n"
         "**use get_clip_detail(clip_id) to fetch full transcripts**, then set in/out at segment boundaries.\n"
         "**Use tools only**: get_clip_detail for A-roll transcripts, inspect_broll to check B-roll frames (sparingly),\n"
-        "and **finally call emit_plan** to submit today's shot list. Do not reply in plain text.",
+        "and **finally call emit_plan** to submit today's shot list. Do not reply in plain text. "
+        "If the day's footage presents a genuine ambiguity you can't resolve from the catalog "
+        "(not a creative judgment call you should make yourself), you may call ask_user to ask — "
+        "use it sparingly.",
     ),
     "day_prompt_json_tail": (
         "请只输出 JSON，格式：\n"
@@ -260,6 +293,20 @@ _MESSAGES: dict[str, tuple[str, str]] = {
     # system / staged prompt fragments
     "target_duration": ("目标时长 {lo:.0f}–{hi:.0f} 分钟。", "Target duration: {lo:.0f}–{hi:.0f} min."),
     "style_fallback": ("（自行把握）", "(at your discretion)"),
+    # pre-flight clarification (§3.15 B1)
+    "preflight_date_question": (
+        "请指定素材的日期范围。只写月份和日期会按今年推断，建议写完整日期（如 2016/08/31）。",
+        "Please specify the footage's date range. A bare month/day is read as the current year — "
+        "give the full date (e.g. 2016/08/31).",
+    ),
+    "preflight_duration_question": (
+        "请指定视频的目标时长。例如「10 分钟」或「不限长度」。",
+        "Please specify the target duration. For example \"10 minutes\" or \"unlimited\".",
+    ),
+    "duration_opt_5min": ("5 分钟以内", "Under 5 minutes"),
+    "duration_opt_10min": ("10 分钟", "10 minutes"),
+    "duration_opt_15_20min": ("15-20 分钟", "15-20 minutes"),
+    "duration_opt_unlimited": ("不限长度", "Unlimited"),
     # agent loop (per-day)
     "accepted_text_shotlist": (
         "导演直接给出文字分镜，已采纳",
@@ -291,6 +338,10 @@ _MESSAGES: dict[str, tuple[str, str]] = {
         "你已了解足够。现在**必须**调用 emit_plan 给出这一天的最终分镜表，不要再查看素材。",
         "You have enough context. **Call emit_plan now** to finalize today's shot list."
         " Do not inspect more clips.",
+    ),
+    "day_ask_user_fallback": (
+        "需要你补充一些信息才能继续。",
+        "Needs more information from you to continue.",
     ),
     "inspected_findings_header": (
         "导演已现场勘察过以下 B-roll 画面，请优先据此判断其用途（而非仅凭标签）：\n",

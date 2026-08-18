@@ -1,10 +1,10 @@
-"""Unit tests for OmlxVisionTagger — B-roll visual tagging via OMLX vision model.
+"""Unit tests for OpenAIVisionTagger — B-roll visual tagging via an OpenAI-compatible vision model.
 
 Mocks the OpenAI client to test prompt construction, request params,
 base64 image encoding, multi-frame handling, JSON parsing from LLM response,
 retry logic, and edge cases — without any real network calls.
 
-Pattern matches test_omlx_summarizer.py:
+Pattern matches test_openai_text_summarizer.py:
   - monkeypatch for openai module injection
   - MagicMock for happy-path tests (no real exceptions raised)
   - types.ModuleType + real exception classes for error/retry tests
@@ -32,10 +32,10 @@ import pytest
 
 
 def _make_config(monkeypatch: pytest.MonkeyPatch) -> MagicMock:
-    """Create a mock AppConfig with OMLX settings."""
+    """Create a mock AppConfig with OpenAI-compatible server settings."""
     env = MagicMock()
-    env.OMLX_BASE_URL = "http://localhost:12345/v1"
-    env.OMLX_API_KEY = "test-api-key-12345"
+    env.OPENAI_BASE_URL = "http://localhost:12345/v1"
+    env.OPENAI_API_KEY = "test-api-key-12345"
     # Empty strings so the adapter's `.strip()` falls through to prefs.
     env.TEXT_MODEL = ""
     env.VISION_MODEL = ""
@@ -54,11 +54,11 @@ def _import_adapter():
     import sys
 
     for key in list(sys.modules):
-        if key.startswith("cutfinder.adapters.omlx_vision"):
+        if key.startswith("cutfinder.adapters.openai_vision"):
             del sys.modules[key]
 
-    import cutfinder.adapters.omlx_vision  # noqa: F401
-    return sys.modules["cutfinder.adapters.omlx_vision"]
+    import cutfinder.adapters.openai_vision  # noqa: F401
+    return sys.modules["cutfinder.adapters.openai_vision"]
 
 
 def _mocked_tagger(
@@ -66,7 +66,7 @@ def _mocked_tagger(
     monkeypatch: pytest.MonkeyPatch,
     model_override: str | None = None,
 ) -> MagicMock:
-    """Create an OmlxVisionTagger with OpenAI client mocked.
+    """Create an OpenAIVisionTagger with OpenAI client mocked.
 
     Returns the adapter module so we can access internal functions too.
     """
@@ -76,7 +76,7 @@ def _mocked_tagger(
     mock_openai = MagicMock()
     monkeypatch.setitem(__import__("sys").modules, "openai", mock_openai)  # type: ignore[attr-defined]
 
-    tagger = mod.OmlxVisionTagger(config, model=model_override)
+    tagger = mod.OpenAIVisionTagger(config, model=model_override)
     return (tagger, mod)
 
 
@@ -121,7 +121,7 @@ class TestEmptyInput:
         mod = _import_adapter()
 
         # Even without mocking, empty input returns early (no network call)
-        tagger = mod.OmlxVisionTagger(config)
+        tagger = mod.OpenAIVisionTagger(config)
         result = tagger.describe([])
 
         assert result.description == ""
@@ -149,7 +149,7 @@ class TestPromptVerification:
 
         # Re-import to pick up new mock
         mod = _import_adapter()
-        tagger = mod.OmlxVisionTagger(config)
+        tagger = mod.OpenAIVisionTagger(config)
 
         frames = [_make_fake_frame(Path("/tmp"), "f1.png")]
         tagger.describe(frames)
@@ -175,7 +175,7 @@ class TestPromptVerification:
 # ── request_params tests ────────────────────────────────────────
 
 class TestRequestParams:
-    """Test that correct parameters are sent to the OMLX API."""
+    """Test that correct parameters are sent to the OpenAI-compatible API."""
 
     def test_uses_config_vision_model(self, monkeypatch):
         """Model name comes from config.prefs.vision_model."""
@@ -189,11 +189,11 @@ class TestRequestParams:
         mock_client_cls.return_value.chat.completions.create.return_value = mock_response
 
         mod = _import_adapter()
-        tagger = mod.OmlxVisionTagger(config)
+        tagger = mod.OpenAIVisionTagger(config)
 
         _mock_openai_module(monkeypatch, MagicMock(OpenAI=mock_client_cls))
         mod = _import_adapter()
-        tagger = mod.OmlxVisionTagger(config)
+        tagger = mod.OpenAIVisionTagger(config)
 
         frames = [_make_fake_frame(Path("/tmp"), "f1.png")]
         tagger.describe(frames)
@@ -213,11 +213,11 @@ class TestRequestParams:
         mock_client_cls.return_value.chat.completions.create.return_value = mock_response
 
         mod = _import_adapter()
-        tagger = mod.OmlxVisionTagger(config, model="Qwen2.5-VL-7B")
+        tagger = mod.OpenAIVisionTagger(config, model="Qwen2.5-VL-7B")
 
         _mock_openai_module(monkeypatch, MagicMock(OpenAI=mock_client_cls))
         mod = _import_adapter()
-        tagger = mod.OmlxVisionTagger(config, model="Qwen2.5-VL-7B")
+        tagger = mod.OpenAIVisionTagger(config, model="Qwen2.5-VL-7B")
 
         frames = [_make_fake_frame(Path("/tmp"), "f1.png")]
         tagger.describe(frames)
@@ -238,7 +238,7 @@ class TestRequestParams:
 
         _mock_openai_module(monkeypatch, MagicMock(OpenAI=mock_client_cls))
         mod = _import_adapter()
-        tagger = mod.OmlxVisionTagger(config)
+        tagger = mod.OpenAIVisionTagger(config)
 
         frames = [_make_fake_frame(Path("/tmp"), "f1.png")]
         tagger.describe(frames)
@@ -261,7 +261,7 @@ class TestRequestParams:
 
         _mock_openai_module(monkeypatch, MagicMock(OpenAI=mock_client_cls))
         mod = _import_adapter()
-        tagger = mod.OmlxVisionTagger(config)
+        tagger = mod.OpenAIVisionTagger(config)
 
         result = tagger.describe([_make_fake_frame(Path("/tmp"), "f1.png")])
         assert result.description == "湖边日落"
@@ -285,11 +285,11 @@ class TestImageEncoding:
         mock_client_cls.return_value.chat.completions.create.return_value = mock_response
 
         mod = _import_adapter()
-        tagger = mod.OmlxVisionTagger(config)
+        tagger = mod.OpenAIVisionTagger(config)
 
         _mock_openai_module(monkeypatch, MagicMock(OpenAI=mock_client_cls))
         mod = _import_adapter()
-        tagger = mod.OmlxVisionTagger(config)
+        tagger = mod.OpenAIVisionTagger(config)
 
         tmp_path = Path("/tmp/vision_test")
         frame = _make_fake_frame(tmp_path, "test.png")
@@ -321,11 +321,11 @@ class TestImageEncoding:
         mock_client_cls.return_value.chat.completions.create.return_value = mock_response
 
         mod = _import_adapter()
-        tagger = mod.OmlxVisionTagger(config)
+        tagger = mod.OpenAIVisionTagger(config)
 
         _mock_openai_module(monkeypatch, MagicMock(OpenAI=mock_client_cls))
         mod = _import_adapter()
-        tagger = mod.OmlxVisionTagger(config)
+        tagger = mod.OpenAIVisionTagger(config)
 
         tmp_path = Path("/tmp/vision_test")
         frames = [
@@ -367,11 +367,11 @@ class TestJsonParsing:
         mock_client_cls.return_value.chat.completions.create.return_value = mock_response
 
         mod = _import_adapter()
-        tagger = mod.OmlxVisionTagger(config)
+        tagger = mod.OpenAIVisionTagger(config)
 
         _mock_openai_module(monkeypatch, MagicMock(OpenAI=mock_client_cls))
         mod = _import_adapter()
-        tagger = mod.OmlxVisionTagger(config)
+        tagger = mod.OpenAIVisionTagger(config)
 
         frames = [_make_fake_frame(Path("/tmp"), "f1.png")]
         result = tagger.describe(frames)
@@ -393,11 +393,11 @@ class TestJsonParsing:
         mock_client_cls.return_value.chat.completions.create.side_effect = [mock_response] * 3
 
         mod = _import_adapter()
-        tagger = mod.OmlxVisionTagger(config)
+        tagger = mod.OpenAIVisionTagger(config)
 
         _mock_openai_module(monkeypatch, MagicMock(OpenAI=mock_client_cls))
         mod = _import_adapter()
-        tagger = mod.OmlxVisionTagger(config)
+        tagger = mod.OpenAIVisionTagger(config)
 
         frames = [_make_fake_frame(Path("/tmp"), "f1.png")]
 
@@ -429,11 +429,11 @@ class TestJsonParsing:
         ))
 
         mod = _import_adapter()
-        tagger = mod.OmlxVisionTagger(config)
+        tagger = mod.OpenAIVisionTagger(config)
 
         _mock_openai_module(monkeypatch, MagicMock(OpenAI=client_cls))
         mod = _import_adapter()
-        tagger = mod.OmlxVisionTagger(config)
+        tagger = mod.OpenAIVisionTagger(config)
 
         frames = [_make_fake_frame(Path("/tmp"), "f1.png")]
         result = tagger.describe(frames)
@@ -463,11 +463,11 @@ class TestJsonParsing:
         ))
 
         mod = _import_adapter()
-        tagger = mod.OmlxVisionTagger(config)
+        tagger = mod.OpenAIVisionTagger(config)
 
         _mock_openai_module(monkeypatch, MagicMock(OpenAI=client_cls))
         mod = _import_adapter()
-        tagger = mod.OmlxVisionTagger(config)
+        tagger = mod.OpenAIVisionTagger(config)
 
         frames = [_make_fake_frame(Path("/tmp"), "f1.png")]
         result = tagger.describe(frames)
@@ -496,11 +496,11 @@ class TestJsonParsing:
         ))
 
         mod = _import_adapter()
-        tagger = mod.OmlxVisionTagger(config)
+        tagger = mod.OpenAIVisionTagger(config)
 
         _mock_openai_module(monkeypatch, MagicMock(OpenAI=client_cls))
         mod = _import_adapter()
-        tagger = mod.OmlxVisionTagger(config)
+        tagger = mod.OpenAIVisionTagger(config)
 
         frames = [_make_fake_frame(Path("/tmp"), "f1.png")]
         result = tagger.describe(frames)
@@ -530,11 +530,11 @@ class TestJsonParsing:
         ))
 
         mod = _import_adapter()
-        tagger = mod.OmlxVisionTagger(config)
+        tagger = mod.OpenAIVisionTagger(config)
 
         _mock_openai_module(monkeypatch, MagicMock(OpenAI=client_cls))
         mod = _import_adapter()
-        tagger = mod.OmlxVisionTagger(config)
+        tagger = mod.OpenAIVisionTagger(config)
 
         frames = [_make_fake_frame(Path("/tmp"), "f1.png")]
         result = tagger.describe(frames)
@@ -575,10 +575,10 @@ class TestRetryLogic:
 
         _mock_openai_module(monkeypatch, mock_openai)
         mod = _import_adapter()
-        tagger = mod.OmlxVisionTagger(config)
+        tagger = mod.OpenAIVisionTagger(config)
 
         frames = [_make_fake_frame(Path("/tmp"), "f1.png")]
-        with pytest.raises(RuntimeError, match="vision connection failed"):
+        with pytest.raises(RuntimeError, match="connection to the OpenAI-compatible server failed"):
             tagger.describe(frames)
 
         assert client_cls.return_value.chat.completions.create.call_count == 3
@@ -611,10 +611,10 @@ class TestRetryLogic:
 
         _mock_openai_module(monkeypatch, mock_openai)
         mod = _import_adapter()
-        tagger = mod.OmlxVisionTagger(config)
+        tagger = mod.OpenAIVisionTagger(config)
 
         frames = [_make_fake_frame(Path("/tmp"), "f1.png")]
-        with pytest.raises(RuntimeError, match="vision request failed"):
+        with pytest.raises(RuntimeError, match="request to the OpenAI-compatible server failed"):
             tagger.describe(frames)
 
         assert client_cls.return_value.chat.completions.create.call_count == 3
@@ -623,17 +623,17 @@ class TestRetryLogic:
 # ── config integration tests ───────────────────────────────────
 
 class TestConfigIntegration:
-    """Test that OmlxVisionTagger correctly consumes AppConfig."""
+    """Test that OpenAIVisionTagger correctly consumes AppConfig."""
 
     def test_has_describe_method(self, monkeypatch):
-        """OmlxVisionTagger is instantiable with AppConfig and has describe method."""
+        """OpenAIVisionTagger is instantiable with AppConfig and has describe method."""
         config = _make_config(monkeypatch)
 
         mock_openai_mock = MagicMock()
         monkeypatch.setitem(__import__("sys").modules, "openai", mock_openai_mock)  # type: ignore[attr-defined]
 
         mod = _import_adapter()
-        tagger = mod.OmlxVisionTagger(config)
+        tagger = mod.OpenAIVisionTagger(config)
 
         assert hasattr(tagger, "describe")
         assert callable(tagger.describe)
@@ -650,11 +650,11 @@ class TestConfigIntegration:
         mock_client_cls.return_value.chat.completions.create.return_value = mock_response
 
         mod = _import_adapter()
-        tagger = mod.OmlxVisionTagger(config, model="custom-vision-model")
+        tagger = mod.OpenAIVisionTagger(config, model="custom-vision-model")
 
         _mock_openai_module(monkeypatch, MagicMock(OpenAI=mock_client_cls))
         mod = _import_adapter()
-        tagger = mod.OmlxVisionTagger(config, model="custom-vision-model")
+        tagger = mod.OpenAIVisionTagger(config, model="custom-vision-model")
 
         frames = [_make_fake_frame(Path("/tmp"), "f1.png")]
         tagger.describe(frames)

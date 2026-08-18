@@ -8,7 +8,7 @@
 ## 1. 设计目标与原则
 
 1. **模块强隔离、可独立测试**：每个模块只做一件事，通过明确接口通信，能脱离其他模块单独测。
-2. **外部重依赖全部藏在接口后面**：ffmpeg/ffprobe、Silero VAD、mlx-whisper/Qwen3-ASR+ForcedAligner、OMLX（文本+视觉）都通过 Python `Protocol` 抽象，业务逻辑只依赖接口，测试时注入假实现（fake/mock），不碰真实模型、不跑真实视频。
+2. **外部重依赖全部藏在接口后面**：ffmpeg/ffprobe、Silero VAD、mlx-whisper/Qwen3-ASR+ForcedAligner、本地 OpenAI 兼容服务端（文本+视觉）都通过 Python `Protocol` 抽象，业务逻辑只依赖接口，测试时注入假实现（fake/mock），不碰真实模型、不跑真实视频。
 3. **前后端分离**：后端 FastAPI 提供 REST + SSE，前端 React 只通过 HTTP 通信，两端可各自独立开发与测试。
 4. **继承 proposal 的四条硬约束**：原文件只读、拍摄时间永不改、全本地离线、扫描幂等。
 
@@ -47,16 +47,16 @@
 │ LibraryWriter │ │  + CutPlan CRUD) │ │ FrameExtractor     │
 │ (纯逻辑)      │ └─────────────────┘ │ SpeechDetector       │
 └───────────────┘                     │ Transcriber          │
-                                    │ Summarizer (OMLX)    │
-                                    │ VisionTagger(OMLX)   │
+                                    │ Summarizer (OpenAI兼容) │
+                                    │ VisionTagger(OpenAI兼容)│
                                     │ VocalSeparator(Demucs) │
-                                    │ BrollInspector(OMLX/   │
+                                    │ BrollInspector(OpenAI兼容/│
                                     │    Qwen3-VL)           │
-                                    │ CutPlanDirector(OMLX/   │
+                                    │ CutPlanDirector(OpenAI兼容/│
                                     │    Qwen3.6)            │
                                     └────────────────────┘
                                           │ 真实实现
-                      ffmpeg/ffprobe · Silero · mlx-whisper/Qwen3-ASR+ForcedAligner · OMLX
+                      ffmpeg/ffprobe · Silero · mlx-whisper/Qwen3-ASR+ForcedAligner · OpenAI兼容服务端
 ```
 
 **关键点**：编排层、领域模块、仓储都只依赖「适配器接口」，不依赖具体实现。测试时用假适配器替换，因此整条流水线可在毫秒级、无外部依赖下跑通。
@@ -67,7 +67,7 @@
 cutfinder/
 ├── mise.toml                    # 钉死 Python/Node 版本
 ├── Brewfile                     # 系统依赖(ffmpeg)
-├── Makefile                     # setup/dev/models/check-omlx/test...
+├── Makefile                     # setup/dev/models/check-openai/test...
 ├── backend/
 │   ├── pyproject.toml + uv.lock # uv 管理依赖
 │   ├── cutfinder/
@@ -80,7 +80,7 @@ cutfinder/
 │   │   │   ├── probe.py         # MetadataProbe: ffprobe parsing
 │   │   │   ├── media.py         # ThumbnailMaker, FrameExtractor: ffmpeg/Pillow
 │   │   │   ├── speech.py        # SpeechDetector, Transcriber: Silero VAD + mlx-whisper/Qwen3-ASR
-│   │   │   ├── ai.py            # Summarizer, VisionTagger: OMLX OpenAI client
+│   │   │   ├── ai.py            # Summarizer, VisionTagger: OpenAI-compatible client
 │   │   │   ├── library.py       # LibraryWriter: shutil.copy2, date/type directory
 │   │   │   ├── repository.py    # CatalogRepository: SQLite CRUD + FTS5
 │   │   │   └── cutplan.py       # CutPlanDirector: 初剪导演工具接口
@@ -91,10 +91,10 @@ cutfinder/
 │   │   │   ├── mlx_whisper.py   # Transcriber → mlx-whisper large-v3
 │   │   │   ├── qwen_transcriber.py  # Transcriber → Qwen3-ASR + ForcedAligner
 │   │   │   ├── demucs_separator.py  # VocalSeparator → Demucs htdemucs (torch/MPS)
-│   │   │   ├── omlx_text.py     # OpenAI client → OMLX text model (Qwen3.6)
-│   │   │   ├── omlx_vision.py   # OpenAI client → OMLX vision model (Qwen3-VL)
-│   │   │   ├── omlx_agent.py    # OMLX agent: 模型管理/健康检查
-│   │   │   ├── omlx_check.py    # OMLX 就绪时检查(make check-omlx)
+│   │   │   ├── openai_text.py   # OpenAI client → text model (Qwen3.6) via OpenAI-compatible server
+│   │   │   ├── openai_vision.py # OpenAI client → vision model (Qwen3-VL) via OpenAI-compatible server
+│   │   │   ├── openai_agent.py  # 初剪 Agent client: 工具调用/健康检查
+│   │   │   ├── openai_check.py  # 服务端就绪时检查(make check-openai)
 │   │   │   ├── broll_inspector.py # B-roll 视觉勘察(初剪用，复用 vision)
 │   │   │   ├── fs_library.py    # LibraryWriter → shutil.copy2, rename
 │   │   │   ├── sqlite_repo.py   # CatalogRepository → SQLite + FTS5
@@ -138,7 +138,7 @@ cutfinder/
 │   │   │   ├── filters/         # Date filter, type filter, tag filter (frequency-sorted)
 │   │   │   ├── search/          # Search bar, live filter by filename/tags/description
 │   │   │   ├── detail/          # Detail panel drawer, A/B toggle, tag editing
-│   │   │   ├── settings/        # Settings page: OMLX config, library binding, speech engine
+│   │   │   ├── settings/        # Settings page: OpenAI-compatible server config, library binding, speech engine
 │   │   │   ├── jobs/            # Job progress display (scan/keyframe/subtitle)
 │   │   │   ├── jobs-queue/      # Task Queue page: list, delete, retry-failed
 │   │   │   ├── subtitles/       # Subtitle export UI: format selection, progress bar
@@ -166,9 +166,9 @@ cutfinder/
 
 - **职责**：提供类型安全的配置对象；区分**密钥/端点**与**用户偏好**两类来源。
 - **两类来源**：
-  - **密钥/端点 → 全局配置 / OS env vars**（`pydantic-settings` 读取，不入库不进 git）：`OMLX_BASE_URL`、`OMLX_API_KEY`。
+  - **密钥/端点 → 全局配置 / OS env vars**（`pydantic-settings` 读取，不入库不进 git）：`OPENAI_BASE_URL`、`OPENAI_API_KEY`。
   - **用户偏好 → JSON**（`<库>/.cutfinder/config.json`）：`source_folders`、`library_path`、`text_model`、`vision_model`、`whisper_model`、`extensions`（默认 `.mov .mp4 .m4v`）、`broll_frame_count`（默认 3）、`vad_threshold`（默认 0.15）。
-- **接口**：`resolve_env() -> EnvSettings`（全局配置优先，OS env 覆盖）、`load_config() -> AppConfig`、`save_prefs(Prefs)`。`AppConfig` 合并全局配置/OS env 与 JSON 两部分；全部缺失时给出明确报错（OMLX 必填）。
+- **接口**：`resolve_env() -> EnvSettings`（全局配置优先，OS env 覆盖）、`load_config() -> AppConfig`、`save_prefs(Prefs)`。`AppConfig` 合并全局配置/OS env 与 JSON 两部分；全部缺失时给出明确报错（OpenAI 兼容服务端配置必填）。
 - **独立测**：用 `monkeypatch` OS env + 临时 JSON，断言合并结果、默认值；全局配置缺失时报错。
 
 ### 3.2 MetadataProbe（元数据探测，适配器）
@@ -212,13 +212,13 @@ cutfinder/
       def transcribe(self, path: Path) -> Transcript: ...
   ```
   `Transcript`：`full_text: str`、`segments: list[Segment(start_s, end_s, text)]`。
-- **真实实现（两种引擎，由 `transcription_engine` 偏好选择，均为本地独立进程、不走 OMLX）**：
+- **真实实现（两种引擎，由 `transcription_engine` 偏好选择，均为本地独立进程、不走 OpenAI 兼容服务端）**：
   - **`mlx-whisper`**（large-v3，中文）—— `adapters/mlx_whisper.py`。
-  - **Qwen3-ASR + Qwen3-ForcedAligner**（经 `mlx-audio` 本地运行）—— `adapters/qwen_transcriber.py`：先按 Silero VAD 把音频切成 ≤ `qwen_max_chunk_s`（默认 60，上限 300，受对齐器约 400 秒时间戳范围限制）的片段，逐段用 Qwen3-ASR 出准确中文/中英文本、用 ForcedAligner 出逐字时间戳，偏移回整段时间轴后再归并成字幕 cue。中文更准且时间轴不漂移；OMLX 无法经 HTTP 托管对齐器，故必须本地跑，模型下载到 `models/qwen/`。该选择作用于所有 A-roll 语音处理（编目转写、关键帧、字幕导出）。
+  - **Qwen3-ASR + Qwen3-ForcedAligner**（经 `mlx-audio` 本地运行）—— `adapters/qwen_transcriber.py`：先按 Silero VAD 把音频切成 ≤ `qwen_max_chunk_s`（默认 60，上限 300，受对齐器约 400 秒时间戳范围限制）的片段，逐段用 Qwen3-ASR 出准确中文/中英文本、用 ForcedAligner 出逐字时间戳，偏移回整段时间轴后再归并成字幕 cue。中文更准且时间轴不漂移；OpenAI 兼容服务端无法经 HTTP 托管对齐器，故必须本地跑，模型下载到 `models/qwen/`。该选择作用于所有 A-roll 语音处理（编目转写、关键帧、字幕导出）。
 - **转写前人声分离**（见 §3.14）：构造可注入 `VocalSeparator`；注入时先抽干声去 BGM 再转写，分离失败回落原始音频。whisper 路径补防幻觉 kwargs（如 `condition_on_previous_text=False`），Qwen 路径用 `repetition_penalty` + 按片段时长限制 `max_tokens` 防止 ASR 复读。`transcribe()` 端口签名不变——是否分离由构造时是否注入 separator 决定。
 - **独立测**：fake 返回固定文本；适配器集成测试用一段短中文语音样本。
 
-### 3.6 Summarizer（A-roll 文本总结，适配器→OMLX）
+### 3.6 Summarizer（A-roll 文本总结，适配器→OpenAI 兼容服务端）
 
 - **接口**（`ports/ai.py`）：
   ```python
@@ -226,10 +226,10 @@ cutfinder/
       def summarize(self, transcript_text: str) -> SummaryResult: ...
   ```
   `SummaryResult`：`summary: str`（中文简介）、`tags: list[str]`。
-- **真实实现**：OpenAI 客户端指向 OMLX（`base_url=OMLX_BASE_URL`、`api_key=OMLX_API_KEY`，来自全局配置 / OS env；`model=text_model` 默认 `Qwen3.6-35B-A3B`）。用**结构化输出**（JSON）约束返回 `{summary, tags}`。
-- **独立测**：fake 返回固定 `SummaryResult`；适配器集成测试需本机 OMLX，打 `integration` 标记。
+- **真实实现**：OpenAI 客户端指向本地 OpenAI 兼容服务端（`base_url=OPENAI_BASE_URL`、`api_key=OPENAI_API_KEY`，来自全局配置 / OS env；`model=text_model` 默认 `Qwen3.6-35B-A3B`）。用**结构化输出**（JSON）约束返回 `{summary, tags}`。
+- **独立测**：fake 返回固定 `SummaryResult`；适配器集成测试需本机 OpenAI 兼容服务端（如 OMLX），打 `integration` 标记。
 
-### 3.7 VisionTagger（B-roll 画面识别，适配器→OMLX）
+### 3.7 VisionTagger（B-roll 画面识别，适配器→OpenAI 兼容服务端）
 
 - **接口**：
   ```python
@@ -237,8 +237,8 @@ cutfinder/
       def describe(self, frame_paths: list[Path]) -> VisionResult: ...
   ```
   `VisionResult`：`description: str`（中文画面描述）、`tags: list[str]`。
-- **真实实现**：把抽帧读成 **base64**，按 OpenAI 视觉消息格式（`image_url` data URI）发给 OMLX（同样用全局配置 / OS env 的 `OMLX_BASE_URL`/`OMLX_API_KEY`，`model=vision_model` 默认 `Qwen3-VL-8B`），一次请求带多帧；结构化输出 `{description, tags}`。
-- **独立测**：fake 返回固定结果；适配器集成测试需本机 OMLX。
+- **真实实现**：把抽帧读成 **base64**，按 OpenAI 视觉消息格式（`image_url` data URI）发给本地 OpenAI 兼容服务端（同样用全局配置 / OS env 的 `OPENAI_BASE_URL`/`OPENAI_API_KEY`，`model=vision_model` 默认 `Qwen3-VL-8B`），一次请求带多帧；结构化输出 `{description, tags}`。
+- **独立测**：fake 返回固定结果；适配器集成测试需本机 OpenAI 兼容服务端（如 OMLX）。
 
 ### 3.8 LibraryWriter（库文件组织，适配器）
 
@@ -283,8 +283,8 @@ cutfinder/
   ```
   probe 元数据 → 生成缩略图
     → speech_ratio 判 A/B
-       A: transcribe → summarize(OMLX 文本)
-       B: extract 抽帧 → describe(OMLX 视觉)
+       A: transcribe → summarize(OpenAI 兼容·文本)
+       B: extract 抽帧 → describe(OpenAI 兼容·视觉)
     → repository.upsert_clip(+tags +transcript/description)
     → library.copy_into(复制到日期/类型目录)
     → 发进度事件
@@ -305,7 +305,7 @@ cutfinder/
 
 ### 3.12 Worker + Job Queue（后台队列 + SSE）
 
-- **职责**：接收扫描/处理请求 → 入队 → 单 worker **顺序**处理（尊重模型显存，OMLX 负责换模型）→ 把每个片段的开始/完成/失败作为**进度事件**通过 SSE 推给前端。
+- **职责**：接收扫描/处理请求 → 入队 → 单 worker **顺序**处理（尊重模型显存，由服务端负责换模型）→ 把每个片段的开始/完成/失败作为**进度事件**通过 SSE 推给前端。
 - **实现**：`asyncio.Queue` + 后台 task；进度用 `asyncio` 事件广播给 SSE 连接。Job 状态（total/done/error）持久化到仓储，便于刷新页面后恢复。
 - **独立测**：注入假编排器，验证队列顺序、进度事件序列、job 状态推进；SSE 用 FastAPI TestClient 断言事件流。
 
@@ -355,7 +355,7 @@ cutfinder/
 > 在已编目素材库之上，通过多轮对话，依据用户给的日期范围 / 目标时长 / 风格 / 节奏 / 画面比例，产出一份精确到片段内 in/out 的文字分镜表（A-roll 叙事主线 + B-roll 插空），供用户照搬到剪辑软件。不渲染、不导出剪辑工程（FCPXML 留作后续）。
 
 - **架构**：把"会算错、要稳定"的部分交给确定性代码；把"需要创意"的部分交给 LLM 工具调用环。LLM 跑飞时由确定性脚手架 + 护栏兜底。
-- **复用**：`CatalogRepository`（检索编目 + transcript segments + 关键帧）、`VisionTagger`+`FrameExtractor`（现场看 B-roll）、现有 OMLX 文本 client。
+- **复用**：`CatalogRepository`（检索编目 + transcript segments + 关键帧）、`VisionTagger`+`FrameExtractor`（现场看 B-roll）、现有 OpenAI 兼容文本 client。
 - **工具集**（`ports/cutplan.py`，LLM 只能调这些）：
   ```python
   class FootageRetriever(Protocol):
@@ -397,8 +397,8 @@ cutfinder/
 | SpeechDetector | Silero VAD | 返回设定 `speech_ratio` | 有声/无声样本各一 |
 | Transcriber | mlx-whisper / Qwen3-ASR+ForcedAligner | 返回固定 `Transcript` | 短中文语音样本 |
 | VocalSeparator | Demucs (`htdemucs`) | 返回固定干声数组 | 含 BGM 样本，验证去伴奏 |
-| Summarizer | OMLX 文本 | 返回固定 `SummaryResult` | 需本机 OMLX |
-| VisionTagger | OMLX 视觉 | 返回固定 `VisionResult` | 需本机 OMLX |
+| Summarizer | OpenAI 兼容·文本 | 返回固定 `SummaryResult` | 需本机 OpenAI 兼容服务端 |
+| VisionTagger | OpenAI 兼容·视觉 | 返回固定 `VisionResult` | 需本机 OpenAI 兼容服务端 |
 | LibraryWriter | shutil 复制 | 真跑(轻，临时目录) | — |
 | CatalogRepository | SQLite | 内存 SQLite 真跑 | — |
 
@@ -539,7 +539,7 @@ CREATE TABLE cut_plans (
 | `features/filters` | 日期/类型/标签筛选侧栏 | 断言筛选触发正确请求参数 |
 | `features/search` | 全文搜索框与结果高亮 | mock 搜索响应 |
 | `features/detail` | 详情面板：简介、可编辑标签、转写、改 A/B、重新分析按钮 | 断言编辑触发 PATCH/PUT、重分析触发 POST reanalyze、乐观更新回滚 |
-| `features/settings` | 源/库文件夹、OMLX 配置表单 | 表单校验与保存，`check-omlx` 状态探测 |
+| `features/settings` | 源/库文件夹、OpenAI 兼容服务端配置表单 | 表单校验与保存，`check-openai` 状态探测 |
 | `features/jobs` | SSE 进度条、逐个完成提示(toast) | mock SSE 事件流断言进度更新 |
 | `features/subtitles` (§3.13) | 选成片/选输出文件夹/勾选 iTT·SRT/进度条/产出列表 + Reveal | mock pick/export/SSE，断言请求参数与产出渲染 |
 | `features/cutplan` (§3.15) | 左对话框(会话列表可删)/右实时分镜表/复制 Markdown/初剪设置弹窗 | mock 会话 CRUD/发消息/轮询，断言流式回复、分镜渲染、设置弹窗读写 |
@@ -559,7 +559,7 @@ CREATE TABLE cut_plans (
    - 全部不带标记，秒级、可进 CI。
 
 2. **后端集成测试（pytest `-m integration`，手动/本机）**
-   - 各适配器对真实 ffmpeg / Silero / whisper/Qwen3-ASR / OMLX 跑，验证契约。用极短样本素材。
+   - 各适配器对真实 ffmpeg / Silero / whisper/Qwen3-ASR / OpenAI 兼容服务端跑，验证契约。用极短样本素材。
 
 3. **前端单元/组件测试（Vitest + React Testing Library）**
    - 组件行为 + API 交互（MSW 模拟 HTTP/SSE）。
@@ -578,15 +578,15 @@ CREATE TABLE cut_plans (
 | `source_folders` | JSON | 空列表 | 用户指定，可多个文件夹路径 |
 | `library_path` | JSON | 空字符串 | 复制目标库目录 |
 | `extensions` | JSON | `.mov .mp4 .m4v` | 扫描白名单扩展名（空格分隔）|
-| `OMLX_BASE_URL` | OS env / 全局配置 | `http://localhost:8000/v1` | OMLX API 端点（必填）|
-| `OMLX_API_KEY` | OS env / 全局配置 | （无） | OMLX API 密钥（必填，不进 git）|
-| `text_model` | JSON | `Qwen3.6-35B-A3B` | A-roll 简介/标签用文本模型名（OMLX）|
-| `vision_model` | JSON | `Qwen3-VL-8B` | B-roll 画面识别用视觉模型名（OMLX）|
+| `OPENAI_BASE_URL` | OS env / 全局配置 | `http://localhost:8000/v1` | OpenAI 兼容服务端 API 端点（必填）|
+| `OPENAI_API_KEY` | OS env / 全局配置 | （无） | OpenAI 兼容服务端 API 密钥（必填，不进 git）|
+| `text_model` | JSON | `Qwen3.6-35B-A3B` | A-roll 简介/标签用文本模型名（OpenAI 兼容服务端）|
+| `vision_model` | JSON | `Qwen3-VL-8B` | B-roll 画面识别用视觉模型名（OpenAI 兼容服务端）|
 | `whisper_model` | JSON | `large-v3` | mlx-whisper 模型名（仅 whisper 引擎时生效）|
 | `transcription_engine` | JSON | `whisper` | 语音转写引擎：`whisper`(mlx-whisper) / `qwen`(Qwen3-ASR+ForcedAligner)|
 | `broll_frame_count` | JSON | `3` | B-roll 均匀抽帧数（默认每段 3 张）|
 | `vad_threshold` | JSON | `0.15` | speech_ratio ≥ 阈值判 A-roll（范围 0~1）|
-| `worker_concurrency` | JSON / env | `1` | 顺序处理，尊重模型显存（OMLX 负责换模型）|
+| `worker_concurrency` | JSON / env | `1` | 顺序处理，尊重模型显存（由服务端负责换模型）|
 | `output_language` | JSON | `zh` | AI 简介/描述语言；字幕导出也沿用此值（zh=en）|
 | `ui_language` | JSON(机器全局) | `en` | 界面/初剪文案语言（EN/ZH），与 output_language 独立；前端 PUT /settings 持久化 |
 | `subtitle_default_formats` | JSON | `["itt","srt"]` | 字幕导出 UI 默认格式选项 |
@@ -605,7 +605,7 @@ CREATE TABLE cut_plans (
 
 ## 10. 环境与部署（一键安装）
 
-> **Docker 不适用**：MLX/OMLX/Whisper 需直接用 Apple Metal GPU，容器内访问不到 Metal。
+> **Docker 不适用**：MLX/本地 OpenAI 兼容服务端/Whisper 需直接用 Apple Metal GPU，容器内访问不到 Metal。
 
 ### 工具分工
 
@@ -617,7 +617,7 @@ CREATE TABLE cut_plans (
 | **npm/pnpm** (`frontend/package.json`) | 前端依赖 |
 | **Makefile** | 把上面串成少数几条命令 |
 
-OMLX 端点与密钥通过全局配置（`~/.cutfinder/config.json`）或 OS env vars 注入，后端用 `pydantic-settings` 自动读取；缺失则启动时明确报错。
+OpenAI 兼容服务端的端点与密钥通过全局配置（`~/.cutfinder/config.json`）或 OS env vars 注入，后端用 `pydantic-settings` 自动读取；缺失则启动时明确报错。
 
 ### Makefile 目标
 
@@ -625,20 +625,20 @@ OMLX 端点与密钥通过全局配置（`~/.cutfinder/config.json`）或 OS env
 |---|---|
 | `make setup` | `mise install` → `brew bundle` → `uv sync` → 前端依赖安装 |
 | `make dev` | 同时起后端（FastAPI/uvicorn）与前端（Vite dev server）|
-| `make models` | 拉取并缓存 `mlx-whisper` / demucs 模型（视觉/文本在 OMLX 侧加载）|
-| `make check-omlx` | 探测 OMLX `/v1/models`，确认接口与所需模型就绪（含纯函数单测）|
+| `make models` | 拉取并缓存 `mlx-whisper` / demucs 模型（视觉/文本模型在 OpenAI 兼容服务端侧加载）|
+| `make check-openai` | 探测该服务端 `/v1/models`，确认接口与所需模型就绪（含纯函数单测）|
 | `make test` | 后端 `pytest`（不含集成）+ 前端 `vitest`|
-| `make test-integration` | `pytest -m integration`（需本机 ffmpeg/whisper/Qwen3-ASR/OMLX 与样本素材）|
+| `make test-integration` | `pytest -m integration`（需本机 ffmpeg/whisper/Qwen3-ASR/OpenAI 兼容服务端与样本素材）|
 | `make e2e` | Playwright（后端以假适配器 + 预置 DB 启动）|
 
-**换机流程：** 装好 OMLX App → `git clone` → 在 `~/.cutfinder/config.json`（或 OS env）中填入 OMLX key → `mise install && make setup` → `make check-omlx` → `make dev`。
+**换机流程：** 装好一个本地 OpenAI 兼容推理服务器（如 OMLX） → `git clone` → 在 `~/.cutfinder/config.json`（或 OS env）中填入其 key → `mise install && make setup` → `make check-openai` → `make dev`。
 
 ---
 
 ## 11. 原生 macOS .app 外壳（Swift 包装器）
 
 > 取代现有 shell 脚本启动器。用**最小 Swift/AppKit 包装器**，得到标准菜单、稳定 Dock 生命周期、点 Dock 重开 UI。
-> **设计决策**：① UI 用 WKWebView 内嵌现有 web 前端；② 服务启动即自动开启，可手动停止/重启；③ 首次启动自动安装本地依赖（uv / ffmpeg / Python env），语音模型懒加载下载，OMLX 仅探测 + 引导。
+> **设计决策**：① UI 用 WKWebView 内嵌现有 web 前端；② 服务启动即自动开启，可手动停止/重启；③ 首次启动自动安装本地依赖（uv / ffmpeg / Python env），语音模型懒加载下载，OpenAI 兼容服务端仅探测 + 引导。
 
 ### 11.1 为什么不再用 shell 脚本
 
@@ -653,7 +653,7 @@ OMLX 端点与密钥通过全局配置（`~/.cutfinder/config.json`）或 OS env
 | `MainWindowController` | 单窗口，宿主 WKWebView；在「安装中 / 运行中 / 错误」三态间切换 |
 | `ServerController` | 用 Process 拉起/停止/重启 uvicorn 子进程；健康探测；端口管理 |
 | `Provisioner` | 首次安装流程（payload 同步 + 依赖安装 + 模型下载），逐步上报进度 |
-| `DependencyChecker` | 探测 uv / ffmpeg / OMLX 是否就绪 |
+| `DependencyChecker` | 探测 uv / ffmpeg / OpenAI 兼容服务端是否就绪 |
 | `PayloadManager` | 把 bundle 内 Resources/payload 同步到可写运行目录（保留 venv/catalog/用户状态）|
 
 源码布局：
@@ -679,7 +679,7 @@ packaging/macapp/            # Swift 包装器（swiftc 直接编译，无 .xcod
 `MainWindowController` 按服务状态切换 contentView：
 1. **安装中**：原生 `SetupView`（步骤清单 + 进度条 + 可折叠日志）。
 2. **运行中**：`WKWebView` 加载 `http://127.0.0.1:<PORT>/`（复用后端静态托管的前端构建产物）。
-3. **错误/引导**：原生 `ErrorView`（如 OMLX 不可达、ffmpeg 缺失），含「重试 / 打开日志 / 仍然继续」。
+3. **错误/引导**：原生 `ErrorView`（如 OpenAI 兼容服务端不可达、ffmpeg 缺失），含「重试 / 打开日志 / 仍然继续」。
 
 ### 11.5 ServerController（开启 / 停止 / 重启）
 
@@ -699,7 +699,7 @@ packaging/macapp/            # Swift 包装器（swiftc 直接编译，无 .xcod
 | 3. ffmpeg/ffprobe | 缺失则 `brew install ffmpeg`；无 Homebrew → 引导（给链接）|
 | 4. Python env | `uv sync --frozen`，幂等 |
 | 5. 模型预热 | **仅 demucs**（~80MB）；语音模型 whisper/Qwen3-ASR 首次转写时懒加载下载 |
-| 6. OMLX 探测 | `GET <OMLX_BASE_URL>/models`，不可达 → 引导（不阻断启动）|
+| 6. OpenAI 兼容服务端探测 | `GET <OPENAI_BASE_URL>/models`，不可达 → 引导（不阻断启动）|
 | 7. 版本戳标记完成 | 后续只做快速存在性检查 + uv sync，不重复全量安装 |
 
 ### 11.7 沙盒 / 签名 / 公证
@@ -711,7 +711,7 @@ packaging/macapp/            # Swift 包装器（swiftc 直接编译，无 .xcod
 
 ### 11.8–11.9 测试策略
 
-- Swift 层逻辑薄、以编排为主：核心可测点是 Provisioner 步骤判定与 DependencyChecker/OMLX 探测（沿用 §10 check-omlx 纯函数单测）。
+- Swift 层逻辑薄、以编排为主：核心可测点是 Provisioner 步骤判定与 DependencyChecker/OpenAI 兼容服务端探测（沿用 §10 check-openai 纯函数单测）。
 - 进程管理、菜单等以手动验收清单覆盖。
 
 ---
@@ -911,7 +911,7 @@ packaging/macapp/            # Swift 包装器（swiftc 直接编译，无 .xcod
 #### 12.6.3 设置页
 ```
 连接
-  OMLX 接口   [http://localhost:8000/v1]    ● 已连接
+  OpenAI 兼容接口 [http://localhost:8000/v1]    ● 已连接
 模型
   文本模型     [Qwen3.6-35B-A3B    ▾]
   视觉模型     [Qwen3-VL-8B▾]
@@ -995,7 +995,7 @@ packaging/macapp/            # Swift 包装器（swiftc 直接编译，无 .xcod
 │   ⟳  ffmpeg          安装中…            │
 │   ·  Python运行环境    等待             │
 │   ·  AI模型(whisper/demucs) 等待·约3GB │
-│   ·  OMLX模型服务      待探测           │
+│   ·  AI模型服务(OpenAI兼容) 待探测        │
 │                                        │
 │   ▮▮▮▮▮▯▯ 45%                         │
 │   ▸ 查看安装日志                       │
@@ -1004,14 +1004,15 @@ packaging/macapp/            # Swift 包装器（swiftc 直接编译，无 .xcod
 
 #### ErrorView（错误/引导视图）
 ```
-┌─ CutFinder ───────────────  ● OMLX未就绪 ─┐
+┌─ CutFinder ─────────  ● AI 模型服务未就绪 ─┐
 │                                           │
-│   ⚠  未检测到 OMLX 模型服务               │
+│   ⚠  未检测到 OpenAI 兼容模型服务          │
 │   CutFinder 的「A-roll简介 / B-roll打标」需要│
-│   本机 OMLX（独立 App）。                  │
+│   本机的 OpenAI 兼容推理服务器（如 OMLX、    │
+│   LM Studio、Ollama）。                    │
 │   扫描、转写不受影响，可先继续使用。        │
 │                                           │
-│   [打开 OMLX下载页]  [重试探测]  [继续]    │
+│   [下载推荐服务器]  [重试探测]  [继续]     │
 │   ▸ 详情/日志                             │
 └───────────────────────────────────────────┘
 ```
@@ -1023,7 +1024,7 @@ CutFinder   文件    编辑    显示    服务    窗口    帮助
 CutFinder ▸ 关于 · 偏好设置(端口/开机自启)· 隐藏 · ⌘Q退出
 显示     ▸ 重新加载(⌘R)·实际大小·全屏
 服务     ▸ 开启/停止/重启 · ─── ·在浏览器中打开·开库文件夹·日志
-帮助     ▸ CutFinder文档·检查OMLX状态
+帮助     ▸ CutFinder文档·检查AI模型服务状态
 ```
 
 ---
@@ -1034,7 +1035,7 @@ CutFinder ▸ 关于 · 偏好设置(端口/开机自启)· 隐藏 · ⌘Q退出
 - **测试边界**：单元测试一律 mock 外部依赖（仓储用内存 SQLite、LibraryWriter 用临时真文件）；真实模型/视频只在带标记的集成测试出现。
 - **进度**：单 worker 顺序处理 + SSE 实时推进度；job 状态持久化以便刷新恢复。
 - **幂等与纠正**：指纹去重；手动纠正的 A/B 标 `manual`，重扫不被覆盖。
-- **预留扩展点**：关键帧建议可复用 `FrameExtractor` + `VisionTagger`；字幕导出（§3.13）复用 `Transcriber` + 纯逻辑格式化器；初剪导演（§3.15）复用 `CatalogRepository` + OMLX client，均作为独立工具挂在 Worker/SSE 上。
+- **预留扩展点**：关键帧建议可复用 `FrameExtractor` + `VisionTagger`；字幕导出（§3.13）复用 `Transcriber` + 纯逻辑格式化器；初剪导演（§3.15）复用 `CatalogRepository` + OpenAI 兼容服务端 client，均作为独立工具挂在 Worker/SSE 上。
 
 ---
 

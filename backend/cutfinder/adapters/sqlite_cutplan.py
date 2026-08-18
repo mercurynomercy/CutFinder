@@ -12,7 +12,7 @@ import json
 from sqlite3 import Connection as _Conn
 from typing import Any
 
-from ..domain.models import ChatMessage, CutPlan, CutSession
+from ..domain.models import ChatMessage, CutPlan, CutSession, PendingClarification
 
 _CREATE_SESSIONS = """
 CREATE TABLE IF NOT EXISTS cut_sessions (
@@ -56,6 +56,8 @@ class SqliteCutSessionStore:
         # turn writes it, the polling UI reads it via get_session. Lost on
         # restart, which is fine — interrupted sessions are reset to idle anyway.
         self._progress: dict[int, str] = {}
+        self._day_progress: dict[int, tuple[int, int]] = {}
+        self._asked: dict[int, set[str]] = {}
         self.execute_schema()
 
     def execute_schema(self) -> None:
@@ -63,6 +65,11 @@ class SqliteCutSessionStore:
         c.execute(_CREATE_SESSIONS)
         c.execute(_CREATE_MESSAGES)
         c.execute(_CREATE_PLANS)
+        # Migration: older on-disk DBs predate the pause/resume feature.
+        c.execute("PRAGMA table_info(cut_sessions)")
+        cols = {row[1] for row in c.fetchall()}
+        if "pending_json" not in cols:
+            c.execute("ALTER TABLE cut_sessions ADD COLUMN pending_json TEXT")
         self._conn.commit()
 
     # ── sessions ─────────────────────────────────────────────────
@@ -93,15 +100,20 @@ class SqliteCutSessionStore:
     def get_session(self, session_id: int) -> CutSession | None:
         c = self._conn.cursor()
         c.execute(
-            "SELECT id, title, status, created_at, updated_at FROM cut_sessions WHERE id = ?",
+            "SELECT id, title, status, created_at, updated_at, pending_json"
+            " FROM cut_sessions WHERE id = ?",
             (session_id,),
         )
         r = c.fetchone()
         if r is None:
             return None
+        pending = PendingClarification(**json.loads(r[5])) if r[5] else None
+        day_index, day_total = self._day_progress.get(session_id, (None, None))
         return CutSession(
             id=r[0], title=r[1] or "", status=r[2], created_at=r[3], updated_at=r[4],
             progress=self._progress.get(session_id, ""),
+            day_index=day_index, day_total=day_total,
+            pending=pending,
         )
 
     def set_session_progress(self, session_id: int, text: str) -> None:
@@ -111,6 +123,34 @@ class SqliteCutSessionStore:
     def clear_session_progress(self, session_id: int) -> None:
         """Drop a session's live progress text (turn finished or errored)."""
         self._progress.pop(session_id, None)
+        self._day_progress.pop(session_id, None)
+
+    def set_session_day_progress(self, session_id: int, day_index: int, day_total: int) -> None:
+        """Set the live day index/total for a running turn (in-memory only)."""
+        self._day_progress[session_id] = (day_index, day_total)
+
+    def set_session_pending(self, session_id: int, pending: PendingClarification) -> None:
+        c = self._conn.cursor()
+        c.execute(
+            "UPDATE cut_sessions SET pending_json = ?, updated_at = ? WHERE id = ?",
+            (json.dumps(pending.model_dump(), ensure_ascii=False), _now(), session_id),
+        )
+        self._conn.commit()
+
+    def clear_session_pending(self, session_id: int) -> None:
+        c = self._conn.cursor()
+        c.execute(
+            "UPDATE cut_sessions SET pending_json = NULL, updated_at = ? WHERE id = ?",
+            (_now(), session_id),
+        )
+        self._conn.commit()
+
+    def get_asked(self, session_id: int) -> set[str]:
+        """In-memory only: only needs to survive one live conversation, not a restart."""
+        return set(self._asked.get(session_id, set()))
+
+    def mark_asked(self, session_id: int, field: str) -> None:
+        self._asked.setdefault(session_id, set()).add(field)
 
     def delete_session(self, session_id: int) -> None:
         c = self._conn.cursor()
@@ -120,6 +160,8 @@ class SqliteCutSessionStore:
         c.execute("DELETE FROM cut_sessions WHERE id = ?", (session_id,))
         self._conn.commit()
         self._progress.pop(session_id, None)
+        self._day_progress.pop(session_id, None)
+        self._asked.pop(session_id, None)
 
     def set_session_title(self, session_id: int, title: str) -> None:
         c = self._conn.cursor()

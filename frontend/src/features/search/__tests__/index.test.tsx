@@ -105,4 +105,12 @@ describe('Search', () => {
     expect(input).toHaveClass('placeholder:text-[--text-muted]')
   })
 
+  it('seeds the input from a non-empty `query` prop (e.g. the parent\'s already-active search after a remount)', async () => {
+    render(<searchModule.Search onSearch={() => {}} query="hello" />)
+    const input = await screen.findByPlaceholderText(/Search clips/i) as HTMLInputElement
+    expect(input.value).toBe('hello')
+    // Clear button should also show, since the seeded query is non-empty.
+    expect(await screen.findByLabelText('Clear search')).toBeInTheDocument()
+  })
+
 })
