@@ -255,7 +255,13 @@ class Scanner:
 
         if probe is not None:
             try:
-                return probe.probe(path).capture_time
+                ct = probe.probe(path).capture_time
+                if ct is not None:
+                    # Adapters disagree on tz-awareness (e.g. PillowImageProbe
+                    # returns naive datetimes); normalize so sorting never
+                    # compares naive against aware.
+                    return ct if ct.tzinfo else ct.replace(tzinfo=datetime.timezone.utc)
+                return None
             except Exception:  # noqa: BLE001 — probing is best-effort for sort order
                 pass
 

@@ -333,3 +333,72 @@ class TestScanCaptureTimeOrdering:
         names = [Path(c.path).name for c in candidates]
 
         assert names == ["photo_earlier.jpg", "photo_later.jpg"]
+
+    def test_mixed_naive_and_aware_capture_times_do_not_crash(
+        self, tmp_folder: Path, repo: FakeCatalogRepository
+    ):
+        """Video probes return tz-aware capture_time; PillowImageProbe returns
+        naive capture_time (both EXIF and its file-time fallback are naive).
+        Sorting a folder with both video and photo candidates must not raise
+        TypeError from comparing naive vs. aware datetimes.
+        """
+
+        class _NaivePhotoProbe:
+            def probe(self, path: Path) -> VideoMetadata:
+                return VideoMetadata(
+                    capture_time=dt.datetime(2026, 8, 18, 9, 0),  # naive, like PillowImageProbe
+                    date_source="file",
+                    duration_s=0.0,
+                )
+
+        _write_file(tmp_folder, "clip.mp4", b"video")
+        _write_file(tmp_folder, "photo.jpg", b"photo")
+
+        video_probe = _MapProbe({
+            "clip.mp4": dt.datetime(2026, 8, 18, 9, 30, tzinfo=dt.timezone.utc),
+        })
+        scanner = Scanner(
+            repo, probe=video_probe, image_probe=_NaivePhotoProbe(), photo_extensions={".jpg"},
+        )
+
+        candidates = scanner.scan([tmp_folder], {".mp4", ".jpg"})
+
+        assert len(candidates) == 2
+
+    def test_no_probe_injected_falls_back_to_birthtime(
+        self, tmp_folder: Path, repo: FakeCatalogRepository, monkeypatch: pytest.MonkeyPatch
+    ):
+        """With no probes injected at all, ordering falls back directly to
+        filesystem birth time and stays deterministic (no crash, no None-vs-
+        datetime comparison error)."""
+
+        _write_file(tmp_folder, "later.mp4", b"later")
+        _write_file(tmp_folder, "earlier.mp4", b"earlier")
+
+        birthtimes = {
+            "later.mp4": dt.datetime(2026, 8, 18, 9, 30, tzinfo=dt.timezone.utc).timestamp(),
+            "earlier.mp4": dt.datetime(2026, 8, 18, 9, 0, tzinfo=dt.timezone.utc).timestamp(),
+        }
+        real_stat = Path.stat
+
+        class _FakeStat:
+            def __init__(self, real_result: Any, birthtime: float) -> None:
+                self._real = real_result
+                self.st_birthtime = birthtime
+
+            def __getattr__(self, name: str) -> Any:
+                return getattr(self._real, name)
+
+        def fake_stat(self: Path, *args: Any, **kwargs: Any) -> Any:
+            result = real_stat(self, *args, **kwargs)
+            if self.name not in birthtimes:
+                return result
+            return _FakeStat(result, birthtimes[self.name])
+
+        monkeypatch.setattr(Path, "stat", fake_stat)
+
+        scanner = Scanner(repo)  # no probe, no image_probe
+        candidates = scanner.scan([tmp_folder], {".mp4"})
+        names = [Path(c.path).name for c in candidates]
+
+        assert names == ["earlier.mp4", "later.mp4"]
