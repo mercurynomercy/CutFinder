@@ -18,13 +18,14 @@ Tracker: docs/tasks/10-scanner.md — all DoD items covered.
 
 from __future__ import annotations
 
+import datetime as dt
 import os
 from pathlib import Path
 from typing import Any, Dict  # noqa: F401 — kept for type hints
 
 import pytest
 
-from cutfinder.domain.models import ClipCandidate
+from cutfinder.domain.models import ClipCandidate, VideoMetadata
 from tests.fakes.fake_repository import FakeCatalogRepository
 from cutfinder.pipeline.scanner import Scanner, _compute_fingerprint, _is_hidden
 
@@ -270,3 +271,65 @@ class TestScanEdgeCases:
 
         assert "clip.mp4" in c.path
         assert len(c.fingerprint) == 64
+
+
+# ── Scanner.scan — capture-time ordering ─────────────────────────
+
+class _MapProbe:
+    """Fake MetadataProbe returning a per-filename capture_time."""
+
+    def __init__(self, times_by_filename: Dict[str, dt.datetime]) -> None:
+        self._times = times_by_filename
+
+    def probe(self, path: Path) -> VideoMetadata:
+        return VideoMetadata(capture_time=self._times[path.name], date_source="embedded", duration_s=1.0)
+
+
+class TestScanCaptureTimeOrdering:
+    def test_sorts_candidates_by_capture_time_ascending(self, tmp_folder: Path, repo: FakeCatalogRepository):
+        # Write the later-captured file first so filesystem/walk order would
+        # produce the wrong (unsorted) order if capture-time sorting were absent.
+        _write_file(tmp_folder, "A-0001.mp4", b"shot later, written first")
+        _write_file(tmp_folder, "A-0002.mp4", b"shot earlier, written second")
+
+        probe = _MapProbe({
+            "A-0002.mp4": dt.datetime(2026, 8, 18, 9, 16, tzinfo=dt.timezone.utc),
+            "A-0001.mp4": dt.datetime(2026, 8, 18, 9, 20, tzinfo=dt.timezone.utc),
+        })
+        scanner = Scanner(repo, probe=probe)
+
+        candidates = scanner.scan([tmp_folder], {".mp4"})
+        names = [Path(c.path).name for c in candidates]
+
+        assert names == ["A-0002.mp4", "A-0001.mp4"]
+
+    def test_probe_failure_does_not_crash_scan(self, tmp_folder: Path, repo: FakeCatalogRepository):
+        """A probe that raises for one file should not abort the whole scan."""
+
+        class _RaisingProbe:
+            def probe(self, path: Path) -> VideoMetadata:
+                raise RuntimeError("ffprobe exploded")
+
+        _write_file(tmp_folder, "broken.mp4", b"corrupt")
+        scanner = Scanner(repo, probe=_RaisingProbe())
+
+        candidates = scanner.scan([tmp_folder], {".mp4"})
+
+        assert len(candidates) == 1
+
+    def test_photo_extensions_use_image_probe_for_ordering(self, tmp_folder: Path, repo: FakeCatalogRepository):
+        """Photos are ordered using image_probe, not the video probe."""
+
+        _write_file(tmp_folder, "photo_later.jpg", b"later photo, written first")
+        _write_file(tmp_folder, "photo_earlier.jpg", b"earlier photo, written second")
+
+        image_probe = _MapProbe({
+            "photo_later.jpg": dt.datetime(2026, 8, 18, 10, 0, tzinfo=dt.timezone.utc),
+            "photo_earlier.jpg": dt.datetime(2026, 8, 18, 8, 0, tzinfo=dt.timezone.utc),
+        })
+        scanner = Scanner(repo, image_probe=image_probe, photo_extensions={".jpg"})
+
+        candidates = scanner.scan([tmp_folder], {".jpg"})
+        names = [Path(c.path).name for c in candidates]
+
+        assert names == ["photo_earlier.jpg", "photo_later.jpg"]

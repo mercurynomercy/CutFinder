@@ -25,15 +25,21 @@ Examples
 
 from __future__ import annotations
 
+import datetime
 import hashlib
 import os
 import struct
 from pathlib import Path
 from typing import Protocol, Set
 
+from ..ports.probe import MetadataProbe
+
 # ── internal constants ────────────────────────────────────────────────
 
 _FOUR_MIB = 4 * 1024 * 1024  # 4 MiB, max bytes read for fingerprinting
+
+# Sort key fallback for candidates with unknowable capture time — sorts last.
+_MAX_DATETIME = datetime.datetime.max.replace(tzinfo=datetime.timezone.utc)
 
 
 # ── public API ────────────────────────────────────────────────────────
@@ -130,8 +136,19 @@ class Scanner:
     >>> scanner = Scanner(FakeCatalogRepository())        # doctest: +SKIP
     """
 
-    def __init__(self, repository: CatalogRepository) -> None:
+    def __init__(
+        self,
+        repository: CatalogRepository,
+        probe: MetadataProbe | None = None,
+        image_probe: MetadataProbe | None = None,
+        photo_extensions: set[str] | None = None,
+    ) -> None:
         self._repository = repository
+        self._probe = probe
+        self._image_probe = image_probe
+        self._photo_extensions = {
+            e.lower() for e in (photo_extensions or {".jpg", ".jpeg", ".png", ".heic"})
+        }
 
     def scan(
         self,
@@ -218,7 +235,36 @@ class Scanner:
 
                     candidates.append(ClipCandidate(path=str(file_path), fingerprint=fp))
 
+        # Order by actual shooting/capture time (not filesystem walk order,
+        # which is arbitrary) so sequential A-0001/B-0001 numbering downstream
+        # reflects when clips were actually shot.
+        candidates.sort(key=lambda c: self._capture_time(Path(c.path)) or _MAX_DATETIME)
+
         return candidates
+
+    def _capture_time(self, path: Path) -> "datetime.datetime | None":
+        """Best-effort capture time for *path*, used only for scan-order sorting.
+
+        Uses the injected probe (embedded QuickTime/EXIF time, with its own
+        fallback to file birth time) for the matching file kind. Falls back to
+        the filesystem birth time directly when no probe is injected or the
+        probe fails, so a single bad file never aborts the scan.
+        """
+        is_photo = path.suffix.lower() in self._photo_extensions
+        probe = self._image_probe if is_photo else self._probe
+
+        if probe is not None:
+            try:
+                return probe.probe(path).capture_time
+            except Exception:  # noqa: BLE001 — probing is best-effort for sort order
+                pass
+
+        try:
+            return datetime.datetime.fromtimestamp(
+                path.stat().st_birthtime, tz=datetime.timezone.utc
+            )
+        except OSError:
+            return None
 
 
 # ── re-export for convenience ───────────────────────────────────────
