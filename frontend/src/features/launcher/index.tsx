@@ -39,12 +39,24 @@ export function LauncherPage({ theme, onToggleTheme, onNavigate }: LauncherPageP
 
       <div className="w-full max-w-[640px] text-center">
         <div className="mb-2 flex items-center justify-center gap-3">
-          <div className="flex h-12 w-12 items-center justify-center rounded-[10px] bg-[--primary]">
-            <svg className="h-6 w-6" viewBox="0 0 20 20" fill="none" aria-hidden="true">
-              <rect x="2" y="2" width="16" height="16" rx="4" fill="white" opacity="0.2" />
-              <path d="M7 7.5L13 10L7 12.5V7.5Z" fill="white" />
-            </svg>
-          </div>
+          <svg className="h-14 w-14 shrink-0" viewBox="190 45 280 300" aria-hidden="true">
+            <rect x="220" y="158" width="240" height="158" rx="6" fill="#1a1a1c" />
+            <g transform="rotate(-18 224 168)">
+              <rect x="220" y="128" width="240" height="40" rx="4" fill="#1a1a1c" />
+              <polygon points="232,128 270,128 250,168 218,168" fill="#f5f5f0" />
+              <polygon points="284,128 322,128 302,168 264,168" fill="#1a1a1c" />
+              <polygon points="336,128 374,128 354,168 316,168" fill="#f5f5f0" />
+              <polygon points="388,128 426,128 406,168 368,168" fill="#1a1a1c" />
+              <polygon points="440,128 460,128 460,168 420,168" fill="#f5f5f0" />
+            </g>
+            <text x="312" y="272" textAnchor="middle" fontFamily="Arial, sans-serif" fontWeight="bold" fontSize="118" fill="#e63329">C</text>
+            <text x="380" y="272" textAnchor="middle" fontFamily="Arial, sans-serif" fontWeight="bold" fontSize="118" fill="#f5c518">F</text>
+            <line x1="232" y1="308" x2="208" y2="332" stroke="#1d1d1f" strokeWidth="11" strokeLinecap="round" />
+            <line x1="232" y1="308" x2="208" y2="332" stroke="#8a8a8e" strokeWidth="6" strokeLinecap="round" />
+            <circle cx="252" cy="288" r="30" fill="none" stroke="#1d1d1f" strokeWidth="10" />
+            <circle cx="252" cy="288" r="24" fill="#cfe8f5" fillOpacity="0.55" stroke="#f5f5f0" strokeWidth="2" />
+            <path d="M242 274 Q236 280 238 292" fill="none" stroke="#f5f5f0" strokeWidth="3" strokeLinecap="round" />
+          </svg>
           <h1 className="text-3xl font-semibold tracking-tight">{t('launcher.title')}</h1>
         </div>
         <p className="mb-10 text-[15px] text-[--text-secondary]">{t('launcher.subtitle')}</p>
