@@ -148,6 +148,16 @@ def _clip_columns_sql() -> str:  # noqa: D103
     return ", ".join(_CLIP_COLUMNS)
 
 
+def _fts5_quote(q: str) -> str:
+    """Wrap *q* as an FTS5 string literal so MATCH treats it as a literal phrase.
+
+    A bound ``?`` parameter to MATCH is still parsed as FTS5 query syntax (not
+    just SQL), so raw user input containing quotes/%%/parens/etc. raises
+    ``OperationalError``. Quoting turns any input into a safe phrase match.
+    """
+    return '"' + q.replace('"', '""') + '"'
+
+
 # ── Repository implementation ─────────────────────────────────
 
 class SqliteRepository:
@@ -390,7 +400,7 @@ class SqliteRepository:
             sql = self._select_clip_summary_sql(
                 "id IN (SELECT rowid FROM clips_fts WHERE clips_fts MATCH ? ORDER BY rank)"
             )
-            c.execute(sql, (trimmed,))
+            c.execute(sql, (_fts5_quote(trimmed),))
         else:
             # Short-query fallback (trigram needs ≥3 chars): LIKE across summary, description and transcript.
             sql = self._select_clip_summary_sql(

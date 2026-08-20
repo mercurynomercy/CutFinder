@@ -352,6 +352,17 @@ class TestSearch:
         results = repo.search("testing")
         assert len(results) == 3
 
+    @pytest.mark.parametrize("query", ['a"b', "100%", "a(b)"])
+    def test_search_special_chars_do_not_raise(self, repo, query):
+        """FTS5 syntax chars in the query must not blow up as OperationalError.
+
+        MATCH parses the *bound value* as FTS5 query syntax even though it's
+        passed as a ``?`` parameter — quotes/%/parens are FTS5 operators, not
+        SQL injection vectors, so parameterisation alone doesn't protect here.
+        """
+        results = repo.search(query)
+        assert results == []
+
 
 class TestFilterDateAndType:
     def test_combined_date_and_roll_filter(self, repo):
