@@ -527,6 +527,24 @@ class TestUpdateAnalysis:
         assert ("旅行", "manual") in names_sources  # manual copy survives
         assert ("风景", "auto") in names_sources
 
+    def test_regenerated_broll_auto_tag_matching_manual_name_does_not_raise(self, repo):
+        """Same collision as above, through the B-roll vision_result.tags branch."""
+        c = _make_clip("fp_ua_collide_broll", roll_type="b")
+        cid = repo.upsert_clip(c)
+
+        repo.add_tag(cid, "旅行")  # manual
+
+        result = AnalysisResult(
+            roll_type="b",
+            vision_result=_make_vision_result(tags=["旅行", "风景"]),
+        )
+        repo.update_analysis(cid, result)  # must not raise IntegrityError
+
+        tags = repo.get_tags(cid)
+        names_sources = [(t.name, t.source) for t in tags]
+        assert ("旅行", "manual") in names_sources  # manual copy survives
+        assert ("风景", "auto") in names_sources
+
     def test_updates_transcript_and_summary(self, repo):
         c = _make_clip("fp_uats", roll_type="a")
         cid = repo.upsert_clip(c)

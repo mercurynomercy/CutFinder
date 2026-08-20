@@ -161,8 +161,9 @@ def _locked(fn: _F) -> _F:
     synchronisation — a multi-statement method (e.g. ``update_analysis``) can
     otherwise be interrupted mid-transaction by another thread's ``commit()``
     (e.g. ``get_clip``'s cursor-closing commit). ``self._lock`` is an
-    ``RLock`` so same-thread nested calls (``find_by_fingerprint`` ->
-    ``get_clip``, ``update_analysis`` -> ``get_tags``) don't deadlock.
+    ``RLock`` so a same-thread nested call into another locked method
+    (currently only ``find_by_fingerprint`` -> ``get_clip``) doesn't
+    deadlock — a plain ``Lock`` would.
     """
 
     @functools.wraps(fn)
