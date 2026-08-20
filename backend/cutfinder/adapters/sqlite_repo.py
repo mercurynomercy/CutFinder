@@ -346,8 +346,9 @@ class SqliteRepository:
 
     def delete_clip(self, clip_id: int) -> None:
         c = self._conn.cursor()
-        # Foreign-key cascade may be off (PRAGMA), so clear keyframes explicitly.
+        # Foreign-key cascade may be off (PRAGMA), so clear child rows explicitly.
         c.execute("DELETE FROM keyframes WHERE clip_id = ?", (clip_id,))
+        c.execute("DELETE FROM transcripts WHERE clip_id = ?", (clip_id,))
         c.execute("DELETE FROM clips WHERE id = ?", (clip_id,))
         # Remove from FTS index (keyed by rowid = clips.id) *after* deleting the
         # clip: the clips_fts_delete trigger re-inserts an empty row on DELETE,

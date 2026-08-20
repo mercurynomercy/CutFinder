@@ -144,6 +144,23 @@ class TestClipCrud:
         repo.delete_clip(clip_id)
         assert repo.get_clip(clip_id) is None
 
+    def test_delete_clip_removes_transcript(self, repo):
+        """delete_clip must not leave an orphaned transcripts row.
+
+        ON DELETE CASCADE on transcripts.clip_id doesn't fire because the
+        connection never turns on PRAGMA foreign_keys, so delete_clip must
+        clear transcripts explicitly (as it already does for keyframes).
+        """
+        c = _make_clip("fp-del-tr")
+        clip_id = repo.upsert_clip(c)
+        repo.save_transcript(clip_id, _make_transcript("to be deleted"))
+
+        repo.delete_clip(clip_id)
+
+        cur = repo._conn.cursor()
+        cur.execute("SELECT * FROM transcripts WHERE clip_id = ?", (clip_id,))
+        assert cur.fetchall() == []
+
     def test_query_returns_all_clips(self, repo):
         for i in range(3):
             repo.upsert_clip(_make_clip(f"fp-q{i}", roll_type="a"))
