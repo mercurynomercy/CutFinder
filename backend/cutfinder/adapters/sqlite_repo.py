@@ -516,15 +516,12 @@ class SqliteRepository:
             auto_tags = []
 
         if auto_tags:
-            # Merge: keep manual, add/replace auto.
-            existing = self.get_tags(clip_id)
-            merged: list[Tag] = [t for t in existing if t.source == "manual"]
-            merged.extend(auto_tags)
-
-            # Remove old auto tags first.
+            # Remove old auto tags first, then insert the new ones. A regenerated
+            # auto tag whose name collides with an existing manual tag would
+            # violate UNIQUE(clip_id, name) — OR IGNORE skips it, so manual wins.
             c.execute("DELETE FROM tags WHERE clip_id = ? AND source = 'auto'", (clip_id,))
             c.executemany(
-                "INSERT INTO tags (clip_id, name, source) VALUES (?, ?, ?)",
+                "INSERT OR IGNORE INTO tags (clip_id, name, source) VALUES (?, ?, ?)",
                 [(clip_id, t.name, t.source) for t in auto_tags],
             )
 

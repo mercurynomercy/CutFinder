@@ -489,6 +489,26 @@ class TestUpdateAnalysis:
         fetched = repo.get_clip(cid)
         assert fetched.roll_type == "b"  # manual override preserved.
 
+    def test_regenerated_auto_tag_matching_manual_name_does_not_raise(self, repo):
+        """A regenerated auto tag whose name collides with an existing manual
+        tag must not violate UNIQUE(clip_id, name) — manual wins.
+        """
+        c = _make_clip("fp_ua_collide")
+        cid = repo.upsert_clip(c)
+
+        repo.add_tag(cid, "旅行")  # manual
+
+        result = AnalysisResult(
+            roll_type="a",
+            summary_result=_make_summary_result(tags=["旅行", "风景"]),
+        )
+        repo.update_analysis(cid, result)  # must not raise IntegrityError
+
+        tags = repo.get_tags(cid)
+        names_sources = [(t.name, t.source) for t in tags]
+        assert ("旅行", "manual") in names_sources  # manual copy survives
+        assert ("风景", "auto") in names_sources
+
     def test_updates_transcript_and_summary(self, repo):
         c = _make_clip("fp_uats", roll_type="a")
         cid = repo.upsert_clip(c)
