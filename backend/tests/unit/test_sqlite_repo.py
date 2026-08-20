@@ -11,6 +11,7 @@ Run with:
 from __future__ import annotations
 
 import datetime as _dt  # noqa: F401 — kept for type hints
+import threading
 
 import pytest  # noqa: F401 — used via conftest / pytest import below
 
@@ -794,3 +795,48 @@ def test_job_error_roundtrips(repo):
 def test_job_error_defaults_none(repo):
     job = repo.create_job(total=1)
     assert repo.get_job(job.id).error is None
+
+
+# ── Thread safety (shared connection used from multiple threads) ────
+
+class TestThreadSafety:
+    def test_repository_lock_is_reentrant(self, repo):
+        """Public methods share a lock that must tolerate same-thread nested
+        calls (e.g. find_by_fingerprint -> get_clip, update_analysis ->
+        get_tags) — a plain (non-reentrant) Lock would deadlock on those.
+        """
+        acquired = repo._lock.acquire(timeout=1)
+        assert acquired, "could not acquire repo lock at all"
+        try:
+            reacquired = repo._lock.acquire(timeout=1)
+            assert reacquired, "lock is not reentrant — same-thread re-acquire blocked"
+            repo._lock.release()
+        finally:
+            repo._lock.release()
+
+    def test_reentrant_public_method_call_does_not_hang(self):
+        """find_by_fingerprint calls self.get_clip() internally; with locking
+        applied to both, this must complete without deadlocking — even when
+        called from a different thread than the one that created the repo
+        (mirrors the app's shared check_same_thread=False connection).
+        """
+        import sqlite3 as _sqlite3
+
+        from cutfinder.adapters.sqlite_repo import SqliteRepository
+
+        conn = _sqlite3.connect(":memory:", check_same_thread=False)
+        repo = SqliteRepository(conn)
+        repo.upsert_clip(_make_clip("fp-lock"))
+
+        result: dict = {}
+
+        def run() -> None:
+            result["clip"] = repo.find_by_fingerprint("fp-lock")
+
+        t = threading.Thread(target=run)
+        t.start()
+        t.join(timeout=2.0)
+
+        assert not t.is_alive(), "find_by_fingerprint deadlocked"
+        assert result["clip"] is not None
+        repo.close()

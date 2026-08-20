@@ -8,11 +8,13 @@ All SQL is written with ``?`` parameterised queries to prevent injection.
 
 from __future__ import annotations
 
+import functools
 import json  # noqa: F401 — used throughout for segments_json / JSONB
+import threading
 from sqlite3 import IntegrityError, Connection as _Conn  # noqa: F401 — type hints
 import datetime as _dt
 
-from typing import Any
+from typing import Any, Callable, TypeVar
 
 from ..domain.models import (
     AnalysisResult,
@@ -148,6 +150,29 @@ def _clip_columns_sql() -> str:  # noqa: D103
     return ", ".join(_CLIP_COLUMNS)
 
 
+_F = TypeVar("_F", bound=Callable[..., Any])
+
+
+def _locked(fn: _F) -> _F:
+    """Serialize a public :class:`SqliteRepository` method on ``self._lock``.
+
+    The connection is shared (``check_same_thread=False``) between the
+    FastAPI event-loop thread and worker thread-pool threads, with no other
+    synchronisation — a multi-statement method (e.g. ``update_analysis``) can
+    otherwise be interrupted mid-transaction by another thread's ``commit()``
+    (e.g. ``get_clip``'s cursor-closing commit). ``self._lock`` is an
+    ``RLock`` so same-thread nested calls (``find_by_fingerprint`` ->
+    ``get_clip``, ``update_analysis`` -> ``get_tags``) don't deadlock.
+    """
+
+    @functools.wraps(fn)
+    def wrapper(self: "SqliteRepository", *args: Any, **kwargs: Any) -> Any:
+        with self._lock:
+            return fn(self, *args, **kwargs)
+
+    return wrapper  # type: ignore[return-value]
+
+
 def _fts5_quote(q: str) -> str:
     """Wrap *q* as an FTS5 string literal so MATCH treats it as a literal phrase.
 
@@ -178,6 +203,7 @@ class SqliteRepository:
 
     def __init__(self, conn: _Conn) -> None:
         self._conn = conn
+        self._lock = threading.RLock()
         self.execute_schema()
 
     # ── schema initialisation ────────────────────────────────
@@ -246,11 +272,13 @@ class SqliteRepository:
 
     # ── Clip CRUD ────────────────────────────────────────────
 
+    @_locked
     def exists_fingerprint(self, fp: str) -> bool:
         c = self._conn.cursor()
         c.execute("SELECT 1 FROM clips WHERE fingerprint = ?", (fp,))
         return c.fetchone() is not None
 
+    @_locked
     def upsert_clip(self, clip: Clip) -> int:
         c = self._conn.cursor()
 
@@ -293,6 +321,7 @@ class SqliteRepository:
         self._conn.commit()
         return int(c.execute("SELECT id FROM clips WHERE fingerprint = ?", (clip.fingerprint,)).fetchone()[0])
 
+    @_locked
     def get_clip(self, clip_id: int) -> Clip | None:
         c = self._conn.cursor()
         c.execute(f"SELECT {_clip_columns_sql()} FROM clips WHERE id = ?", (clip_id,))
@@ -331,6 +360,7 @@ class SqliteRepository:
         self._conn.commit()  # close any open cursors on this connection.
         return clip
 
+    @_locked
     def find_by_fingerprint(self, fp: str) -> Clip | None:
         c = self._conn.cursor()
         c.execute("SELECT id FROM clips WHERE fingerprint = ?", (fp,))
@@ -339,11 +369,13 @@ class SqliteRepository:
             return None
         return self.get_clip(row[0])
 
+    @_locked
     def set_library_path(self, clip_id: int, library_path: str) -> None:
         c = self._conn.cursor()
         c.execute("UPDATE clips SET library_path = ? WHERE id = ?", (library_path, clip_id))
         self._conn.commit()
 
+    @_locked
     def delete_clip(self, clip_id: int) -> None:
         c = self._conn.cursor()
         # Foreign-key cascade may be off (PRAGMA), so clear child rows explicitly.
@@ -358,6 +390,7 @@ class SqliteRepository:
 
     # ── Query / Filter / Search (FTS5) ─────────────────────
 
+    @_locked
     def query_clips(self, f: ClipFilter) -> list[ClipSummary]:
         """List clips matching optional filters."""
         c = self._conn.cursor()
@@ -383,6 +416,7 @@ class SqliteRepository:
 
         return [self._row_to_clip_summary(r) for r in c.fetchall()]
 
+    @_locked
     def search(self, q: str) -> list[ClipSummary]:
         """Full-text search across summary + description + transcript via FTS5.
 
@@ -415,11 +449,13 @@ class SqliteRepository:
 
     # ── Tags (per-clip) ─────────────────────────────────────
 
+    @_locked
     def get_tags(self, clip_id: int) -> list[Tag]:
         c = self._conn.cursor()
         c.execute("SELECT name, source FROM tags WHERE clip_id = ?", (clip_id,))
         return [Tag(name=r[0], source=r[1]) for r in c.fetchall()]
 
+    @_locked
     def set_tags(self, clip_id: int, tags: list[Tag]) -> None:
         c = self._conn.cursor()
         c.execute("DELETE FROM tags WHERE clip_id = ?", (clip_id,))
@@ -431,6 +467,7 @@ class SqliteRepository:
 
         self._conn.commit()
 
+    @_locked
     def add_tag(self, clip_id: int, tag_name: str) -> None:
         c = self._conn.cursor()
         try:
@@ -443,6 +480,7 @@ class SqliteRepository:
 
         self._conn.commit()
 
+    @_locked
     def remove_tag(self, clip_id: int, tag_name: str) -> None:
         c = self._conn.cursor()
         c.execute("DELETE FROM tags WHERE clip_id = ? AND name = ?", (clip_id, tag_name))
@@ -450,6 +488,7 @@ class SqliteRepository:
 
     # ── Roll correction ───────────────────────────────────────
 
+    @_locked
     def correct_roll(self, clip_id: int, roll: str) -> None:
         c = self._conn.cursor()
         c.execute(
@@ -458,6 +497,7 @@ class SqliteRepository:
         )
         self._conn.commit()
 
+    @_locked
     def set_status(self, clip_id: int, status: str) -> None:
         c = self._conn.cursor()
         c.execute("UPDATE clips SET status = ? WHERE id = ?", (status, clip_id))
@@ -465,6 +505,7 @@ class SqliteRepository:
 
     # ── Re-analyze: update only AI-generated fields ───────────
 
+    @_locked
     def update_analysis(self, clip_id: int, r: AnalysisResult) -> None:
         """Update transcript/summary/vision fields and auto-tags only.
 
@@ -534,6 +575,7 @@ class SqliteRepository:
 
     # ── Transcript ────────────────────────────────────────────
 
+    @_locked
     def save_transcript(self, clip_id: int, t: Transcript) -> None:
         c = self._conn.cursor()
         segments_json = json.dumps(
@@ -551,6 +593,7 @@ class SqliteRepository:
         self._sync_fts_transcript(clip_id)
         self._conn.commit()
 
+    @_locked
     def get_transcript(self, clip_id: int) -> Transcript | None:
         c = self._conn.cursor()
         c.execute("SELECT full_text, segments_json FROM transcripts WHERE clip_id = ?", (clip_id,))
@@ -592,6 +635,7 @@ class SqliteRepository:
 
     # ── Keyframe suggestions (req 8) ──────────────────────────
 
+    @_locked
     def save_keyframes(self, clip_id: int, suggestions: list[CutSuggestion]) -> None:
         c = self._conn.cursor()
         c.execute("DELETE FROM keyframes WHERE clip_id = ?", (clip_id,))
@@ -606,6 +650,7 @@ class SqliteRepository:
             )
         self._conn.commit()
 
+    @_locked
     def get_keyframes(self, clip_id: int) -> list[CutSuggestion]:
         c = self._conn.cursor()
         c.execute(
@@ -621,11 +666,13 @@ class SqliteRepository:
             for r in c.fetchall()
         ]
 
+    @_locked
     def clear_keyframes(self, clip_id: int) -> None:
         c = self._conn.cursor()
         c.execute("DELETE FROM keyframes WHERE clip_id = ?", (clip_id,))
         self._conn.commit()
 
+    @_locked
     def clip_ids_without_keyframes(self) -> list[int]:
         c = self._conn.cursor()
         # Photos have no keyframes (no timeline), so they are excluded — both the
@@ -641,6 +688,7 @@ class SqliteRepository:
 
     # ── Job CRUD ──────────────────────────────────────────────
 
+    @_locked
     def create_job(self, total: int, kind: str = "scan") -> Job:
         c = self._conn.cursor()
         now = _dt.datetime.now(_dt.timezone.utc).isoformat()
@@ -653,6 +701,7 @@ class SqliteRepository:
         job_id = c.execute("SELECT id FROM jobs ORDER BY id DESC LIMIT 1").fetchone()[0]
         return Job(id=job_id, status="queued", kind=kind, total=total, done=0, failed=0, started_at=now)
 
+    @_locked
     def update_job(self, job_id: int, **fields: Any) -> None:
         if not fields:
             return
@@ -679,6 +728,7 @@ class SqliteRepository:
 
         self._conn.commit()
 
+    @_locked
     def get_job(self, job_id: int) -> Job | None:
         c = self._conn.cursor()
         c.execute("""
@@ -696,6 +746,7 @@ class SqliteRepository:
             error=row[8],
         )
 
+    @_locked
     def list_jobs(self, limit: int | None = None) -> list[Job]:
         c = self._conn.cursor()
         sql = """
@@ -717,12 +768,14 @@ class SqliteRepository:
             for row in c.fetchall()
         ]
 
+    @_locked
     def delete_job(self, job_id: int) -> None:
         c = self._conn.cursor()
         c.execute("DELETE FROM job_failed_items WHERE job_id = ?", (job_id,))
         c.execute("DELETE FROM jobs WHERE id = ?", (job_id,))
         self._conn.commit()
 
+    @_locked
     def reset_interrupted_jobs(self) -> int:
         c = self._conn.cursor()
         c.execute(
@@ -732,6 +785,7 @@ class SqliteRepository:
         self._conn.commit()
         return c.rowcount
 
+    @_locked
     def record_failed_item(self, item: JobFailedItem) -> None:
         c = self._conn.cursor()
         c.execute("""
@@ -740,6 +794,7 @@ class SqliteRepository:
         """, (item.job_id, item.kind, item.path, item.fingerprint, item.clip_id, item.error))
         self._conn.commit()
 
+    @_locked
     def get_failed_items(self, job_id: int) -> list[JobFailedItem]:
         c = self._conn.cursor()
         c.execute("""
@@ -754,11 +809,13 @@ class SqliteRepository:
             for row in c.fetchall()
         ]
 
+    @_locked
     def clear_failed_items(self, job_id: int) -> None:
         c = self._conn.cursor()
         c.execute("DELETE FROM job_failed_items WHERE job_id = ?", (job_id,))
         self._conn.commit()
 
+    @_locked
     def close(self) -> None:
         """Close the underlying connection.  Idempotent (sqlite3 allows it)."""
         self._conn.close()
