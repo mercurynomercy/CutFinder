@@ -96,7 +96,7 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 CutFinder is **implemented** (v1.3+). Source code lives in `backend/cutfinder/` and `frontend/src/`. Build/lint/test commands:
 - **Setup:** `make setup` (mise + Brewfile deps + uv sync + frontend npm install)
 - **Dev server:** `make dev` (starts backend via uvicorn + Vite frontend proxy)
-- **Unit tests:** `make test` → pytest (e.g. 546 total, ~545 passed)
+- **Unit tests:** `make test` → pytest (e.g. 630 total, all passed)
 - **Integration tests:** `make test-integration` (real OpenAI-compatible server + ffmpeg/mlx-whisper/Silero)
 - **E2E:** `make e2e` (Playwright end-to-end against live server)
 - **Single test:** `pytest tests/unit/test_file.py::test_name -v`
@@ -126,7 +126,7 @@ These come directly from the user and override convenience:
 
 Text and vision models are **both served by a local OpenAI-compatible server** — any server that exposes the standard `/chat/completions` API works (OMLX at github.com/jundot/omlx is the reference implementation this project was built against; LM Studio, Ollama's OpenAI-compat endpoint, and vLLM are also fine). The endpoint and key are configured via `OPENAI_BASE_URL`/`OPENAI_API_KEY` in Settings (or `~/.cutfinder/config.json`). Models are *not* run as separate mlx-vlm processes — you call the same `/chat/completions` endpoint and switch via the `model` name.
 
-- **A-roll text summary + tags:** `Qwen3.6-35B-A3B` (text-only MoE — it cannot see images).
+- **A-roll text summary + tags:** `Qwen3.6-35B-A3B` (MoE; used here in a text-only role for A-roll summarization — note the model itself is actually multimodal/vision-capable per its model card, CutFinder just doesn't route images to it).
 - **B-roll visual tags + description:** `Qwen3-VL-8B-Instruct` (vision; send extracted frames as base64 images using the standard OpenAI vision message format).
 - The server should handle load/unload and memory (LRU eviction, model pinning, per-model TTL) so both models can be configured to coexist — OMLX does this.
 

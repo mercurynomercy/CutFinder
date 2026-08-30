@@ -249,7 +249,7 @@ make models                     # 预下载 mlx-whisper large-v3-mlx + Demucs ht
 ```bash
 cd backend
 
-uv run pytest tests/unit             # 仅单元测试（515 项，无需外部服务，秒级）
+uv run pytest tests/unit             # 仅单元测试（630 项，无需外部服务，秒级）
 uv run pytest -m integration         # 集成测试（需真实 OpenAI 兼容服务端 / ffmpeg / 样片）
 uv run mypy cutfinder/               # 类型检查（strict，clean）
 uv run ruff check cutfinder/         # linting（clean）

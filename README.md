@@ -253,7 +253,7 @@ You don't have to run this — models are **downloaded automatically on first us
 ```bash
 cd backend
 
-uv run pytest tests/unit             # unit tests only (515, no external services, seconds)
+uv run pytest tests/unit             # unit tests only (630, no external services, seconds)
 uv run pytest -m integration         # integration tests (need a real OpenAI-compatible server / ffmpeg / sample clips)
 uv run mypy cutfinder/               # type check (strict, clean)
 uv run ruff check cutfinder/         # linting (clean)
