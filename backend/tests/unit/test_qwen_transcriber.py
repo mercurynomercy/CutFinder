@@ -325,3 +325,10 @@ def test_run_of_unpunctuated_fragments_all_merge_forward() -> None:
     cues = [_seg(0.0, 0.5, "我们"), _seg(0.6, 1.2, "现在"), _seg(1.3, 3.0, "准备去吃饭了。")]
     out = _merge(cues)
     assert [c.text for c in out] == ["我们现在准备去吃饭了。"]
+
+
+def test_clean_fold_does_not_split_hyphenated_or_decimal_tokens() -> None:
+    out = clean_cues([Segment(start_s=0.0, end_s=1.0, text="e-"), Segment(start_s=1.0, end_s=1.0, text="mail")])
+    assert [c.text for c in out] == ["e-mail"]
+    out = clean_cues([Segment(start_s=0.0, end_s=1.0, text="3."), Segment(start_s=1.0, end_s=1.0, text="5")])
+    assert [c.text for c in out] == ["3.5"]

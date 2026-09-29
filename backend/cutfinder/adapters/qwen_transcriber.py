@@ -272,11 +272,16 @@ def _join(a: str, b: str) -> str:
     """Concatenate two cue texts, restoring the word space Latin text needs.
 
     Cue text is stripped, so joining ``"Hey,"`` and ``"you're"`` must put the
-    space back; CJK text (or a CJK side of the boundary) joins without one.
+    space back; CJK text (or a CJK side of the boundary) joins without one, as
+    does a word the aligner split mid-token (``e-`` + ``mail``, ``3.`` + ``5``).
     """
-    if a and b and not _is_wide(a[-1]) and not a[-1].isspace() and b[0].isalnum() and not _is_wide(b[0]):
-        return f"{a} {b}"
-    return a + b
+    if not (a and b) or _is_wide(a[-1]) or a[-1].isspace():
+        return a + b
+    if not b[0].isalnum() or _is_wide(b[0]) or a[-1] in "-'’/":
+        return a + b
+    if a[-1] in ".," and b[0].isdigit() and len(a) > 1 and a[-2].isdigit():
+        return a + b
+    return f"{a} {b}"
 
 
 def merge_short_cues(
