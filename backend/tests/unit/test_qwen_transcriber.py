@@ -9,6 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from cutfinder.adapters.qwen_transcriber import (
+    _display_width,
     _lang_name,
     assemble_cues,
     clean_cues,
@@ -118,6 +119,18 @@ def test_group_breaks_on_max_chars() -> None:
     assert [c.text for c in cues] == ["一二", "三四"]
 
 
+def test_display_width_counts_latin_as_half() -> None:
+    assert _display_width("你好。") == 3.0
+    assert _display_width("and I") == 2.5
+
+
+def test_group_measures_english_by_display_width() -> None:
+    # 21 Latin chars = width 10.5 < 18: one cue, not chopped at 18 characters.
+    timed = [("You ", 0.0, 0.2), ("know ", 0.2, 0.4), ("the ", 0.4, 0.5), ("location ", 0.5, 0.9)]
+    cues = group_cues(timed, offset=0.0, max_chars=18, max_dur=6.0, gap_s=0.7)
+    assert [c.text for c in cues] == ["You know the location"]
+
+
 # ── cue assembly across chunks ────────────────────────────────────
 
 def test_assemble_merges_sentence_split_across_chunks() -> None:
@@ -157,7 +170,7 @@ def _seg(start: float, end: float, text: str) -> Segment:
 
 def _merge(cues: list[Segment]) -> list[Segment]:
     return merge_short_cues(
-        cues, max_gap_s=1.0, short_max_chars=3, max_chars=18, max_dur=6.0,
+        cues, max_gap_s=1.0, short_max_chars=4, max_chars=18, max_dur=6.0,
     )
 
 
@@ -198,12 +211,59 @@ def test_short_cue_not_merged_when_it_would_exceed_max_dur() -> None:
     assert [c.text for c in out] == ["一二三四五六", "了"]
 
 
-def test_short_cue_not_merged_when_combined_exceeds_max_chars() -> None:
-    # 17 + 1 = 18 fits; 18 + 1 = 19 overflows one line, so it stays split.
-    out = _merge([_seg(0.0, 2.0, "一二三四五六七八九十一二三四五六七"), _seg(2.1, 2.4, "了")])
-    assert [c.text for c in out] == ["一二三四五六七八九十一二三四五六七了"]
-    out2 = _merge([_seg(0.0, 2.0, "一二三四五六七八九十一二三四五六七八"), _seg(2.1, 2.4, "了")])
-    assert [c.text for c in out2] == ["一二三四五六七八九十一二三四五六七八", "了"]
+def test_short_cue_not_merged_when_combined_exceeds_overflow_limit() -> None:
+    # A short-cue merge may overflow max_chars (18) up to 1.5x = 27 (two lines):
+    # 26 + 1 = 27 fits; 27 + 1 = 28 overflows, so it stays split.
+    out = _merge([_seg(0.0, 2.0, "一" * 26), _seg(2.1, 2.4, "了")])
+    assert [c.text for c in out] == ["一" * 26 + "了"]
+    out2 = _merge([_seg(0.0, 2.0, "一" * 27), _seg(2.1, 2.4, "了")])
+    assert [c.text for c in out2] == ["一" * 27, "了"]
+
+
+def test_short_exclaim_folds_forward_into_abutting_long_line() -> None:
+    # 好冷啊！ (0.32s) + a 17-char line = 20 > 18, but within the overflow limit.
+    cues = [_seg(8.26, 8.58, "好冷啊！"), _seg(8.58, 11.78, "好冷，怪不得他们说不适合游泳，真的好")]
+    out = _merge(cues)
+    assert [c.text for c in out] == ["好冷啊！好冷，怪不得他们说不适合游泳，真的好"]
+
+
+def test_unpunctuated_fragment_prefers_merging_forward() -> None:
+    # "and I" was cut off at a pause mid-sentence: it belongs with what follows.
+    cues = [
+        _seg(613.76, 616.08, "You know the location of the secret base,"),
+        _seg(616.16, 617.04, "and I"),
+        _seg(617.84, 618.72, "will take it from you."),
+    ]
+    out = _merge(cues)
+    assert [c.text for c in out] == [
+        "You know the location of the secret base,",
+        "and I will take it from you.",
+    ]
+    assert (out[1].start_s, out[1].end_s) == (616.16, 618.72)
+
+
+def test_four_char_cjk_fragment_is_short() -> None:
+    cues = [_seg(0.0, 1.4, "听起来就"), _seg(1.45, 3.0, "就非常的美味呢。")]
+    out = _merge(cues)
+    assert [c.text for c in out] == ["听起来就就非常的美味呢。"]
+
+
+def test_sub_second_cue_is_short_even_when_wide() -> None:
+    cues = [_seg(0.0, 3.0, "你在想什么？"), _seg(3.1, 3.5, "想什么？想什么？")]
+    out = _merge(cues)
+    assert [c.text for c in out] == ["你在想什么？想什么？想什么？"]
+
+
+def test_merging_latin_cues_keeps_a_space_between_words() -> None:
+    cues = [_seg(0.0, 0.2, "Hey,"), _seg(0.3, 1.5, "you're not authorized!")]
+    out = _merge(cues)
+    assert [c.text for c in out] == ["Hey, you're not authorized!"]
+
+
+def test_merging_cjk_cues_adds_no_space() -> None:
+    cues = [_seg(0.0, 0.5, "我们"), _seg(0.6, 1.5, "去吃brunch啦！")]
+    out = _merge(cues)
+    assert [c.text for c in out] == ["我们去吃brunch啦！"]
 
 
 def test_two_long_cues_not_merged() -> None:
@@ -248,3 +308,20 @@ def test_clean_drops_zero_duration_and_dups() -> None:
     ]
     out = clean_cues(cues)
     assert [c.text for c in out] == ["hello", "world"]
+
+
+def test_clean_folds_zero_duration_latin_word_with_a_space() -> None:
+    # The "thebook" / "pleasebe" regression: a folded English word must keep
+    # the space the cue boundary stripped.
+    cues = [
+        Segment(start_s=0.0, end_s=2.0, text="Sir, we have put the"),
+        Segment(start_s=2.0, end_s=2.0, text="book"),
+    ]
+    out = clean_cues(cues)
+    assert [c.text for c in out] == ["Sir, we have put the book"]
+
+
+def test_run_of_unpunctuated_fragments_all_merge_forward() -> None:
+    cues = [_seg(0.0, 0.5, "我们"), _seg(0.6, 1.2, "现在"), _seg(1.3, 3.0, "准备去吃饭了。")]
+    out = _merge(cues)
+    assert [c.text for c in out] == ["我们现在准备去吃饭了。"]

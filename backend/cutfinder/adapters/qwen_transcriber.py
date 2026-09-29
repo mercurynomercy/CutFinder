@@ -50,6 +50,9 @@ _LANG_NAMES = {"zh": "Chinese", "en": "English", "ja": "Japanese", "ko": "Korean
 # Cue assembly: sentence-final marks force a cue break; the rest is bounded by
 # length / duration / silence gaps so cues stay readable.
 _HARD_PUNCT = "。！？!?…"
+# A merge that involves a short cue may overflow max_chars by this factor (the
+# result wraps onto a second line) rather than leave an unreadable fragment.
+_MERGE_OVERFLOW = 1.5
 
 # Loaded models, keyed by resolved local path (shared across instances).
 _MODEL_CACHE: dict[str, Any] = {}
@@ -170,7 +173,8 @@ def group_cues(
 ) -> list[Segment]:
     """Group reconstructed *timed* tokens into subtitle cues (offset to timeline).
 
-    A cue is flushed when it ends on sentence punctuation, reaches *max_chars*,
+    A cue is flushed when it ends on sentence punctuation, reaches *max_chars*
+    display width (see :func:`_display_width`),
     spans *max_dur* seconds, or the silence before the next token exceeds
     *gap_s*. Empty / whitespace tokens never start a cue.
     """
@@ -189,7 +193,7 @@ def group_cues(
         hard = any(c in _HARD_PUNCT for c in txt)
         flush = (
             hard
-            or len(stripped) >= max_chars
+            or _display_width(stripped) >= max_chars
             or next_gap > gap_s
             or (ce - cs) >= max_dur
         )
@@ -239,12 +243,40 @@ def assemble_cues(
     return cues
 
 
-def _content_len(text: str) -> int:
-    """Number of visible characters in *text*, ignoring spaces and punctuation."""
-    return sum(
-        1 for ch in text
-        if not ch.isspace() and unicodedata.category(ch)[0] not in ("P", "S")
+def _is_wide(ch: str) -> bool:
+    """Whether *ch* is a full-width (CJK) character."""
+    return unicodedata.east_asian_width(ch) in ("W", "F")
+
+
+def _display_width(text: str) -> float:
+    """On-screen width of *text* in CJK-character units.
+
+    A CJK / full-width character counts 1; Latin letters, digits, spaces and
+    half-width punctuation count 0.5 — so ``max_chars=18`` means 18 Chinese
+    characters or ~36 English letters on one line.
+    """
+    return sum(1.0 if _is_wide(ch) else 0.5 for ch in text)
+
+
+def _content_width(text: str) -> float:
+    """Display width of *text*, ignoring spaces and punctuation."""
+    return _display_width(
+        "".join(
+            ch for ch in text
+            if not ch.isspace() and unicodedata.category(ch)[0] not in ("P", "S")
+        )
     )
+
+
+def _join(a: str, b: str) -> str:
+    """Concatenate two cue texts, restoring the word space Latin text needs.
+
+    Cue text is stripped, so joining ``"Hey,"`` and ``"you're"`` must put the
+    space back; CJK text (or a CJK side of the boundary) joins without one.
+    """
+    if a and b and not _is_wide(a[-1]) and not a[-1].isspace() and b[0].isalnum() and not _is_wide(b[0]):
+        return f"{a} {b}"
+    return a + b
 
 
 def merge_short_cues(
@@ -254,34 +286,58 @@ def merge_short_cues(
     short_max_chars: int,
     max_chars: int,
     max_dur: float,
+    short_max_dur: float = 1.0,
 ) -> list[Segment]:
     """Merge short cues into an adjacent cue when they abut in time.
 
     The aligner over-splits continuous speech into tiny cues — a stranded
-    character (了 / 的 / 吧 …) or a 2-3 character filler that flashes by too fast
-    to read. A cue is "short" when its visible length (ignoring punctuation) is
-    at most *short_max_chars*. When a short cue sits within *max_gap_s* of its
-    previous cue, it is folded into it — provided the combined visible length
-    stays within *max_chars* (one readable line) and the combined cue within
-    *max_dur*. Runs of short cues collapse into readable lines this way; a
-    leading short cue folds forward into the next when that next cue arrives.
-    Cues separated by a real pause, or that would overflow a line, are untouched.
+    character (了 / 的 / 吧 …), a fragment cut off at a mid-sentence pause
+    (``听起来就`` / ``and I``), or a line that flashes by too fast to read. A cue
+    is "short" when its visible width (ignoring punctuation, see
+    :func:`_display_width`) is at most *short_max_chars*, or it lasts under
+    *short_max_dur* seconds. A short cue folds into a neighbour within
+    *max_gap_s* when the combined cue stays within *max_dur* and its visible
+    width within ``max_chars * _MERGE_OVERFLOW`` (a wrapped second line beats an
+    unreadable fragment). A short cue not ending in punctuation is the start of
+    the next sentence, so it merges forward when it can, else backward; others
+    merge backward first. Cues separated by a real pause are untouched.
     """
+    def _short(c: Segment) -> bool:
+        return (
+            _content_width(c.text) <= short_max_chars
+            or c.end_s - c.start_s < short_max_dur
+        )
+
     def _can_merge(a: Segment, b: Segment) -> bool:
-        la, lb = _content_len(a.text), _content_len(b.text)
         return (
             b.start_s - a.end_s <= max_gap_s
-            and (la <= short_max_chars or lb <= short_max_chars)
-            and la + lb <= max_chars
+            and (_short(a) or _short(b))
+            and _content_width(a.text) + _content_width(b.text)
+            <= max_chars * _MERGE_OVERFLOW
             and b.end_s - a.start_s <= max_dur
         )
 
+    def _prefers_forward(c: Segment, nxt: Segment | None) -> bool:
+        text = c.text.rstrip()
+        return (
+            nxt is not None
+            and _short(c)
+            and bool(text)
+            and unicodedata.category(text[-1])[0] not in ("P", "S")
+            and _can_merge(c, nxt)
+        )
+
     out: list[Segment] = []
-    for c in cues:
-        if out and _can_merge(out[-1], c):
+    waiting = False  # out[-1] deferred merging so it could join this cue
+    for i, c in enumerate(cues):
+        nxt = cues[i + 1] if i + 1 < len(cues) else None
+        forward = _prefers_forward(c, nxt)
+        if out and _can_merge(out[-1], c) and (waiting or not forward):
             prev = out.pop()
-            c = Segment(start_s=prev.start_s, end_s=c.end_s, text=prev.text + c.text)
+            c = Segment(start_s=prev.start_s, end_s=c.end_s, text=_join(prev.text, c.text))
+            forward = _prefers_forward(c, nxt)
         out.append(c)
+        waiting = forward
     return out
 
 
@@ -303,7 +359,7 @@ def clean_cues(cues: list[Segment]) -> list[Segment]:
             if out:
                 prev = out[-1]
                 out[-1] = Segment(
-                    start_s=prev.start_s, end_s=prev.end_s, text=prev.text + c.text,
+                    start_s=prev.start_s, end_s=prev.end_s, text=_join(prev.text, c.text),
                 )
             continue
         if out and out[-1].text == c.text:
@@ -343,7 +399,8 @@ class QwenTranscriber(Transcriber):
         cue_max_dur: float = 6.0,
         cue_gap_s: float = 0.7,
         cue_merge_gap_s: float = 1.5,
-        cue_merge_short_max: int = 3,
+        cue_merge_short_max: int = 4,
+        cue_merge_short_dur: float = 1.0,
     ) -> None:
         self._asr_model = asr_model
         self._aligner_model = aligner_model
@@ -356,6 +413,7 @@ class QwenTranscriber(Transcriber):
         self._cue_gap_s = cue_gap_s
         self._cue_merge_gap_s = cue_merge_gap_s
         self._cue_merge_short_max = cue_merge_short_max
+        self._cue_merge_short_dur = cue_merge_short_dur
         self._vad: Any = None  # lazily-loaded Silero VAD model
 
     # ── model loading / unloading ────────────────────────────────
@@ -525,6 +583,7 @@ class QwenTranscriber(Transcriber):
             clean_cues(all_cues),
             max_gap_s=self._cue_merge_gap_s,
             short_max_chars=self._cue_merge_short_max,
+            short_max_dur=self._cue_merge_short_dur,
             max_chars=self._cue_max_chars,
             max_dur=self._cue_max_dur,
         )
