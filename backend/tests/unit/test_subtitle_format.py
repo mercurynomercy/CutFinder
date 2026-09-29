@@ -15,15 +15,49 @@ def test_min_duration_extends_isolated_short_cue() -> None:
     assert (out[0].start_s, out[0].end_s) == (1.0, 4.0)
 
 
-def test_min_duration_caps_at_next_cue_start() -> None:
+def test_min_duration_uses_gap_before_next_cue_when_enough() -> None:
     segs = [
         Segment(start_s=1.0, end_s=1.3, text="好"),
-        Segment(start_s=2.0, end_s=2.4, text="嗯"),
+        Segment(start_s=5.0, end_s=8.0, text="嗯嗯嗯"),
     ]
     out = enforce_min_duration(segs, 3.0)
-    # First extends only to the next cue's start (no overlap); second extends fully.
+    assert out[0].end_s == 4.0
+    assert (out[1].start_s, out[1].end_s) == (5.0, 8.0)
+
+
+def test_min_duration_borrows_time_from_abutting_next_cue() -> None:
+    # 好冷啊！ (0.32s) runs straight into a long line: push the next cue's start
+    # so the short one is readable, while the next still keeps >= min_s.
+    segs = [
+        Segment(start_s=8.26, end_s=8.58, text="好冷啊！"),
+        Segment(start_s=8.58, end_s=11.78, text="好冷，怪不得他们说不适合游泳"),
+    ]
+    out = enforce_min_duration(segs, 1.0)
+    assert out[0].end_s == 9.26
+    assert (out[1].start_s, out[1].end_s) == (9.26, 11.78)
+
+
+def test_min_duration_borrow_leaves_next_cue_at_least_min() -> None:
+    segs = [
+        Segment(start_s=1.0, end_s=1.3, text="好"),
+        Segment(start_s=1.3, end_s=4.0, text="嗯嗯嗯"),
+    ]
+    out = enforce_min_duration(segs, 2.0)
+    # Next may only shrink to 2.0s → first ends at 2.0, not 3.0.
     assert out[0].end_s == 2.0
-    assert out[1].end_s == 5.0
+    assert (out[1].start_s, out[1].end_s) == (2.0, 4.0)
+
+
+def test_min_duration_never_borrows_from_already_short_next_cue() -> None:
+    segs = [
+        Segment(start_s=1.0, end_s=1.3, text="好"),
+        Segment(start_s=1.3, end_s=1.6, text="嗯"),
+    ]
+    out = enforce_min_duration(segs, 3.0)
+    # Next is shorter than min itself: no borrowing, first caps at its start;
+    # next then extends freely (nothing after it).
+    assert out[0].end_s == 1.3
+    assert (out[1].start_s, out[1].end_s) == (1.3, 4.3)
 
 
 def test_min_duration_leaves_long_cue_unchanged() -> None:

@@ -48,19 +48,27 @@ def enforce_min_duration(segments: list[Segment], min_s: float) -> list[Segment]
     """Hold each cue on screen for at least *min_s* seconds.
 
     A cue's end is pushed out to ``start + min_s`` so short cues (e.g. a 2-3
-    character utterance) stay readable, but never past the next cue's start, so
-    no overlap is introduced — a cue with little trailing silence extends only
-    into the gap available. A cue already long enough is left unchanged, and
-    *min_s* <= 0 returns the segments unchanged.
+    character utterance) stay readable. When the next cue starts too soon, the
+    short cue borrows time from it by delaying the next cue's start — but only
+    as far as leaves the next cue at least *min_s* itself, so no overlap is
+    introduced and a next cue already shorter than *min_s* is never shrunk. A
+    cue already long enough is left unchanged, and *min_s* <= 0 returns the
+    segments unchanged.
     """
     if min_s <= 0 or not segments:
         return list(segments)
+    segs = list(segments)
     out: list[Segment] = []
-    n = len(segments)
-    for i, seg in enumerate(segments):
+    n = len(segs)
+    for i, seg in enumerate(segs):
         new_end = max(seg.start_s + min_s, seg.end_s)  # extend only if needed
         if i + 1 < n:
-            new_end = min(new_end, segments[i + 1].start_s)
+            nxt = segs[i + 1]
+            # Latest point the next cue may start while keeping >= min_s.
+            limit = max(nxt.start_s, nxt.end_s - min_s)
+            new_end = min(new_end, limit)
+            if new_end > nxt.start_s:
+                segs[i + 1] = Segment(start_s=new_end, end_s=nxt.end_s, text=nxt.text)
         out.append(Segment(start_s=seg.start_s, end_s=new_end, text=seg.text))
     return out
 
