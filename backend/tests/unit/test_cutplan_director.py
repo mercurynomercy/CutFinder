@@ -542,6 +542,44 @@ def test_generate_agent_falls_back_to_staged_on_nonconvergence() -> None:
     assert result.plan.total_s == 12.0
 
 
+class FailingRunLLM(FakeAgentLLM):
+    """run() raises on its Nth call (an LLM/server error mid tool loop)."""
+
+    def __init__(self, steps: list[AgentStep], raw: str, fail_on: int) -> None:
+        super().__init__(steps, raw)
+        self._fail_on = fail_on
+
+    def run(self, messages: list[dict[str, Any]], tools: list[dict[str, Any]]) -> AgentStep:
+        if self.run_calls + 1 == self._fail_on:
+            self.run_calls += 1
+            raise RuntimeError("the OpenAI-compatible server returned no choices: incomplete_tool_call")
+        return super().run(messages, tools)
+
+
+def test_generate_agent_error_on_one_day_falls_back_and_keeps_other_days() -> None:
+    # Day 2's tool-loop call blows up (e.g. its emit_plan was truncated by the
+    # server). That must cost only the agent path for that day — it falls back
+    # to staged JSON — not abort the whole turn and drop every later date.
+    emit = lambda cid: AgentStep(tool_calls=[_tc("emit_plan", {"shots": [  # noqa: E731
+        {"clip_id": cid, "in_s": 0, "out_s": 5},
+    ]})])
+    raw = '{"shots": [{"clip_id": 2, "roll": "b", "in_s": 0, "out_s": 5}]}'
+    llm = FailingRunLLM([emit(1), emit(3)], raw=raw, fail_on=2)
+    briefs = [
+        ClipBrief(clip_id=1, roll="a", has_transcript=True, capture_time="2026-04-25T09:00:00"),
+        ClipBrief(clip_id=2, roll="b", capture_time="2026-04-26T09:00:00"),
+        ClipBrief(clip_id=3, roll="b", capture_time="2026-04-27T09:00:00"),
+    ]
+    details = _details()
+    details[3] = ClipDetail(clip_id=3, roll="b", duration_s=20.0, capture_time="2026-04-27T09:00:00")
+    director = CutDirector(llm, FakeRetriever(briefs, details))
+    result = director.generate(RoughCutRequest(date_from="2026-04-25"), [], "剪一条")
+
+    assert result.plan is not None
+    assert result.plan.chapters == ["2026-04-25", "2026-04-26", "2026-04-27"]
+    assert llm.complete_calls == 1  # only the failed day used the staged fallback
+
+
 def test_run_day_dedups_repeated_tool_calls() -> None:
     # Model inspects the same B-roll twice (hallucinated repeat) → the second is
     # short-circuited by the dedup guard, not re-executed (inspector hit once).

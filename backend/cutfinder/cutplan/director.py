@@ -736,7 +736,14 @@ class CutDirector:
         mid-conversation with deserialized state after an ``ask_user`` pause.
         """
         for round_i in range(start_round, self._max_tool_rounds):
-            step = self._llm.run(messages, DAY_TOOLS)
+            try:
+                step = self._llm.run(messages, DAY_TOOLS)
+            except Exception:  # noqa: BLE001 — one day's agent error must not abort the turn
+                # e.g. the server rejected a truncated emit_plan. Treat it as
+                # non-convergence so the caller falls back to staged JSON for
+                # this day and the remaining dates still get generated.
+                logger.warning("cutplan: tool loop failed for %s", day, exc_info=True)
+                return None, "", vision_used, findings, None
             if not step.tool_calls:
                 # Model replied in prose instead of calling a tool. Don't bail on
                 # the first one (that's why busy days never used tools): (1) if

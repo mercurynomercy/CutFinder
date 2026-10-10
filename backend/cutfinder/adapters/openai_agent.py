@@ -15,8 +15,23 @@ from ..ports.cutplan import AgentStep, ToolCall
 
 # Bound HTTP calls to the OpenAI-compatible server so a hung model server can't stall a cut-plan turn
 # forever. Larger window than the per-clip pipeline: the director generates up
-# to ~2048 tokens per round. A stuck request times out, is retried, then errors.
+# to ~4096 tokens per round. A stuck request times out, is retried, then errors.
 _REQUEST_TIMEOUT_S = 180.0
+
+
+def _first_choice(response: Any) -> Any:
+    """``response.choices[0]``, or a clear error when the server sent none.
+
+    A server can answer HTTP 200 with an ``{"error": ...}`` body instead of a
+    completion (OMLX does when a long request's tool call is cut off by
+    ``max_tokens``: its keepalive has already committed the 200). The SDK then
+    parses that into a response whose ``choices`` is ``None``.
+    """
+    if not response.choices:
+        raise RuntimeError(
+            f"the OpenAI-compatible server returned no choices: {getattr(response, 'error', None)}"
+        )
+    return response.choices[0]
 
 
 class OpenAIAgentClient:
@@ -45,7 +60,9 @@ class OpenAIAgentClient:
                     messages=messages,
                     tools=tools,
                     tool_choice="auto",
-                    max_tokens=2048,
+                    # Must fit a whole day's emit_plan call: a truncated tool
+                    # call is unrecoverable, so the server errors instead.
+                    max_tokens=4096,
                     temperature=0.7,
                     extra_body={"chat_template_kwargs": {"enable_thinking": False}},
                 )
@@ -62,7 +79,7 @@ class OpenAIAgentClient:
                     ) from e
                 continue
 
-            msg = response.choices[0].message
+            msg = _first_choice(response).message
             tool_calls: list[ToolCall] = []
             for tc in (msg.tool_calls or []):
                 try:
@@ -149,6 +166,6 @@ class OpenAIAgentClient:
                     ) from e
                 continue
 
-            return response.choices[0].message.content or ""
+            return _first_choice(response).message.content or ""
 
         raise RuntimeError("agent returned no completion after retries")
