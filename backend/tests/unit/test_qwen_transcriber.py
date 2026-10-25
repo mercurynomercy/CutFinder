@@ -332,3 +332,47 @@ def test_clean_fold_does_not_split_hyphenated_or_decimal_tokens() -> None:
     assert [c.text for c in out] == ["e-mail"]
     out = clean_cues([Segment(start_s=0.0, end_s=1.0, text="3."), Segment(start_s=1.0, end_s=1.0, text="5")])
     assert [c.text for c in out] == ["3.5"]
+
+
+# ── transcribe: aligner timestamps stay inside their chunk ────────
+
+def test_transcribe_clamps_aligner_overrun_into_its_chunk(tmp_path, monkeypatch) -> None:
+    """A hallucinated chunk whose aligner timestamps run past the chunk's end
+    must not produce cues that land after the next chunk's cues (out-of-order
+    cues later became end<begin and broke Final Cut Pro's iTT import)."""
+    import numpy as np
+
+    from cutfinder.adapters import qwen_transcriber as qt
+
+    video = tmp_path / "v.mp4"
+    video.write_bytes(b"x")
+    monkeypatch.setattr(qt, "_extract_audio", lambda p: np.zeros(qt._SR * 30, dtype=np.float32))
+
+    texts = {10.0: "一个两个" + "三个" * 10, 20.0: "师傅好！拍照也亮堂。城堡全景。"}
+    aligned = {
+        # Chunk [0,10]: the aligner spreads the loop far beyond the 10 s chunk.
+        10.0: [_Item("一个", 1.0, 2.0), _Item("两个", 12.0, 13.0), _Item("三个" * 10, 25.0, 26.0)],
+        20.0: [_Item("师傅好", 0.5, 1.5), _Item("拍照也亮堂", 3.0, 5.0), _Item("城堡全景", 7.0, 9.0)],
+    }
+
+    class _Model:
+        def generate(self, seg, text=None, **kw):
+            dur = round(len(seg) / qt._SR, 3)
+            if text is None:
+                return _Item(texts[dur], 0, 0)
+            return aligned[dur]
+
+    t = qt.QwenTranscriber(asr_model="a", aligner_model="b", max_chunk_s=20.0)
+    monkeypatch.setattr(t, "_load", lambda repo: _Model())
+    monkeypatch.setattr(t, "_speech_spans", lambda audio: [(0.0, 10.0), (10.0, 30.0)])
+
+    cues = t.transcribe(video).segments
+
+    assert cues, "expected cues"
+    for c in cues:
+        assert c.end_s >= c.start_s
+    starts = [c.start_s for c in cues]
+    assert starts == sorted(starts)
+    for a, b in zip(cues, cues[1:]):
+        assert a.end_s <= b.start_s
+    assert max(c.end_s for c in cues) <= 30.0

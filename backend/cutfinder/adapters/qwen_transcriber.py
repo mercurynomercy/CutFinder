@@ -572,7 +572,12 @@ class QwenTranscriber(Transcriber):
                     # Offset onto the clip timeline and defer grouping: cues are
                     # assembled across all chunks below, so a sentence straddling
                     # this boundary isn't cut into a stray one-character cue.
-                    results.append([(t, s + a, e + a) for t, s, e in timed])
+                    # Clamp into [a, b]: on a hallucinated loop the aligner can
+                    # spread tokens past the chunk end, which would land them
+                    # after the next chunk's cues (out-of-order, end < begin).
+                    results.append([
+                        (t, min(s + a, b), min(e + a, b)) for t, s, e in timed
+                    ])
                 else:
                     # Alignment yielded nothing — fall back to a single chunk cue.
                     results.append(Segment(start_s=a, end_s=b, text=text))
