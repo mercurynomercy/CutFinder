@@ -291,6 +291,7 @@ make e2e               # Playwright e2e
 
 ## 文档
 
+- [架构总览图 `docs/architecture.svg`](./docs/architecture.svg) —— 一页看懂全栈（PNG 导出版：[`docs/architecture.png`](./docs/architecture.png)）
 - [需求文档 `docs/proposal.md`](./docs/proposal.md) —— 目标、需求、范围、技术选型
 - [详细设计 `docs/detailed-design.md`](./docs/detailed-design.md) —— 模块、接口、数据模型、API、测试与部署
 - [UI 设计系统 `docs/detailed-design.md`](./docs/detailed-design.md) (§ UI 设计系统部分) —— 配色/字体/间距 token、组件规范、页面布局（深色优先）

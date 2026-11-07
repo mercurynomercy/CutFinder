@@ -1,0 +1,252 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1560" height="1010" viewBox="0 0 1560 1010" font-family="-apple-system, 'PingFang SC', 'Helvetica Neue', Arial, sans-serif">
+  <defs>
+    <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#475569"/>
+    </marker>
+    <marker id="ahl" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#94a3b8"/>
+    </marker>
+    <style>
+      .ttl   { font-size: 26px; font-weight: 700; fill: #0f172a; }
+      .sub   { font-size: 13px; fill: #64748b; }
+      .cttl  { font-size: 15px; font-weight: 700; }
+      .box   { font-size: 12px; fill: #1e293b; }
+      .boxb  { font-size: 12px; font-weight: 600; fill: #0f172a; }
+      .tiny  { font-size: 10.5px; fill: #64748b; }
+      .lbl   { font-size: 11px; font-weight: 600; fill: #475569; }
+      .pnl   { rx: 12; ry: 12; stroke-width: 1.5; }
+      .ib    { rx: 7; ry: 7; stroke-width: 1; }
+      .arr   { stroke: #475569; stroke-width: 2; fill: none; marker-end: url(#ah); }
+      .arrd  { stroke: #94a3b8; stroke-width: 1.6; fill: none; stroke-dasharray: 6 5; marker-end: url(#ahl); }
+    </style>
+  </defs>
+
+  <rect x="0" y="0" width="1560" height="1010" fill="#f8fafc"/>
+  <text class="ttl" x="50" y="34">CutFinder · 系统架构图</text>
+  <text class="sub" x="330" y="34">本地 / 离线 macOS 素材编目与粗剪助手 — localhost web app（六边形架构：ports ↔ adapters）</text>
+
+  <!-- ============ R1 客户端容器 ============ -->
+  <rect x="40" y="56" width="1480" height="226" rx="14" fill="#eef2f7" stroke="#cbd5e1"/>
+  <text class="cttl" x="58" y="78" fill="#334155">客户端 · 单台 Apple Silicon Mac（全程离线，原始素材永不离开本机）</text>
+
+  <!-- frontend panel -->
+  <rect class="pnl" x="60" y="94" width="880" height="170" fill="#dbeafe" stroke="#3b82f6"/>
+  <text class="cttl" x="78" y="116" fill="#1d4ed8">Web 前端 · Vite + React + TypeScript + Tailwind</text>
+  <rect class="ib" x="78" y="130" width="200" height="54" fill="#ffffff" stroke="#93c5fd"/>
+  <text class="boxb" x="90" y="152">Gallery</text>
+  <text class="tiny" x="90" y="170">缩略图墙 / 多选 / 扫描</text>
+  <rect class="ib" x="294" y="130" width="200" height="54" fill="#ffffff" stroke="#93c5fd"/>
+  <text class="boxb" x="306" y="152">Filters · Search</text>
+  <text class="tiny" x="306" y="170">A/Broll·日期·标签·全文</text>
+  <rect class="ib" x="510" y="130" width="200" height="54" fill="#ffffff" stroke="#93c5fd"/>
+  <text class="boxb" x="522" y="152">Detail</text>
+  <text class="tiny" x="522" y="170">摘要 / 转录 / 标签可修正</text>
+  <rect class="ib" x="726" y="130" width="196" height="54" fill="#ffffff" stroke="#93c5fd"/>
+  <text class="boxb" x="738" y="152">Cut Plan Chat</text>
+  <text class="tiny" x="738" y="170">粗剪会话 · 镜头表</text>
+  <rect class="ib" x="78" y="194" width="200" height="54" fill="#ffffff" stroke="#93c5fd"/>
+  <text class="boxb" x="90" y="216">Subtitles</text>
+  <text class="tiny" x="90" y="234">iTT / SRT / FCPXML 导出</text>
+  <rect class="ib" x="294" y="194" width="200" height="54" fill="#ffffff" stroke="#93c5fd"/>
+  <text class="boxb" x="306" y="216">Jobs Queue · Logs</text>
+  <text class="tiny" x="306" y="234">暂停 / 续跑 / 重试 / SSE</text>
+  <rect class="ib" x="510" y="194" width="200" height="54" fill="#ffffff" stroke="#93c5fd"/>
+  <text class="boxb" x="522" y="216">Settings</text>
+  <text class="tiny" x="522" y="234">Base URL·模型·语音引擎</text>
+  <rect class="ib" x="726" y="194" width="196" height="54" fill="#ffffff" stroke="#93c5fd"/>
+  <text class="boxb" x="738" y="216">Launcher</text>
+  <text class="tiny" x="738" y="234">选库 / 系统文件夹选择</text>
+
+  <!-- mac app shell panel -->
+  <rect class="pnl" x="966" y="94" width="534" height="170" fill="#d1fae5" stroke="#10b981"/>
+  <text class="cttl" x="984" y="116" fill="#047857">macOS 原生壳 · packaging/macapp</text>
+  <rect class="ib" x="984" y="130" width="498" height="44" fill="#ffffff" stroke="#6ee7b7"/>
+  <text class="boxb" x="996" y="148">.app bundle（pyinstaller / uv + 静态资源内嵌）</text>
+  <text class="tiny" x="996" y="166">双击即起：托管 uvicorn + 打开内置 WebView</text>
+  <rect class="ib" x="984" y="184" width="498" height="44" fill="#ffffff" stroke="#6ee7b7"/>
+  <text class="boxb" x="996" y="202">Info.plist · 图标 · 版本号</text>
+  <text class="tiny" x="996" y="220">localhost 单进程服务，无云端依赖</text>
+
+  <!-- ============ R1 -> R2 arrow ============ -->
+  <path class="arr" d="M480,282 L480,316"/>
+  <text class="lbl" x="496" y="300">HTTP JSON + SSE 进度流</text>
+  <circle cx="440" cy="300" r="10" fill="#1d4ed8"/>
+  <text x="436" y="304" font-size="11" font-weight="700" fill="#ffffff">1</text>
+
+  <!-- ============ R2 API layer ============ -->
+  <rect class="pnl" x="60" y="318" width="1440" height="118" fill="#ffedd5" stroke="#f97316"/>
+  <text class="cttl" x="78" y="340" fill="#c2410c">API 服务层 · FastAPI（app.py：create_app 工厂 + LibraryContext 运行时可换库）</text>
+  <rect class="ib" x="78" y="352" width="256" height="68" fill="#ffffff" stroke="#fdba74"/>
+  <text class="boxb" x="90" y="374">routes.py</text>
+  <text class="tiny" x="90" y="392">/scan · /jobs · /clips · /search</text>
+  <text class="tiny" x="90" y="408">/thumbnail · /keyframes · /logs</text>
+  <rect class="ib" x="350" y="352" width="220" height="68" fill="#ffffff" stroke="#fdba74"/>
+  <text class="boxb" x="362" y="374">cut_routes.py</text>
+  <text class="tiny" x="362" y="392">/cut/sessions · /messages</text>
+  <text class="tiny" x="362" y="408">/plan · /prompt</text>
+  <rect class="ib" x="586" y="352" width="212" height="68" fill="#ffffff" stroke="#fdba74"/>
+  <text class="boxb" x="598" y="374">settings_routes.py</text>
+  <text class="tiny" x="598" y="392">GET/PUT /settings</text>
+  <text class="tiny" x="598" y="408">POST /settings/openai/test</text>
+  <rect class="ib" x="814" y="352" width="212" height="68" fill="#ffffff" stroke="#fdba74"/>
+  <text class="boxb" x="826" y="374">library_routes.py</text>
+  <text class="tiny" x="826" y="392">绑定 / 切换目标库</text>
+  <text class="tiny" x="826" y="408">孤儿条目检测与清理</text>
+  <rect class="ib" x="1042" y="352" width="212" height="68" fill="#ffffff" stroke="#fdba74"/>
+  <text class="boxb" x="1054" y="374">subtitles / schemas</text>
+  <text class="tiny" x="1054" y="392">字幕导出任务 + 状态</text>
+  <text class="tiny" x="1054" y="408">请求/响应 Pydantic 模型</text>
+  <rect class="ib" x="1270" y="352" width="212" height="68" fill="#fff7ed" stroke="#fdba74" stroke-dasharray="5 4"/>
+  <text class="boxb" x="1282" y="374">未绑定库时</text>
+  <text class="tiny" x="1282" y="392">catalog 路由 → 503</text>
+  <text class="tiny" x="1282" y="408">/library 始终可用</text>
+
+  <!-- ============ R2 -> R3 ============ -->
+  <path class="arr" d="M480,436 L480,464"/>
+  <text class="lbl" x="496" y="454">入队 / 单并发消费</text>
+  <circle cx="440" cy="452" r="10" fill="#c2410c"/>
+  <text x="436" y="456" font-size="11" font-weight="700" fill="#ffffff">2</text>
+
+  <!-- ============ R3 orchestration ============ -->
+  <rect class="pnl" x="60" y="466" width="1440" height="122" fill="#ede9fe" stroke="#8b5cf6"/>
+  <text class="cttl" x="78" y="488" fill="#6d28d9">编排 &amp; 后台执行 · pipeline/ + worker</text>
+  <rect class="ib" x="78" y="500" width="204" height="74" fill="#ffffff" stroke="#c4b5fd"/>
+  <text class="boxb" x="90" y="522">WorkerQueue</text>
+  <text class="tiny" x="90" y="540">asyncio 单并发</text>
+  <text class="tiny" x="90" y="556">SSE 广播 · 暂停/续跑</text>
+  <rect class="ib" x="298" y="500" width="184" height="74" fill="#ffffff" stroke="#c4b5fd"/>
+  <text class="boxb" x="310" y="522">Orchestrator</text>
+  <text class="tiny" x="310" y="540">逐条 clip 步骤编排</text>
+  <text class="tiny" x="310" y="556">错误隔离 status=error</text>
+  <rect class="ib" x="498" y="500" width="150" height="74" fill="#ffffff" stroke="#c4b5fd"/>
+  <text class="boxb" x="510" y="522">Scanner</text>
+  <text class="tiny" x="510" y="540">递归源目录</text>
+  <text class="tiny" x="510" y="556">指纹去重（幂等）</text>
+  <rect class="ib" x="664" y="500" width="170" height="74" fill="#ffffff" stroke="#c4b5fd"/>
+  <text class="boxb" x="676" y="522">CutPlanService</text>
+  <text class="tiny" x="676" y="540">会话 / 意图解析</text>
+  <text class="tiny" x="676" y="556">preflight 预算校验</text>
+  <rect class="ib" x="850" y="500" width="160" height="74" fill="#ffffff" stroke="#c4b5fd"/>
+  <text class="boxb" x="862" y="522">Director</text>
+  <text class="tiny" x="862" y="540">per-day mini-agent</text>
+  <text class="tiny" x="862" y="556">+ Critic 复查一轮</text>
+  <rect class="ib" x="1026" y="500" width="180" height="74" fill="#ffffff" stroke="#c4b5fd"/>
+  <text class="boxb" x="1038" y="522">SubtitleExporter</text>
+  <text class="tiny" x="1038" y="540">iTT / SRT / FCPXML</text>
+  <text class="tiny" x="1038" y="556">用已存 transcript</text>
+  <rect class="ib" x="1222" y="500" width="260" height="74" fill="#faf5ff" stroke="#c4b5fd" stroke-dasharray="5 4"/>
+  <text class="boxb" x="1234" y="522">领域模型 domain/</text>
+  <text class="tiny" x="1234" y="540">Clip · Job · Transcript · Tag</text>
+  <text class="tiny" x="1234" y="556">Shot · CutPlan · RollType(A/B)</text>
+
+  <!-- ============ R3 -> R4 ============ -->
+  <path class="arrd" d="M770,588 L770,616"/>
+  <text class="lbl" x="786" y="608">实现并注入 ports</text>
+  <circle cx="730" cy="604" r="10" fill="#6d28d9"/>
+  <text x="726" y="608" font-size="11" font-weight="700" fill="#ffffff">3</text>
+
+  <!-- ============ R4 ports row ============ -->
+  <rect class="ib" x="60" y="618" width="192" height="44" fill="#ccfbf1" stroke="#14b8a6"/>
+  <text class="boxb" x="72" y="638">ports/probe.py</text>
+  <text class="tiny" x="72" y="654">MetadataProbe</text>
+  <rect class="ib" x="262" y="618" width="192" height="44" fill="#ccfbf1" stroke="#14b8a6"/>
+  <text class="boxb" x="274" y="638">ports/media.py</text>
+  <text class="tiny" x="274" y="654">ThumbnailMaker / Frames</text>
+  <rect class="ib" x="464" y="618" width="192" height="44" fill="#ccfbf1" stroke="#14b8a6"/>
+  <text class="boxb" x="476" y="638">ports/speech.py</text>
+  <text class="tiny" x="476" y="654">SpeechDetector / Transcriber</text>
+  <rect class="ib" x="666" y="618" width="192" height="44" fill="#ccfbf1" stroke="#14b8a6"/>
+  <text class="boxb" x="678" y="638">ports/ai.py</text>
+  <text class="tiny" x="678" y="654">Summarizer / VisionTagger</text>
+  <rect class="ib" x="868" y="618" width="192" height="44" fill="#ccfbf1" stroke="#14b8a6"/>
+  <text class="boxb" x="880" y="638">ports/cutplan.py</text>
+  <text class="tiny" x="880" y="654">LLMAgentClient / Retriever</text>
+  <rect class="ib" x="1070" y="618" width="192" height="44" fill="#ccfbf1" stroke="#14b8a6"/>
+  <text class="boxb" x="1082" y="638">ports/repository.py</text>
+  <text class="tiny" x="1082" y="654">CatalogRepository</text>
+  <rect class="ib" x="1272" y="618" width="192" height="44" fill="#ccfbf1" stroke="#14b8a6"/>
+  <text class="boxb" x="1284" y="638">ports/library.py</text>
+  <text class="tiny" x="1284" y="654">LibraryWriter（只写副本）</text>
+
+  <!-- adapters row -->
+  <rect class="pnl" x="60" y="670" width="452" height="94" fill="#f1f5f9" stroke="#64748b"/>
+  <text class="cttl" x="74" y="692" fill="#334155">媒体 / 图像适配器</text>
+  <rect class="ib" x="74" y="702" width="132" height="50" fill="#ffffff" stroke="#94a3b8"/>
+  <text class="boxb" x="84" y="722">ffmpeg_probe</text>
+  <text class="tiny" x="84" y="740">拍摄时间·时长</text>
+  <rect class="ib" x="216" y="702" width="132" height="50" fill="#ffffff" stroke="#94a3b8"/>
+  <text class="boxb" x="226" y="722">ffmpeg_media</text>
+  <text class="tiny" x="226" y="740">缩略图·关键帧</text>
+  <rect class="ib" x="358" y="702" width="134" height="50" fill="#ffffff" stroke="#94a3b8"/>
+  <text class="boxb" x="368" y="722">pillow_image</text>
+  <text class="tiny" x="368" y="740">缩略图裁切压缩</text>
+
+  <rect class="pnl" x="522" y="670" width="452" height="94" fill="#f1f5f9" stroke="#64748b"/>
+  <text class="cttl" x="536" y="692" fill="#334155">存储 / 持久化适配器</text>
+  <rect class="ib" x="536" y="702" width="132" height="50" fill="#ffffff" stroke="#94a3b8"/>
+  <text class="boxb" x="546" y="722">sqlite_repo</text>
+  <text class="tiny" x="546" y="740">catalog 读写</text>
+  <rect class="ib" x="678" y="702" width="132" height="50" fill="#ffffff" stroke="#94a3b8"/>
+  <text class="boxb" x="688" y="722">sqlite_footage</text>
+  <text class="tiny" x="688" y="740">检索 · 标签索引</text>
+  <rect class="ib" x="820" y="702" width="134" height="50" fill="#ffffff" stroke="#94a3b8"/>
+  <text class="boxb" x="830" y="722">fs_library</text>
+  <text class="tiny" x="830" y="740">copy2 保时间戳</text>
+
+  <rect class="pnl" x="984" y="670" width="516" height="94" fill="#fefce8" stroke="#ca8a04"/>
+  <text class="cttl" x="998" y="692" fill="#a16207">AI / 语音适配器（localhost 调用，不出网）</text>
+  <rect class="ib" x="998" y="702" width="112" height="50" fill="#ffffff" stroke="#fde047"/>
+  <text class="boxb" x="1006" y="722">openai_text</text>
+  <text class="tiny" x="1006" y="740">摘要 + 标签</text>
+  <rect class="ib" x="1118" y="702" width="112" height="50" fill="#ffffff" stroke="#fde047"/>
+  <text class="boxb" x="1126" y="722">openai_vision</text>
+  <text class="tiny" x="1126" y="740">base64 帧打标</text>
+  <rect class="ib" x="1238" y="702" width="112" height="50" fill="#ffffff" stroke="#fde047"/>
+  <text class="boxb" x="1246" y="722">openai_agent</text>
+  <text class="tiny" x="1246" y="740">tool-calling</text>
+  <rect class="ib" x="1358" y="702" width="126" height="50" fill="#ffffff" stroke="#fde047"/>
+  <text class="boxb" x="1366" y="722">broll_inspector</text>
+  <text class="tiny" x="1366" y="740">预算内二次看帧</text>
+
+  <!-- ============ R4 -> R5 arrows ============ -->
+  <path class="arr" d="M1050,764 L1050,790"/>
+  <text class="lbl" x="1066" y="782">HTTP /chat/completions（model 名切换）</text>
+  <circle cx="1010" cy="778" r="10" fill="#a16207"/>
+  <text x="1006" y="782" font-size="11" font-weight="700" fill="#ffffff">4</text>
+  <path class="arrd" d="M1280,764 L1280,790"/>
+  <text class="lbl" x="1292" y="782">子进程 · mlx-audio</text>
+
+  <!-- ============ R5 model serving ============ -->
+  <rect class="pnl" x="60" y="792" width="660" height="150" fill="#ffedd5" stroke="#ea580c"/>
+  <text class="cttl" x="76" y="814" fill="#9a3412">OpenAI 兼容推理服务器 · localhost（OMLX / LM Studio / Ollama / vLLM）</text>
+  <rect class="ib" x="76" y="826" width="628" height="34" fill="#ffffff" stroke="#fdba74"/>
+  <text class="boxb" x="88" y="848">POST /v1/chat/completions · OPENAI_BASE_URL / OPENAI_API_KEY（Settings 或 ~/.cutfinder/config.json）</text>
+  <rect class="ib" x="76" y="866" width="628" height="30" fill="#fff7ed" stroke="#fdba74"/>
+  <text class="boxb" x="88" y="886">Qwen3.6-35B-A3B — A-roll 文本摘要 + 中文标签（只用文本能力）</text>
+  <rect class="ib" x="76" y="902" width="628" height="30" fill="#fff7ed" stroke="#fdba74"/>
+  <text class="boxb" x="88" y="922">Qwen3-VL-8B-Instruct — B-roll 视觉标签 + 画面描述（同端点，换 model 名）</text>
+  <text class="tiny" x="76" y="950" fill="#9a3412">服务器负责显存调度：LRU 换入换出 · 模型 pinning · per-model TTL，两模型可共存</text>
+
+  <rect class="pnl" x="750" y="792" width="750" height="150" fill="#dcfce7" stroke="#16a34a"/>
+  <text class="cttl" x="766" y="814" fill="#15803d">本地语音子系统 · 独立进程（服务器不提供音频）</text>
+  <rect class="ib" x="766" y="826" width="350" height="34" fill="#ffffff" stroke="#86efac"/>
+  <text class="boxb" x="778" y="848">Silero VAD — 有声/无声判定 = A-roll / B-roll</text>
+  <rect class="ib" x="1136" y="826" width="350" height="34" fill="#ffffff" stroke="#86efac"/>
+  <text class="boxb" x="1148" y="848">Demucs — 人声分离（转录前置，可选）</text>
+  <rect class="ib" x="766" y="866" width="350" height="30" fill="#f0fdf4" stroke="#86efac"/>
+  <text class="boxb" x="778" y="886">whisper：mlx-whisper large-v3（默认引擎）</text>
+  <rect class="ib" x="1136" y="866" width="350" height="30" fill="#f0fdf4" stroke="#86efac"/>
+  <text class="boxb" x="1148" y="886">qwen：Qwen3-ASR + ForcedAligner（逐字时间轴）</text>
+  <text class="tiny" x="766" y="916" fill="#15803d">VAD 切块 → ASR → 强制对齐 → 字幕 cue；chunk ≤ 60s（上限 300s，aligner ≤ 400s/次）</text>
+  <text class="tiny" x="766" y="934" fill="#15803d">transcription_engine 机器级开关统一决定：编目转录 / 关键帧推理 / 字幕导出 · 模型落在 models/qwen/</text>
+
+  <!-- storage explanation block -->
+  <!-- ============ R6 storage band ============ -->
+  <path class="arrd" d="M250,764 L250,956"/>
+  <circle cx="250" cy="880" r="10" fill="#475569"/>
+  <text x="245" y="884" font-size="11" font-weight="700" fill="#ffffff">5</text>
+  <rect class="pnl" x="40" y="956" width="1480" height="52" fill="#f1f5f9" stroke="#64748b"/>
+  <text class="tiny" x="60" y="976" fill="#334155">存储 · 源素材库只读扫描（永不移动 / 改名 / 改写）→ 目标库副本 &lt;library&gt;/YYYY-MM-DD/A-roll|B-roll（shutil.copy2 保留拍摄与文件系统时间）</text>
+  <text class="tiny" x="60" y="996" fill="#334155">元数据·摘要·标签·转录 → &lt;library&gt;/.cutfinder/catalog.sqlite　·　缩略图 → .cutfinder/thumbnails/　·　重扫按文件指纹去重（幂等，不重复复制）　·　六边形：pipeline 依赖 ports/，adapters/ 提供 ffmpeg / SQLite / OpenAI / mlx 实现</text>
+
+</svg>

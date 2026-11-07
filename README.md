@@ -295,6 +295,7 @@ make e2e               # Playwright e2e
 
 ## Docs
 
+- [Architecture diagram `docs/architecture.svg`](./docs/architecture.svg) — one-page system map (PNG export: [`docs/architecture.png`](./docs/architecture.png))
 - [Proposal `docs/proposal.md`](./docs/proposal.md) — goals, requirements, scope, tech choices
 - [Detailed design `docs/detailed-design.md`](./docs/detailed-design.md) — modules, interfaces, data model, API, testing & deployment
 - [UI design system `docs/detailed-design.md`](./docs/detailed-design.md) (§ UI Design System section) — color/font/spacing tokens, component specs, page layouts (dark-first)
