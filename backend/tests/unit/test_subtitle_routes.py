@@ -112,6 +112,19 @@ def test_export_defaults_language_to_zh(tmp_path: Path) -> None:
     assert queue.enqueued[0].language == "zh"
 
 
+def test_export_defaults_min_cue_to_2s(tmp_path: Path) -> None:
+    video = tmp_path / "v.mp4"
+    video.write_bytes(b"x")
+    queue = _FakeQueue()
+    client = _client(worker_queue=queue)
+    resp = client.post(
+        "/api/subtitles/export",
+        json={"video_path": str(video), "out_dir": str(tmp_path)},
+    )
+    assert resp.status_code == 200
+    assert queue.enqueued[0].min_cue_s == 2.0
+
+
 def test_export_filters_unknown_formats(tmp_path: Path) -> None:
     video = tmp_path / "v.mp4"
     video.write_bytes(b"x")

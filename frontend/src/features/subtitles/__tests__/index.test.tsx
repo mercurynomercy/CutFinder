@@ -89,7 +89,9 @@ describe('SubtitlesPage', () => {
 
     expect(await screen.findByText('a.zh.itt')).toBeInTheDocument()
     expect(screen.getByText('a.zh.srt')).toBeInTheDocument()
-    expect(body).toEqual({ video_path: '/Movies/a.mov', out_dir: '/Movies/Subs', formats: ['itt', 'srt'], min_cue_s: 2 })
+    expect(body).toEqual({ video_path: '/Movies/a.mov', out_dir: '/Movies/Subs', formats: ['itt', 'srt'] })
+    expect(screen.queryByText('Minimum duration per cue (s)')).not.toBeInTheDocument()
+    expect(screen.queryByText('每条字幕最短时长（秒）')).not.toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: 'Reveal in Finder' }))
     await waitFor(() => expect(reveal).toHaveBeenCalledWith(7))

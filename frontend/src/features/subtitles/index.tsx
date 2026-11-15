@@ -60,9 +60,6 @@ export function SubtitlesPage({ onClose }: SubtitlesPageProps) {
   const [outDir, setOutDir] = useState<string | null>(null)
   const [itt, setItt] = useState(true)
   const [srt, setSrt] = useState(true)
-  // Minimum on-screen seconds per cue (0 = keep transcribed timing). Holds short
-  // cues long enough to read, without overlapping the next. Defaults to 2s.
-  const [minCueS, setMinCueS] = useState(2)
   const [phase, setPhase] = useState<Phase>('idle')
   const [files, setFiles] = useState<string[]>([])
   const [jobId, setJobId] = useState<number | null>(null)
@@ -137,7 +134,6 @@ export function SubtitlesPage({ onClose }: SubtitlesPageProps) {
         video_path: videoPath,
         out_dir: outDir,
         formats,
-        min_cue_s: minCueS,
       })
       setJobId(job_id)
       const status = await waitForJob(job_id, (pct) => {
@@ -293,22 +289,6 @@ export function SubtitlesPage({ onClose }: SubtitlesPageProps) {
               </label>
             </div>
             <p className="text-xs text-[--text-muted] leading-relaxed -mt-0.5">{t('subtitles.languageNote')}</p>
-
-            {/* Minimum on-screen seconds per cue */}
-            <div className="flex items-center gap-2 pt-1 border-t border-[--border]">
-              <span className="text-xs font-medium text-[--text-secondary] whitespace-nowrap">{t('subtitles.minDuration')}</span>
-              <input
-                type="number"
-                min={0}
-                max={30}
-                step={0.5}
-                value={minCueS}
-                onChange={(e) => setMinCueS(parseFloat(e.target.value) || 0)}
-                className="w-[72px] h-8 text-center font-mono text-sm bg-[--surface-2] border border-[--border] rounded-md text-[--text-primary] outline-none transition-colors focus:border-[--primary] focus:shadow-[0_0_0_2px_var(--primary-soft)]"
-              />
-              <span className="text-xs text-[--text-muted]">s</span>
-            </div>
-            <p className="text-xs text-[--text-muted] leading-relaxed">{t('subtitles.minDurationDesc')}</p>
           </div>
 
           {/* ── Model download notice (shown in content while model loads) ─ */}

@@ -139,7 +139,7 @@ class SubtitleExportRequest(BaseModel):
     formats: list[str] = ["itt", "srt"]
     language: Optional[str] = None
     # Minimum on-screen seconds per cue (0 = keep transcribed timing).
-    min_cue_s: float = Field(default=0.0, ge=0, le=10)
+    min_cue_s: float = Field(default=2.0, ge=0, le=10)
 
 
 class SubtitleExportResponse(BaseModel):

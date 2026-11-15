@@ -57,7 +57,7 @@ class SubtitleExporter:
         formats: list[str],
         language: str,
         *,
-        min_cue_s: float = 0.0,
+        min_cue_s: float = 2.0,
         on_progress: Callable[[float], None] | None = None,
     ) -> list[Path]:
         """Export subtitle files for *video_path* into *out_dir*.

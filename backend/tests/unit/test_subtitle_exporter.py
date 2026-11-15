@@ -36,7 +36,7 @@ def test_on_progress_forwarded_to_transcribe(tmp_path: Path) -> None:
 
 def test_writes_named_files_per_format(tmp_path: Path) -> None:
     exporter, _ = _exporter()
-    paths = exporter.export(tmp_path / "myvideo.mp4", tmp_path, ["itt", "srt"], "zh")
+    paths = exporter.export(tmp_path / "myvideo.mp4", tmp_path, ["itt", "srt"], "zh", min_cue_s=0.0)
 
     assert [p.name for p in paths] == ["myvideo.zh.itt", "myvideo.zh.srt"]
     assert all(p.exists() for p in paths)
