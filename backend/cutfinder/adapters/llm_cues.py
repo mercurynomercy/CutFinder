@@ -195,7 +195,8 @@ def llm_assemble_cues(
     becomes LLM-origin cues, any other window (and every fallback ``Segment``)
     stays rule-origin. Adjacent rule-origin items are assembled together exactly
     as :func:`assemble_cues` would, so with no usable LLM the output equals
-    today's rule path. Each run is cleaned and merged with its origin's params.
+    today's rule path. Cleaning spans all runs; each run is merged with its
+    origin's params.
     """
     from cutfinder.adapters.qwen_transcriber import (  # lazy: circular
         assemble_cues, clean_cues, merge_short_cues,
@@ -235,20 +236,32 @@ def llm_assemble_cues(
             stretch.extend(r)
     _flush(stretch)
 
-    out: list[Segment] = []
+    # Clean as one pass over all runs (clean_cues folds a zero-width cue onto its
+    # predecessor, which may sit in the previous run), keeping each run's origin.
+    cleaned: list[tuple[str, list[Segment]]] = []
     for origin, items in runs:
+        raw = items if origin == "llm" else assemble_cues(
+            items, max_chars=max_chars, max_dur=max_dur, gap_s=gap_s,
+        )
+        prev = next((c for _, c in reversed(cleaned) if c), None)
+        if prev:
+            head, *rest = clean_cues([prev[-1], *raw])
+            prev[-1] = head
+            cleaned.append((origin, rest))
+        else:
+            cleaned.append((origin, clean_cues(raw)))
+
+    out: list[Segment] = []
+    for origin, cues in cleaned:
         if origin == "llm":
             out.extend(merge_short_cues(
-                clean_cues(items), max_gap_s=merge_gap_s,
+                cues, max_gap_s=merge_gap_s,
                 short_max_chars=_LLM_SHORT_MAX_CHARS, short_max_dur=_LLM_SHORT_MAX_DUR,
                 max_chars=_LLM_MERGE_MAX_CHARS, max_dur=max_dur,
             ))
         else:
             out.extend(merge_short_cues(
-                clean_cues(assemble_cues(
-                    items, max_chars=max_chars, max_dur=max_dur, gap_s=gap_s,
-                )),
-                max_gap_s=merge_gap_s, short_max_chars=merge_short_max,
+                cues, max_gap_s=merge_gap_s, short_max_chars=merge_short_max,
                 short_max_dur=merge_short_dur, max_chars=max_chars, max_dur=max_dur,
             ))
     return out

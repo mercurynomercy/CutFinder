@@ -183,3 +183,11 @@ def test_llm_run_does_not_reglue_separated_lines():
     fake = FakeSegmenter(lambda t: first + "|" + t[len(first):])
     cues = llm_assemble_cues([toks], fake, **_PARAMS)
     assert [c.text for c in cues] == [first, "这次去大阪啦"]
+
+
+def test_zero_width_token_at_run_start_folds_onto_previous_run():
+    a = _chars("我们准备回家啦。")
+    b = [("了。", 20.0, 20.0)] + _chars("这次去大阪。", start=21.0)
+    fake = FakeSegmenter(lambda t: t)
+    cues = llm_assemble_cues([a, Segment(start_s=10, end_s=12, text="x"), b], fake, **_PARAMS)
+    assert [c.text for c in cues] == ["我们准备回家啦。", "x了。", "这次去大阪。"]
