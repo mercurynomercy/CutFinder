@@ -56,3 +56,17 @@ class Transcriber(Protocol):
         model download. Implementations that bundle their model may always
         return ``True``.
         """
+
+
+class SegmenterUnavailable(Exception):
+    """Text server unreachable or timed out — stop asking for this transcription."""
+
+
+class CueSegmenter(Protocol):
+    """Choose subtitle line breaks for a transcript window (text never changes)."""
+
+    def split(self, text: str) -> str | None:
+        """Return *text* with `|` inserted at line breaks, or None on a soft failure.
+
+        Raises SegmenterUnavailable on connection error / timeout.
+        """
