@@ -218,3 +218,22 @@ def test_clean_cues_dedup_overlap_only_collapses_only_overlaps():
     assert clean_cues([a, b]) == [a]
     assert clean_cues([a, b], dedup_overlap_only=True) == [a, b]
     assert clean_cues([b, c], dedup_overlap_only=True) == [b]
+
+
+def test_literal_slash_in_text_is_not_a_mismatch():
+    assert breaks_from_reply("全天24/7营业，我们去吧", "全天24/7营业，|我们去吧") == [9]
+    # A pause marker next to a literal slash is still ignored.
+    assert breaks_from_reply("1/2价格，很便宜", "1/2价格，|/很便宜") == [6]
+    # Dropping the literal slash changes the text.
+    assert breaks_from_reply("全天24/7营业", "全天247营业") is None
+
+
+def test_fullwidth_bar_is_a_break():
+    assert breaks_from_reply("我们准备回家啦，这次", "我们准备回家啦，｜这次") == [8]
+
+
+def test_literal_slash_window_uses_llm_breaks():
+    text = "全天24/7营业，我们去吧。"
+    fake = FakeSegmenter(lambda t: t.replace("，", "，|"))
+    cues = llm_assemble_cues([_chars(text)], fake, **_PARAMS)
+    assert [c.text for c in cues] == ["全天24/7营业，", "我们去吧。"]

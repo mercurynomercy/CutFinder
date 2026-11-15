@@ -78,20 +78,27 @@ def marked_text(window: list[Token], gap_s: float) -> str:
 
 
 def breaks_from_reply(original: str, reply: str) -> list[int] | None:
-    """Non-whitespace char offsets of each ``|`` in *reply*, or None if the text differs."""
-    reply = reply.replace("/", "")
-    if re.sub(r"\s", "", reply.replace("|", "")) != re.sub(r"\s", "", original):
-        return None
-    total = _nchars(original)
+    """Non-whitespace char offsets of each break in *reply*, or None if the text differs.
+
+    *reply* is walked against *original* (whitespace ignored): a char equal to
+    the next original char is text (so a literal ``/`` or ``|`` in the transcript
+    matches itself); otherwise ``|``/``｜`` is a break, ``/`` a pause marker, and
+    anything else a mismatch.
+    """
+    chars = re.sub(r"\s", "", original)
     offsets: list[int] = []
     pos = 0
     for ch in reply:
-        if ch == "|":
-            if 0 < pos < total and (not offsets or offsets[-1] != pos):
-                offsets.append(pos)
-        elif not ch.isspace():
+        if ch.isspace():
+            continue
+        if pos < len(chars) and ch == chars[pos]:
             pos += 1
-    return offsets
+        elif ch in "|｜":
+            if 0 < pos < len(chars) and (not offsets or offsets[-1] != pos):
+                offsets.append(pos)
+        elif ch != "/":
+            return None
+    return offsets if pos == len(chars) else None
 
 
 def split_at_breaks(window: list[Token], breaks: list[int]) -> list[list[Token]]:
