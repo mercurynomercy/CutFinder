@@ -173,6 +173,7 @@ def _build_into(ctx: LibraryContext, library_path: Union[str, Path]) -> None:
 
     def _make_transcriber(separator: Any | None) -> Any:
         if use_qwen:
+            from cutfinder.adapters.llm_segmenter import OpenAICueSegmenter
             from cutfinder.adapters.qwen_transcriber import QwenTranscriber
 
             return QwenTranscriber(
@@ -182,6 +183,11 @@ def _build_into(ctx: LibraryContext, library_path: Union[str, Path]) -> None:
                 separator=separator,
                 vad_threshold=prefs.vad_threshold,
                 max_chunk_s=prefs.qwen_max_chunk_s,
+                segmenter=(
+                    OpenAICueSegmenter(config)
+                    if config.env.OPENAI_BASE_URL.strip()
+                    else None
+                ),
             )
         return MlxWhisperTranscriber(model=whisper_model, separator=separator)
 

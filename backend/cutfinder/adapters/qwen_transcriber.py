@@ -36,7 +36,7 @@ import numpy as np
 
 from ..config import QWEN_MODELS_DIR
 from ..domain.models import Segment, Transcript
-from ..ports.speech import Transcriber, VocalSeparator
+from ..ports.speech import CueSegmenter, Transcriber, VocalSeparator
 
 logger = logging.getLogger(__name__)
 
@@ -406,6 +406,7 @@ class QwenTranscriber(Transcriber):
         cue_merge_gap_s: float = 1.5,
         cue_merge_short_max: int = 4,
         cue_merge_short_dur: float = 1.0,
+        segmenter: CueSegmenter | None = None,
     ) -> None:
         self._asr_model = asr_model
         self._aligner_model = aligner_model
@@ -419,6 +420,7 @@ class QwenTranscriber(Transcriber):
         self._cue_merge_gap_s = cue_merge_gap_s
         self._cue_merge_short_max = cue_merge_short_max
         self._cue_merge_short_dur = cue_merge_short_dur
+        self._segmenter = segmenter
         self._vad: Any = None  # lazily-loaded Silero VAD model
 
     # ── model loading / unloading ────────────────────────────────
@@ -582,6 +584,22 @@ class QwenTranscriber(Transcriber):
                     # Alignment yielded nothing — fall back to a single chunk cue.
                     results.append(Segment(start_s=a, end_s=b, text=text))
             _safe(progress, w + (1 - w) * (ci + 1) / total)
+
+        if self._segmenter is not None and (lang_code or "zh").lower().startswith("zh"):
+            # Lazy import: llm_cues imports from this module.
+            from .llm_cues import llm_assemble_cues
+
+            cues = llm_assemble_cues(
+                results,
+                self._segmenter,
+                max_chars=self._cue_max_chars,
+                max_dur=self._cue_max_dur,
+                gap_s=self._cue_gap_s,
+                merge_gap_s=self._cue_merge_gap_s,
+                merge_short_max=self._cue_merge_short_max,
+                merge_short_dur=self._cue_merge_short_dur,
+            )
+            return Transcript(full_text="".join(full_parts), segments=cues)
 
         all_cues = assemble_cues(
             results,

@@ -376,3 +376,62 @@ def test_transcribe_clamps_aligner_overrun_into_its_chunk(tmp_path, monkeypatch)
     for a, b in zip(cues, cues[1:]):
         assert a.end_s <= b.start_s
     assert max(c.end_s for c in cues) <= 30.0
+
+
+# ── transcribe: optional LLM segmenter (zh only) ──────────────────
+
+class _FakeSegmenter:
+    def __init__(self, reply=None):
+        self.calls: list[str] = []
+        self._reply = reply
+
+    def split(self, text):
+        self.calls.append(text)
+        return self._reply
+
+
+def _segmenter_transcriber(tmp_path, monkeypatch, segmenter):
+    import numpy as np
+
+    from cutfinder.adapters import qwen_transcriber as qt
+
+    video = tmp_path / "v.mp4"
+    video.write_bytes(b"x")
+    monkeypatch.setattr(qt, "_extract_audio", lambda p: np.zeros(qt._SR * 10, dtype=np.float32))
+    text = "今天天气很好我们去公园玩"
+
+    class _Model:
+        def generate(self, seg, text=None, **kw):
+            if text is None:
+                return _Item(_TEXT, 0, 0)
+            return [_Item(c, 0.2 * i, 0.2 * i + 0.2) for i, c in enumerate(_TEXT)]
+
+    _TEXT = text
+    t = qt.QwenTranscriber(asr_model="a", aligner_model="b", segmenter=segmenter)
+    monkeypatch.setattr(t, "_load", lambda repo: _Model())
+    monkeypatch.setattr(t, "_speech_spans", lambda audio: [(0.0, 5.0)])
+    return t, video
+
+
+def test_transcribe_uses_segmenter_for_zh(tmp_path, monkeypatch) -> None:
+    seg = _FakeSegmenter(reply="今天天气很好|我们去公园玩")
+    t, video = _segmenter_transcriber(tmp_path, monkeypatch, seg)
+    cues = t.transcribe(video, language="zh").segments
+    assert seg.calls, "segmenter should be consulted for zh"
+    assert [c.text for c in cues] == ["今天天气很好", "我们去公园玩"]
+
+
+def test_transcribe_skips_segmenter_for_en(tmp_path, monkeypatch) -> None:
+    seg = _FakeSegmenter(reply="今天天气很好|我们去公园玩")
+    t, video = _segmenter_transcriber(tmp_path, monkeypatch, seg)
+    t.transcribe(video, language="en")
+    assert seg.calls == []
+
+
+def test_transcribe_without_segmenter_unchanged(tmp_path, monkeypatch) -> None:
+    t, video = _segmenter_transcriber(tmp_path, monkeypatch, None)
+    baseline = t.transcribe(video, language="zh").segments
+    t2, video2 = _segmenter_transcriber(tmp_path, monkeypatch, _FakeSegmenter(reply=None))
+    assert [(c.start_s, c.end_s, c.text) for c in t2.transcribe(video2, language="zh").segments] == [
+        (c.start_s, c.end_s, c.text) for c in baseline
+    ]

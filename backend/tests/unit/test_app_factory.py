@@ -216,3 +216,30 @@ def test_library_orphans_reconcile_flow(tmp_path: Path, openai_env: None) -> Non
         deleted = client.post("/api/library/orphans/delete", json={"clip_ids": [gone_id]}).json()
         assert deleted == {"deleted": 1}
         assert client.get("/api/library/orphans").json()["orphans"] == []
+
+
+def _qwen_segmenter(tmp_path: Path) -> object:
+    from cutfinder.api.app import LibraryContext, _build_into
+    from cutfinder.config import Prefs, load_config, save_prefs
+
+    _build_into(LibraryContext(), tmp_path)  # seeds the per-library config
+    prefs = load_config(tmp_path).prefs
+    save_prefs(Prefs(**{**prefs.model_dump(), "transcription_engine": "qwen"}), tmp_path)
+    ctx = LibraryContext()
+    _build_into(ctx, tmp_path)
+    return ctx.orchestrator.transcriber._segmenter
+
+
+def test_qwen_transcriber_gets_segmenter_when_server_configured(
+    tmp_path: Path, openai_env: None
+) -> None:
+    from cutfinder.adapters.llm_segmenter import OpenAICueSegmenter
+
+    assert isinstance(_qwen_segmenter(tmp_path), OpenAICueSegmenter)
+
+
+def test_qwen_transcriber_no_segmenter_without_server(
+    tmp_path: Path, openai_env: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("OPENAI_BASE_URL", "")
+    assert _qwen_segmenter(tmp_path) is None
