@@ -346,7 +346,7 @@ def merge_short_cues(
     return out
 
 
-def clean_cues(cues: list[Segment]) -> list[Segment]:
+def clean_cues(cues: list[Segment], *, dedup_overlap_only: bool = False) -> list[Segment]:
     """Drop empty cues and collapse consecutive duplicates.
 
     A near-zero-duration cue is a ForcedAligner timestamp artifact — typically a
@@ -355,6 +355,10 @@ def clean_cues(cues: list[Segment]) -> list[Segment]:
     (silently dropping characters from the subtitle), fold its text onto the
     previous cue so the sentence stays whole; its unreliable timing is ignored.
     A zero-duration cue with no predecessor is still dropped.
+
+    With *dedup_overlap_only* a duplicate is collapsed only when it overlaps the
+    previous cue in time (an ASR repetition artifact); a back-to-back repeat is
+    real speech the LLM chose to split (``对对对，|对对对，``) and is kept.
     """
     out: list[Segment] = []
     for c in cues:
@@ -367,7 +371,9 @@ def clean_cues(cues: list[Segment]) -> list[Segment]:
                     start_s=prev.start_s, end_s=prev.end_s, text=_join(prev.text, c.text),
                 )
             continue
-        if out and out[-1].text == c.text:
+        if out and out[-1].text == c.text and (
+            not dedup_overlap_only or c.start_s < out[-1].end_s
+        ):
             continue
         out.append(c)
     return out

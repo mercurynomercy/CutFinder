@@ -252,13 +252,15 @@ def llm_assemble_cues(
         raw = items if origin == "llm" else assemble_cues(
             items, max_chars=max_chars, max_dur=max_dur, gap_s=gap_s,
         )
+        # The LLM breaks after commas, so a back-to-back repeat is real speech.
+        llm = origin == "llm"
         prev = next((c for _, c in reversed(cleaned) if c), None)
         if prev:
-            head, *rest = clean_cues([prev[-1], *raw])
+            head, *rest = clean_cues([prev[-1], *raw], dedup_overlap_only=llm)
             prev[-1] = head
             cleaned.append((origin, rest))
         else:
-            cleaned.append((origin, clean_cues(raw)))
+            cleaned.append((origin, clean_cues(raw, dedup_overlap_only=llm)))
 
     out: list[Segment] = []
     for origin, cues in cleaned:

@@ -202,3 +202,19 @@ def test_retry_pieces_are_reguarded():
     assert len(fake.calls) == 2
     assert all(_display_width(c.text) <= 24 for c in cues)
     assert all(c.end_s - c.start_s <= 8.0 for c in cues)
+
+
+def test_llm_split_repeated_phrase_is_kept():
+    text = "对对对，对对对，我们走吧。"
+    fake = FakeSegmenter(lambda t: t.replace("，", "，|"))
+    cues = llm_assemble_cues([_chars(text, step=0.25)], fake, **_PARAMS)
+    assert "".join(c.text for c in cues) == text
+
+
+def test_clean_cues_dedup_overlap_only_collapses_only_overlaps():
+    a = Segment(start_s=0.0, end_s=1.0, text="对对对，")
+    b = Segment(start_s=1.0, end_s=2.0, text="对对对，")
+    c = Segment(start_s=1.5, end_s=2.5, text="对对对，")
+    assert clean_cues([a, b]) == [a]
+    assert clean_cues([a, b], dedup_overlap_only=True) == [a, b]
+    assert clean_cues([b, c], dedup_overlap_only=True) == [b]
