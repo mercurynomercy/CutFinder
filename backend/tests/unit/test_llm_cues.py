@@ -191,3 +191,14 @@ def test_zero_width_token_at_run_start_folds_onto_previous_run():
     fake = FakeSegmenter(lambda t: t)
     cues = llm_assemble_cues([a, Segment(start_s=10, end_s=12, text="x"), b], fake, **_PARAMS)
     assert [c.text for c in cues] == ["我们准备回家啦。", "x了。", "这次去大阪。"]
+
+
+def test_retry_pieces_are_reguarded():
+    text = "甲乙丙丁戊己庚辛壬癸" * 4
+    replies = iter([text, text[:2] + "|" + text[2:]])
+    fake = FakeSegmenter(lambda t: next(replies))
+    cues = llm_assemble_cues([_chars(text)], fake, **_PARAMS)
+    assert "".join(c.text for c in cues) == text
+    assert len(fake.calls) == 2
+    assert all(_display_width(c.text) <= 24 for c in cues)
+    assert all(c.end_s - c.start_s <= 8.0 for c in cues)

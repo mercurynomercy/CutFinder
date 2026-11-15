@@ -160,26 +160,35 @@ def _llm_window_cues(
     if breaks is None:
         logger.warning("LLM subtitle breaks changed the text; using rule cues for this window")
         return None
+    def _fits(cue: Segment) -> bool:
+        return (
+            _display_width(cue.text) <= _LINE_MAX_WIDTH
+            and cue.end_s - cue.start_s <= _LINE_MAX_DUR
+        )
+
+    def _keep_or_group(piece: list[Token]) -> list[Segment]:
+        cue = _cue(piece)
+        if _fits(cue):
+            return [cue]
+        return group_cues(piece, offset=0.0, max_chars=max_chars, max_dur=max_dur, gap_s=gap_s)
+
     cues: list[Segment] = []
     for line in split_at_breaks(window, breaks):
         for piece in _gap_split(line, gap_s):
             cue = _cue(piece)
-            if (
-                _display_width(cue.text) <= _LINE_MAX_WIDTH
-                and cue.end_s - cue.start_s <= _LINE_MAX_DUR
-            ):
+            if _fits(cue):
                 cues.append(cue)
                 continue
             text = "".join(t[0] for t in piece)
             retry = breaker.ask(text)
             sub_breaks = breaks_from_reply(text, retry) if retry is not None else None
             sub_lines = split_at_breaks(piece, sub_breaks) if sub_breaks else []
-            if len(sub_lines) > 1:
-                cues.extend(_cue(p) for sub in sub_lines for p in _gap_split(sub, gap_s))
-            else:
-                cues.extend(group_cues(
-                    piece, offset=0.0, max_chars=max_chars, max_dur=max_dur, gap_s=gap_s,
-                ))
+            # Retry pieces are guarded again (no further retry); one line = rule grouping.
+            pieces = (
+                [p for sub in sub_lines for p in _gap_split(sub, gap_s)]
+                if len(sub_lines) > 1 else [piece]
+            )
+            cues.extend(c for p in pieces for c in _keep_or_group(p))
     return cues
 
 
