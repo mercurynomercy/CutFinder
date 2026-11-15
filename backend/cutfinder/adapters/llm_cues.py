@@ -167,6 +167,7 @@ def _llm_window_cues(
     if breaks is None:
         logger.warning("LLM subtitle breaks changed the text; using rule cues for this window")
         return None
+
     def _fits(cue: Segment) -> bool:
         return (
             _display_width(cue.text) <= _LINE_MAX_WIDTH
