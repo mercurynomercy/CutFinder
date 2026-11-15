@@ -29,7 +29,7 @@ def _load_config():
 
 @pytest.mark.integration
 def test_llm_assemble_cues_real_server_preserves_text_and_width():
-    from cutfinder.adapters.llm_cues import llm_assemble_cues
+    from cutfinder.adapters.llm_cues import breaks_from_reply, llm_assemble_cues
     from cutfinder.adapters.llm_segmenter import OpenAICueSegmenter
     from cutfinder.adapters.qwen_transcriber import _display_width
     from cutfinder.ports.speech import SegmenterUnavailable
@@ -44,9 +44,17 @@ def test_llm_assemble_cues_real_server_preserves_text_and_width():
         pytest.skip("OpenAI-compatible server configured but unreachable")
     del probe
 
+    exchanges: list[tuple[str, str]] = []
+
+    class Recording:
+        def split(self, text):
+            reply = segmenter.split(text)
+            exchanges.append((text, reply))
+            return reply
+
     cues = llm_assemble_cues(
         [tokens],
-        segmenter,
+        Recording(),
         max_chars=18,
         max_dur=6.0,
         gap_s=0.7,
@@ -55,13 +63,10 @@ def test_llm_assemble_cues_real_server_preserves_text_and_width():
         merge_short_dur=1.0,
     )
 
+    # The LLM path was really used: some reply was accepted and had breaks.
+    assert any(breaks_from_reply(text, reply) for text, reply in exchanges), exchanges
     assert cues
-    joined = "".join(c.text for c in cues)
     strip = lambda s: "".join(s.split())
-    # Cleaning may drop trailing punctuation, so compare without it.
-    punct = "，。！？、；：,.!?;:"
-    assert strip(joined).translate({ord(p): None for p in punct}) == strip(_TEXT).translate(
-        {ord(p): None for p in punct}
-    )
+    assert strip("".join(c.text for c in cues)) == strip(_TEXT)
     for c in cues:
         assert _display_width(c.text) <= 24
